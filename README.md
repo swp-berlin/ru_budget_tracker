@@ -7,6 +7,7 @@
   - [Development Guidelines](#development-guidelines)
     - [Git and GitHub](#git-and-github)
     - [Structured Documentation](#structured-documentation)
+    - [Code Quality](#code-quality)
   - [Folders Structure](#folders-structure)
   - [Local Setup Instructions](#local-setup-instructions)
   - [Data Import Instructions](#data-import-instructions)
@@ -25,6 +26,9 @@ A dashboard application for Stiftung Wissenschaft und Politik (SWP). Dashboard p
 ### Structured Documentation
 - **README Files**: Each major module or directory should contain a `README.md` file that explains its purpose, usage, and any important details. This helps new developers understand the structure and functionality of the codebase quickly.
 - **Code Comments**: Use comments within the code to explain complex logic or important decisions.
+
+### Code Quality
+- **Pre-commit Hooks**: Use pre-commit hooks to enforce code quality standards before commits are made. This can include formatting checks, linting, ... [Install pre-commit](https://pre-commit.com/#install) and run `pre-commit install` to set up the hooks before your first commit.
 
 ## Folders Structure
 - `src/`: Main source code of the application.
