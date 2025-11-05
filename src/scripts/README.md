@@ -1,6 +1,6 @@
 # Scripts
 
-This directory contains various scripts used for development and maintenance of the project. 
+This directory contains various scripts used for development and maintenance of the project.
 For exammple data import scripts.
 
 ## Table of Contents
@@ -19,9 +19,9 @@ You can refer to the [`example_import_script.py`](src/scripts/example_import_scr
 ### Data Model
 The SQLAlchemy models defining the database schema can be found in the [`src/models/`](src/models/) directory.
 They are defined using SQLAlchemy's ORM capabilities, allowing for easy interaction with the database.
-When writing import scripts, you can directly use these models to insert data into the database either by creating new instances  and adding them to the session or writing SQL statements. 
+When writing import scripts, you can directly use these models to insert data into the database either by creating new instances  and adding them to the session or writing SQL statements.
 
-The current database schema can be visualized in the 
+The current database schema is visualized in the
 [Database Schema Overview](../../README.md#database-schema-overview)
 using a Mermaid ER diagram.
 
@@ -44,4 +44,3 @@ ConversionRates can be imported at any time as they do not have dependencies on 
 - Error Handling: Implement error handling to manage issues such as missing dimensions or data inconsistencies during the import process using try-except blocks and logging as demonstrated in the [`example_import_script.py`](src/scripts/example_import_script.py).
 - Data Validation: Validate the data before importing into the database to ensure it meets the required format and constraints defined in the database schema. This could include directly using the SQLalchemy models for insertion
 - Upsert Logic: Implement logic to handle existing records in the database to avoid duplicates. This can be done by using the `on_conflict_do_...` method provided by the sqlite dialect. You need to provide a unique key constraint for the relevant columns in the model definition for this to work. For reference see the [`example_import_script.py`](src/scripts/example_import_script.py).
-

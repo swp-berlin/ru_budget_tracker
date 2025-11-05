@@ -18,7 +18,7 @@ A dashboard application for Stiftung Wissenschaft und Politik (SWP). Dashboard p
 ## Development Guidelines
 
 ### Git and GitHub
-- **Merge Strategy**: Use feature branches for new features and bug fixes. Merge back into the `develop` when the feature is complete and tested. Only merge into `main` for production releases. 
+- **Merge Strategy**: Use feature branches for new features and bug fixes. Merge back into the `develop` when the feature is complete and tested. Only merge into `main` for production releases.
 - **Branch Naming**: Use descriptive branch names that reflect the purpose of the branch. For example, use `add-import-script` for adding a new import script or `fix-database-connection` for fixing database connection issues.
 - **Commit Messages**: Use clear and descriptive commit messages. You could for example use bulletpoints. This helps in maintaining a clean and understandable project history.
 
@@ -28,15 +28,15 @@ A dashboard application for Stiftung Wissenschaft und Politik (SWP). Dashboard p
 
 ## Folders Structure
 - `src/`: Main source code of the application.
-  - `alembic/`: Database migration scripts and configurations.
+  - `alembic/`: Database migration scripts and configurations. Refer to the [respective documentation](src/alembic/README.md) for more details.
   - `data/`: Data files. Includes Database file as well as raw import data files.
     - `import_files/`: Import files.
   - `database/`: Database connection and session management.
-  - `models/`: SQLAlchemy models representing the database schema.
-  - `scripts/`: Various scripts used for development and maintenance of the project. Including data import scripts.
+  - `models/`: SQLAlchemy models representing the database schema. Refer to the [respective documentation](src/models/README.md) for more details.
+  - `scripts/`: Various scripts used for development and maintenance of the project. Including data import scripts. Refer to the [respective documentation](src/scripts/README.md) for more details.
   - `settings.py`: Application configuration and settings.
   - `alembic.ini`: Alembic configuration file for database migrations.
-  - `app.py`: Main application entry point. 
+  - `app.py`: Main application entry point.
 - `.pre-commit-config.yaml`: Configuration file for pre-commit hooks, ensuring code quality and consistency.
 - `README.md`: Project documentation and instructions.
 - `pyproject.toml`: Project configuration file, including dependencies and metadata.
@@ -45,25 +45,25 @@ A dashboard application for Stiftung Wissenschaft und Politik (SWP). Dashboard p
 
 
 ## Local Setup Instructions
-1. **Clone the Repository**  
+1. **Clone the Repository**
    ```bash
    git clone <repository_url>
    cd ru_budget_tracker
    ```
-2. **Set Up Python Environment**  
+2. **Set Up Python Environment**
    Make sure you have [uv installed](https://docs.astral.sh/uv/#installation)
    1. Create a new virtual environment and install dependencies:
       ```bash
       uv sync
       ```
-3. **Database Initialization**  
+3. **Database Initialization**
    Initialize the database and run migrations using Alembic via the [Makefile](Makefile):
    ```bash
    make alembic-upgrade
    ```
-4. **Import Initial Data**  
+4. **Import Initial Data**
    Use the import scripts located in [`src/scripts/`](src/scripts/) to import initial data into the database. Refer to the [example script](src/scripts/example_import_script.py) for guidance.
-5. **Run the Application**  
+5. **Run the Application**
    TO BE ADDED
 
 ## Data Import Instructions
@@ -112,7 +112,7 @@ erDiagram
 	  DATETIME updated_at "Nullable"
   }
   ConversionRate{
-	  STRING name PK "e.g. RUB_USD" 
+	  STRING name PK "e.g. RUB_USD"
 	  FLOAT value "Not Nullable"
 	  DATE started_at "Nullable"
 	  DATE ended_at "Nullable"
