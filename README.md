@@ -4,6 +4,9 @@
 - [Haushaltsdashboard - Stiftung Wissenschaft und Politik (SWP)](#haushaltsdashboard---stiftung-wissenschaft-und-politik-swp)
   - [Table of Contents](#table-of-contents)
   - [Description](#description)
+  - [Development Guidelines](#development-guidelines)
+    - [Git and GitHub](#git-and-github)
+    - [Structured Documentation](#structured-documentation)
   - [Folders Structure](#folders-structure)
   - [Local Setup Instructions](#local-setup-instructions)
   - [Data Import Instructions](#data-import-instructions)
@@ -11,6 +14,17 @@
 
 ## Description
 A dashboard application for Stiftung Wissenschaft und Politik (SWP). Dashboard provides insights into budgets and expenditures of the russion government. Includes military spending and classified expenses.
+
+## Development Guidelines
+
+### Git and GitHub
+- **Merge Strategy**: Use feature branches for new features and bug fixes. Merge back into the `develop` when the feature is complete and tested. Only merge into `main` for production releases. 
+- **Branch Naming**: Use descriptive branch names that reflect the purpose of the branch. For example, use `add-import-script` for adding a new import script or `fix-database-connection` for fixing database connection issues.
+- **Commit Messages**: Use clear and descriptive commit messages. You could for example use bulletpoints. This helps in maintaining a clean and understandable project history.
+
+### Structured Documentation
+- **README Files**: Each major module or directory should contain a `README.md` file that explains its purpose, usage, and any important details. This helps new developers understand the structure and functionality of the codebase quickly.
+- **Code Comments**: Use comments within the code to explain complex logic or important decisions.
 
 ## Folders Structure
 - `src/`: Main source code of the application.
