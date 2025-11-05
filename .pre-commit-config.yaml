@@ -1,0 +1,33 @@
+# This file is a configuration file for the pre-commit framework. It specifies the repositories, hooks, and their configurations that will be used during the pre-commit process.
+#
+# For more information about pre-commit, you can visit the official website: https://pre-commit.com
+# For a list of available hooks, you can refer to the pre-commit hooks documentation: https://pre-commit.com/hooks.html
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.3
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.18.2
+    hooks:
+      - id: mypy
+        entry: mypy --config-file ./pyproject.toml
+        files: ^src/
+        additional_dependencies:
+          - pydantic
+          - pydantic-settings

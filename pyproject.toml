@@ -1,0 +1,31 @@
+[project]
+name = "ru_budget_tracker"
+version = "0.1.0"
+description = """A dashboard application for Stiftung Wissenschaft und Politik (SWP). 
+Dashboard provides insights into budgets and expenditures of the russion government. 
+Includes military spending and classified expenses."""
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "aiosqlite>=0.21.0",
+    "alembic>=1.17.1",
+    "pydantic>=2.12.3",
+    "pydantic-settings>=2.11.0",
+    "sqlalchemy>=2.0.44",
+]
+[tool.uv]
+package = false
+
+# Ruff settings
+[tool.ruff]
+# Configuration for Ruff
+# Include the following rules:
+# - Line length of 100 characters
+# - T20: print() and pprint() should not be used in production code
+line-length = 100
+select = ["T20"]
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+plugins = ["pydantic.mypy"]
