@@ -2,6 +2,7 @@ from pathlib import Path
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
 class Database(BaseModel):
     """SQLite database settings."""
 
@@ -9,28 +10,30 @@ class Database(BaseModel):
     file_name: str = "budget.db"
 
     @property
-    def _file_path(self) -> str:
+    def _file_path(self) -> Path:
         """
         Full path to the SQLite database file.
+        Path is constructed by taking the os into account, resulting in either a
+        windows or unix style path.
         Parent directories are created if they do not exist.
         """
         full_path = self.directory / self.file_name
-        # Windows compatibility?
-        return full_path.as_posix()
+
+        return full_path
 
     @property
     def sync_dsn(self) -> str:
         """
         DSN for synchronous SQLite connections.
         """
-        return f"sqlite:///{self._file_path}"
+        return f"sqlite:///{str(self._file_path)}"
 
     @property
     def async_dsn(self) -> str:
         """
         DSN for asynchronous SQLite connections.
         """
-        return f"sqlite+aiosqlite:///{self._file_path}"
+        return f"sqlite+aiosqlite:///{str(self._file_path)}"
 
 
 class Settings(BaseSettings):
