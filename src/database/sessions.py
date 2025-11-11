@@ -13,7 +13,7 @@ from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 engine = create_engine(
-    url=settings.database.async_dsn,
+    url=settings.database.sync_dsn,
     future=True,
     pool_pre_ping=True,
     pool_recycle=1_800,

@@ -1,6 +1,21 @@
-from models import budget, conversion_rate
+from models.budget import (
+    Budget,
+    BudgetScopeLiteral,
+    BudgetTypeLiteral,
+    Expense,
+    Dimension,
+    DimensionTypeLiteral,
+    expense_dimension_association_table,
+)
+from models.conversion_rate import ConversionRate
 
 __all__ = [
-    "budget",
-    "conversion_rate",
+    "Budget",
+    "Expense",
+    "Dimension",
+    "BudgetScopeLiteral",
+    "BudgetTypeLiteral",
+    "ConversionRate",
+    "DimensionTypeLiteral",
+    "expense_dimension_association_table",
 ]
