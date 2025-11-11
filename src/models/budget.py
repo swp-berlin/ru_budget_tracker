@@ -2,8 +2,10 @@ from typing import Literal
 from models.base import Base
 
 from sqlalchemy import (
-    BigInteger,
+    Column,
+    Integer,
     String,
+    Table,
     Text,
     Date,
     DateTime,
@@ -26,7 +28,7 @@ class Budget(Base):
 
     __tablename__ = "budgets"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
     # The original identifier from the data source
     original_identifier: Mapped[str] = mapped_column(String, nullable=False, index=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
@@ -55,10 +57,16 @@ class Budget(Base):
     )
     # Relationship to expenses
     expenses: Mapped[list["Expense"]] = relationship(
-        "Expense",
-        back_populates="budget",
-        lazy="noload",
+        "Expense", back_populates="budget", lazy="noload"
     )
+
+
+expense_dimension_association_table = Table(
+    "association_table",
+    Base.metadata,
+    Column("expense_id", ForeignKey("expenses.id")),
+    Column("dimension_id", ForeignKey("dimensions.id")),
+)
 
 
 class Expense(Base):
@@ -68,10 +76,10 @@ class Expense(Base):
 
     __tablename__ = "expenses"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
     # Foreign key to the associated budget
     budget_id: Mapped[int] = mapped_column(
-        BigInteger,
+        Integer,
         ForeignKey("budgets.id", ondelete="CASCADE"),
         nullable=False,
     )
@@ -89,10 +97,12 @@ class Expense(Base):
     )
     # Relationship to the associated dimension entries
     dimensions: Mapped[list["Dimension"]] = relationship(
-        secondary="expense_dimensions",
+        secondary=expense_dimension_association_table,
         back_populates="expenses",
         lazy="selectin",
     )
+    # Relationship to the associated budget
+    budget: Mapped["Budget"] = relationship("Budget", back_populates="expenses", lazy="noload")
 
 
 class Dimension(Base):
@@ -102,10 +112,10 @@ class Dimension(Base):
 
     __tablename__ = "dimensions"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
     # Optional parent dimension for hierarchical structuring (e.g., chapter -> subchapter)
-    parent_id: Mapped[int | None] = mapped_column(
-        BigInteger,
+    parent_id: Mapped[int] = mapped_column(
+        Integer,
         ForeignKey("dimensions.id", ondelete="SET NULL"),
         nullable=True,
     )
@@ -120,26 +130,7 @@ class Dimension(Base):
     name_translated: Mapped[str] = mapped_column(String, nullable=True)
     # Relationship to expenses
     expenses: Mapped[list["Expense"]] = relationship(
-        secondary="expense_dimensions",
+        secondary=expense_dimension_association_table,
         back_populates="dimensions",
         lazy="noload",
-    )
-
-
-class ExpenseDimension(Base):
-    """
-    Many-to-many association table between Expense and Dimension
-    """
-
-    __tablename__ = "expense_dimensions"
-    # Composite primary key consisting of expense_id and dimension_id
-    expense_id: Mapped[int] = mapped_column(
-        BigInteger,
-        ForeignKey("expenses.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    dimension_id: Mapped[int] = mapped_column(
-        BigInteger,
-        ForeignKey("dimensions.id", ondelete="CASCADE"),
-        primary_key=True,
     )

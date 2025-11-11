@@ -10,6 +10,7 @@ dependencies = [
     "aiosqlite>=0.21.0",
     "alembic>=1.17.1",
     "dash>=3.2.0",
+    "faker>=37.12.0",
     "pandas>=2.3.3",
     "pydantic>=2.12.3",
     "pydantic-settings>=2.11.0",
