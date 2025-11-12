@@ -86,12 +86,12 @@ erDiagram
 	  INTEGER budget_id FK "Not Nullable"
 	  INTEGER parent_id FK "Nullable"
   }
-  Dimension ||--|{ ExpenseDimensions : has
+  Dimension ||--|{ expense_dimension_association_table : has
   expense_dimension_association_table {
 	  INTEGER expense_id PK "Not Nullable"
 	  INTEGER category_id PK "Not Nullable"
 	}
-	ExpenseDimensions }|--|| Expense : has
+	expense_dimension_association_table }|--|| Expense : has
 	Budget ||--|{ Expense : contains
 	Budget {
 	  INTEGER id PK
