@@ -14,6 +14,17 @@
             "env": {
                 "PYTHONPATH": "${workspaceFolder}/src",
             }
+        },
+        {
+            "name": "Python Debugger: Dash App",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/app.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/src",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src",
+            }
         }
     ]
 }
