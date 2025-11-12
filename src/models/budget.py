@@ -21,7 +21,7 @@ BudgetScopeLiteral = Literal["YEARLY", "QUARTERLY", "MONTHLY"]
 DimensionTypeLiteral = Literal["MINISTRY", "CHAPTER", "PROGRAMM", "EXPENSE_TYPE"]
 
 
-class Budget(Base):
+class Budget(Base):  # type: ignore[misc]
     """
     Represents a budget entry in the budget system.
     """
@@ -57,7 +57,7 @@ class Budget(Base):
     )
     # Relationship to expenses
     expenses: Mapped[list["Expense"]] = relationship(
-        "Expense", back_populates="budget", lazy="noload"
+        "Expense", back_populates="budget", lazy="selectin"
     )
 
 
@@ -69,7 +69,7 @@ expense_dimension_association_table = Table(
 )
 
 
-class Expense(Base):
+class Expense(Base):  # type: ignore[misc]
     """
     Represents an expense entry in the budget system. Expenses will be in russion rubles.
     """
@@ -105,7 +105,7 @@ class Expense(Base):
     budget: Mapped["Budget"] = relationship("Budget", back_populates="expenses", lazy="noload")
 
 
-class Dimension(Base):
+class Dimension(Base):  # type: ignore[misc]
     """
     Represents a dimension of an expense (e.g., ministry, chapter, expense_type, ...)
     """
@@ -128,6 +128,8 @@ class Dimension(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     # Translated to english
     name_translated: Mapped[str] = mapped_column(String, nullable=True)
+    # Self-referential relationship to parent dimension
+    parent: Mapped["Dimension | None"] = relationship("Dimension", remote_side=[id])
     # Relationship to expenses
     expenses: Mapped[list["Expense"]] = relationship(
         secondary=expense_dimension_association_table,

@@ -12,12 +12,7 @@ app = Dash(__name__, use_pages=True)
 
 app.layout = html.Div(
     children=[
-        html.H1(children="Persistent Layout with Multi-Page Dash App"),
-        html.Div(
-            children="""
-        Page Content Below:
-    """
-        ),
+        html.H1(children="Title: This text will always be here"),
         page_container,
     ]
 )
