@@ -6,9 +6,8 @@ Import files should be placed in the 'data/import_files' directory.
 import csv
 from typing import Sequence
 
-from pydantic import BaseModel
 from sqlalchemy import select
-from models.budget import (
+from models import (
     Budget,
     Expense,
     Dimension,
@@ -31,10 +30,12 @@ def load_data_from_file(file_path: Path) -> dict:
         reader = csv.DictReader(csvfile)
         for row in reader:
             # Implement actual data parsing logic here
+            # You can use Pydantic models to validate the data structures
+            # See https://docs.pydantic.dev/latest/concepts/models/#basic-model-usage
             pass
 
     return {}
-    
+
 
 def import_budgets(file_path: Path) -> None:
     """Import budgets from files into the database."""
@@ -104,15 +105,11 @@ def import_dimensions(file_path: Path) -> None:
         logger.error(f"Failed to import dimensions from {file_path}: {e}")
 
 
-def fetch_dimensions_by_identifiers(
-        dimension_identifiers: list[str]
-    ) -> Sequence[Dimension]:
+def fetch_dimensions_by_identifiers(dimension_identifiers: list[str]) -> Sequence[Dimension]:
     """Fetch dimensions from the database based on their original identifiers."""
     with get_sync_session() as session:
         dimensions = session.scalars(
-            select(Dimension).where(
-                Dimension.original_identifier.in_(dimension_identifiers)
-            )
+            select(Dimension).where(Dimension.original_identifier.in_(dimension_identifiers))
         ).all()
     return dimensions
 
@@ -131,12 +128,11 @@ def import_expenses(file_path: Path) -> None:
         expense = Expense(
             budget_id=expense.get("budget_id"),
             value=expense.get("value"),
-            dimensions=dimensions_list, 
+            dimensions=dimensions_list,
             created_at=expense.get("created_at"),
             updated_at=expense.get("updated_at"),
         )
         expense_list.append(expense)
-        
 
     upsert_stmt = (
         insert(Expense)
@@ -161,4 +157,3 @@ def import_expenses(file_path: Path) -> None:
         logger.info(f"Successfully imported expenses from {file_path}")
     except Exception as e:
         logger.error(f"Failed to import expenses from {file_path}: {e}")
-    

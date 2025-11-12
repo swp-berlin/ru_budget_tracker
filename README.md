@@ -78,23 +78,23 @@ Refer to this [documentation](src/scripts/README.md) for guidance on how to use 
 ```mermaid
 erDiagram
 	Dimension {
-	  BIGINT id PK
+	  INTEGER id PK
 	  STRING original_identifier "Not Nullable"
 	  ENUM type "Not Nullable; MINISTRY | EXPENSE_TYPE | ..."
 	  STRING name "Not Nullable"
 	  STRING name_translation "Nullable"
-	  BIGINT budget_id FK "Not Nullable"
-	  BIGINT parent_id FK "Nullable"
+	  INTEGER budget_id FK "Not Nullable"
+	  INTEGER parent_id FK "Nullable"
   }
   Dimension ||--|{ ExpenseDimensions : has
-  ExpenseDimensions {
-	  BIGINT expense_id PK "Not Nullable"
-	  BIGINT category_id PK "Not Nullable"
+  expense_dimension_association_table {
+	  INTEGER expense_id PK "Not Nullable"
+	  INTEGER category_id PK "Not Nullable"
 	}
 	ExpenseDimensions }|--|| Expense : has
 	Budget ||--|{ Expense : contains
 	Budget {
-	  BIGINT id PK
+	  INTEGER id PK
 	  STRING original_identifier "Not Nullable"
 	  STRING name "Not Nullable"
 	  STRING name_translated "Nullable"
@@ -108,8 +108,8 @@ erDiagram
 	  DATETIME updated_at "Nullable"
 	}
   Expense {
-	  BIGINT id PK
-	  BIGINT budget_id FK "Not Nullable"
+	  INTEGER id PK
+	  INTEGER budget_id FK "Not Nullable"
 	  STRING original_identifier "Not Nullable"
 	  FLOAT value "Not Nullable"
 	  DATETIME created_at "Not Nullable"
