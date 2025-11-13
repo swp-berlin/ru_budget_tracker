@@ -80,7 +80,7 @@ def assign_parent_dimensions(
 
     for dimension in dimensions:
         # 30% chance to have no parent
-        if fake.random_int(1, 100) <= 30:
+        if fake.random_int(1, 100) <= 10:
             continue
 
         potential_parents = [
@@ -89,6 +89,12 @@ def assign_parent_dimensions(
 
         if not potential_parents:
             continue
+
+        # 50% chance to assign a parent that already has a parent
+        if fake.random_int(1, 100) <= 50:
+            potential_parents = [d for d in potential_parents if d.parent_id is not None]
+            if not potential_parents:
+                continue
 
         parent = fake.random_element(elements=potential_parents)
 
