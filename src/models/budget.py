@@ -113,6 +113,12 @@ class Dimension(Base):
     __tablename__ = "dimensions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Foreign key to the budget this dimension belongs to
+    budget_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("budgets.id", ondelete="CASCADE"),
+        nullable=False,
+    )
     # Optional parent dimension for hierarchical structuring (e.g., chapter -> subchapter)
     parent_id: Mapped[int] = mapped_column(
         Integer,
@@ -123,11 +129,13 @@ class Dimension(Base):
     type: Mapped[DimensionTypeLiteral] = mapped_column(String, nullable=False)
     # The original identifier from the data source
     original_identifier: Mapped[str] = mapped_column(
-        String, nullable=False, index=True, unique=True
+        String, nullable=False, unique=True
     )
     name: Mapped[str] = mapped_column(String, nullable=False)
     # Translated to english
     name_translated: Mapped[str] = mapped_column(String, nullable=True)
+    # Relationship to budget
+    budget: Mapped["Budget"] = relationship("Budget", back_populates="dimensions", lazy="noload")
     # Relationship to expenses
     expenses: Mapped[list["Expense"]] = relationship(
         secondary=expense_dimension_association_table,
