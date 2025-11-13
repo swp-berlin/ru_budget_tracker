@@ -1,12 +1,11 @@
-from dash import html, register_page, dcc, callback, Output, Input
-from datetime import datetime
-import plotly.express as px
-from plotly.graph_objects import Figure
 import pandas as pd
+import plotly.express as px
+from dash import dcc, html, register_page
+from plotly.graph_objects import Figure
+from sqlalchemy import select
+
 from database import get_sync_session
-from sqlalchemy import select, func
-from sqlalchemy.orm import joinedload, selectinload
-from models import Dimension, Budget, Expense
+from models import Budget
 
 register_page(__name__, path="/details")
 
@@ -32,7 +31,7 @@ def load_data() -> pd.DataFrame:
     return df
 
 
-def generate_figure(dataframe: pd.DataFrame) -> Figure:
+def update_figure(dataframe: pd.DataFrame) -> Figure:
     fig = px.histogram(
         data_frame=dataframe,
         x="dates",
@@ -47,7 +46,7 @@ def generate_figure(dataframe: pd.DataFrame) -> Figure:
 def layout(**other_unknown_query_strings: str | None) -> html.Div:
     df = load_data()
     len(df)
-    fig = generate_figure(df)
+    fig = update_figure(df)
     return html.Div(
         [
             html.H1("This is our Barchart page"),

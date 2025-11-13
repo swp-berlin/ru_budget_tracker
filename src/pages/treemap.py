@@ -1,12 +1,14 @@
 from typing import Any
-from dash import html, register_page, dcc, callback, Output, Input
-import plotly.express as px
-from plotly.graph_objects import Figure
+
 import pandas as pd
+import plotly.express as px
+from dash import dcc, html, register_page
+from plotly.graph_objects import Figure
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+
 from database import get_sync_session
-from sqlalchemy import select, func
-from sqlalchemy.orm import joinedload, selectinload
-from models import Dimension, Budget, Expense
+from models import Budget, Dimension, Expense
 
 register_page(__name__, path="/")
 
@@ -40,7 +42,7 @@ def load_data(type_filter: str | None) -> pd.DataFrame:
     return df
 
 
-def generate_figure(dataframe: pd.DataFrame) -> Figure:
+def update_figure(dataframe: pd.DataFrame) -> Figure:
     fig = px.treemap(
         data_frame=dataframe,
         path=[px.Constant(ROOT_NODE_NAME), "labels", "parents"],
@@ -53,7 +55,7 @@ def generate_figure(dataframe: pd.DataFrame) -> Figure:
 def layout(budgettype: Any = None, **other_unknown_query_strings: str | None) -> html.Div:
     df = load_data(budgettype)
     len(df)
-    fig = generate_figure(df)
+    fig = update_figure(df)
     return html.Div(
         [
             html.H1("This is our Treemap page"),
