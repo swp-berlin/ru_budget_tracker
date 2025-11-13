@@ -55,6 +55,10 @@ class Budget(Base):
         DateTime(timezone=True),
         nullable=True,
     )
+    # Relationship to dimensions
+    dimensions: Mapped[list["Dimension"]] = relationship(
+        "Dimension", back_populates="budget", lazy="noload"
+    )
     # Relationship to expenses
     expenses: Mapped[list["Expense"]] = relationship(
         "Expense", back_populates="budget", lazy="noload"
