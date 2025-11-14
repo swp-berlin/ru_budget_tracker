@@ -56,9 +56,7 @@ class Budget(Base):  # type: ignore[misc]
         nullable=True,
     )
     # Relationship to expenses
-    expenses: Mapped[list["Expense"]] = relationship(
-        "Expense", back_populates="budget", lazy="selectin"
-    )
+    expenses: Mapped[list["Expense"]] = relationship("Expense", lazy="noload")
 
 
 expense_dimension_association_table = Table(
@@ -99,10 +97,9 @@ class Expense(Base):  # type: ignore[misc]
     dimensions: Mapped[list["Dimension"]] = relationship(
         secondary=expense_dimension_association_table,
         back_populates="expenses",
-        lazy="selectin",
+        lazy="noload",
     )
-    # Relationship to the associated budget
-    budget: Mapped["Budget"] = relationship("Budget", back_populates="expenses", lazy="noload")
+    budget: Mapped["Budget"] = relationship("Budget", lazy="selectin", viewonly=True)
 
 
 class Dimension(Base):  # type: ignore[misc]
@@ -134,5 +131,6 @@ class Dimension(Base):  # type: ignore[misc]
     expenses: Mapped[list["Expense"]] = relationship(
         secondary=expense_dimension_association_table,
         back_populates="dimensions",
-        lazy="noload",
+        lazy="joined",
+        uselist=False,
     )

@@ -11,6 +11,7 @@ dependencies = [
     "alembic>=1.17.1",
     "dash>=3.2.0",
     "faker>=37.12.0",
+    "networkx>=3.5",
     "pandas>=2.3.3",
     "pydantic>=2.12.3",
     "pydantic-settings>=2.11.0",
