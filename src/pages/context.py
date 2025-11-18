@@ -1,0 +1,10 @@
+from dash import html, register_page
+
+register_page(__name__)
+
+layout = html.Div(
+    [
+        html.H1("This is our Context page"),
+        html.Div("This is our Context page content."),
+    ]
+)

@@ -1,14 +1,19 @@
 [project]
 name = "ru_budget_tracker"
 version = "0.1.0"
-description = """A dashboard application for Stiftung Wissenschaft und Politik (SWP). 
-Dashboard provides insights into budgets and expenditures of the russion government. 
+description = """A dashboard application for Stiftung Wissenschaft und Politik (SWP).
+Dashboard provides insights into budgets and expenditures of the russion government.
 Includes military spending and classified expenses."""
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "aiosqlite>=0.21.0",
     "alembic>=1.17.1",
+    "dash>=3.2.0",
+    "faker>=37.12.0",
+    "gunicorn>=23.0.0",
+    "networkx>=3.5",
+    "pandas>=2.3.3",
     "pydantic>=2.12.3",
     "pydantic-settings>=2.11.0",
     "sqlalchemy>=2.0.44",
