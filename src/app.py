@@ -12,5 +12,11 @@ app.layout = html.Div(
     ]
 )
 
+
+@app.server.route("/healthz")
+def healthz():
+    return {"status": "ok"}
+
+
 if __name__ == "__main__":
     app.run(debug=True)
