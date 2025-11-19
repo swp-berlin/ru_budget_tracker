@@ -12,6 +12,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     func,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import date, datetime
@@ -116,6 +117,11 @@ class Dimension(Base):
 
     __tablename__ = "dimensions"
 
+    # for a given budget, the combination of budget_id, type and original_identifier should be unique
+    __table_args__ = (
+        UniqueConstraint('budget_id', 'type', 'original_identifier', name='uix_budget_type_identifier'),
+    )
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     # Foreign key to the budget this dimension belongs to
     budget_id: Mapped[int] = mapped_column(
@@ -133,7 +139,7 @@ class Dimension(Base):
     type: Mapped[DimensionTypeLiteral] = mapped_column(String, nullable=False)
     # The original identifier from the data source
     original_identifier: Mapped[str] = mapped_column(
-        String, nullable=False, unique=True
+        String, nullable=False
     )
     name: Mapped[str] = mapped_column(String, nullable=False)
     # Translated to english
