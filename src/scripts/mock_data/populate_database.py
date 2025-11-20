@@ -78,40 +78,74 @@ def assign_parent_dimensions(
     fake = Faker()
     dimension_dict = {d.id: d for d in dimensions}
 
-    for dimension in dimensions:
-        # 30% chance to have no parent
-        if fake.random_int(1, 100) <= 10:
-            continue
+    def _check_depth(
+        dimension: Dimension,
+        current_depth: int = 0,
+    ) -> int:
+        parent_dimension = dimension_dict.get(dimension.parent_id)
+        if parent_dimension is None:
+            return current_depth
+        return _check_depth(parent_dimension, current_depth + 1)
 
+    def _check_for_cycles_recursively(
+        start_dimension: Dimension,
+        current_dimension: Dimension | None,
+        visited: set[int] = set(),
+    ) -> bool:
+        if current_dimension is None:
+            return False
+        if current_dimension.parent_id is None:
+            return False
+        if current_dimension.parent_id in visited:
+            return True
+        visited.add(current_dimension.parent_id)
+        parent_dimension = dimension_dict.get(current_dimension.parent_id)
+        if parent_dimension is None:
+            return False
+        return _check_for_cycles_recursively(start_dimension, parent_dimension, visited)
+
+    def choose_parent(dimension: Dimension) -> Dimension | None:
         potential_parents = [
-            d for d in dimensions if d.id != dimension.id and d.type == dimension.type
+            d
+            for d in dimensions
+            if d.id != dimension.id
+            and d.type == dimension.type
+            and _check_for_cycles_recursively(dimension, d) is False
         ]
-
         if not potential_parents:
+            return None
+
+        # Sort list by depth (favor deeper hierarchies)
+        potential_parents.sort(key=lambda d: _check_depth(d), reverse=True)
+
+        # Slice highest depth parents to increase chance of existing parents
+        for _ in range(4, 0, -1):
+            depth_filtered = [d for d in potential_parents if _check_depth(d) >= _]
+            if depth_filtered and len(depth_filtered) > 2:
+                potential_parents = depth_filtered
+                break
+
+        # Slice to favor top 20% of deeper hierarchies
+        if len(potential_parents) > 10:
+            top_n = max(1, len(potential_parents) // 2)
+            potential_parents = potential_parents[:top_n]
+
+        return fake.random_element(elements=potential_parents)
+
+    for dimension in dimensions:
+        # 2% chance to have no parent
+        if fake.random_int(1, 100) <= 2:
             continue
 
-        # 50% chance to assign a parent that already has a parent
-        if fake.random_int(1, 100) <= 50:
-            potential_parents = [d for d in potential_parents if d.parent_id is not None]
-            if not potential_parents:
-                continue
+        parent = choose_parent(dimension)
+        if parent is None:
+            # Try again for 10 times
+            for _ in range(10):
+                parent = choose_parent(dimension)
+                if parent is not None:
+                    break
 
-        parent = fake.random_element(elements=potential_parents)
-
-        # Check for circular reference and limit depth
-        current = parent
-        has_cycle = False
-        depth = 0
-        while current:
-            if current.id == dimension.id:
-                has_cycle = True
-                break
-            current = dimension_dict.get(current.parent_id)
-            depth += 1
-            if depth > 3:  # Limit depth to 3
-                break
-
-        if not has_cycle and depth <= 3:
+        if parent is not None:
             dimension.parent_id = parent.id
 
 
@@ -147,7 +181,7 @@ def main() -> None:
         session.flush()  # Ensure expenses have IDs assigned
 
         # Generate dimensions
-        dimensions = generate_dimensions(100)
+        dimensions = generate_dimensions(50)
         session.add_all(dimensions)
         session.flush()  # Ensure dimensions have IDs assigned
 
