@@ -18,3 +18,6 @@ wheels/
 # data-files
 *.xlsx
 *.xls
+
+# Notebooks
+**/*.ipynb

@@ -131,7 +131,6 @@ class Dimension(Base):  # type: ignore[misc]
         secondary=expense_dimension_association_table,
         back_populates="dimensions",
         lazy="joined",
-        uselist=False,
     )
 
     # for a given budget, the combination of budget_id, type and original_identifier should be unique
