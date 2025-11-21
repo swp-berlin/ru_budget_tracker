@@ -1,0 +1,60 @@
+:root {
+  --fg: #222;
+  --muted: #666;
+  --accent: #2b6cb0;
+}
+
+body {
+  margin: 0;
+  font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Arial,
+    sans-serif;
+  color: var(--fg);
+}
+
+header,
+main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 8px;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid #eee;
+}
+
+h1 {
+  font-size: 1.5rem;
+  margin: 0;
+}
+
+.btn {
+  appearance: none;
+  border: 1px solid #ccc;
+  background: #f7f7f7;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: #eee;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.spacer {
+  flex: 1 1 auto;
+}
+
+main p {
+  margin: 0 0 12px 0;
+}
+
+ul {
+  margin: 8px 0 16px 20px;
+}
