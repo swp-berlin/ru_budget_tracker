@@ -56,10 +56,6 @@ class Budget(Base):
         DateTime(timezone=True),
         nullable=True,
     )
-    # Relationship to dimensions
-    dimensions: Mapped[list["Dimension"]] = relationship(
-        "Dimension", back_populates="budget", lazy="noload"
-    )
     # Relationship to expenses
     expenses: Mapped[list["Expense"]] = relationship(
         "Expense", back_populates="budget", lazy="noload"
@@ -117,38 +113,34 @@ class Dimension(Base):
 
     __tablename__ = "dimensions"
 
-    # for a given budget, the combination of budget_id, type and original_identifier should be unique
-    __table_args__ = (
-        UniqueConstraint('budget_id', 'type', 'original_identifier', name='uix_budget_type_identifier'),
-    )
-
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    # Foreign key to the budget this dimension belongs to
-    budget_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("budgets.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    # Optional parent dimension for hierarchical structuring (e.g., chapter -> subchapter)
+    # Optional parent dimension for hierarchical structuring (e.g., programm -> subprogramm)
     parent_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("dimensions.id", ondelete="SET NULL"),
         nullable=True,
     )
+    # The original identifier from the data source
+    original_identifier: Mapped[str] = mapped_column(String, nullable=False)
     # Type of the dimension (e.g., MINISTRY, CHAPTER, PROGRAMM, EXPENSE_TYPE)
     type: Mapped[DimensionTypeLiteral] = mapped_column(String, nullable=False)
-    # The original identifier from the data source
-    original_identifier: Mapped[str] = mapped_column(
-        String, nullable=False
-    )
     name: Mapped[str] = mapped_column(String, nullable=False)
     # Translated to english
     name_translated: Mapped[str] = mapped_column(String, nullable=True)
-    # Relationship to budget
-    budget: Mapped["Budget"] = relationship("Budget", back_populates="dimensions", lazy="noload")
-    # Relationship to expenses
+    # Relationship to Expense entries
     expenses: Mapped[list["Expense"]] = relationship(
         secondary=expense_dimension_association_table,
         back_populates="dimensions",
         lazy="noload",
+    )
+
+    # for a given budget, the combination of budget_id, type and original_identifier should be unique
+    __table_args__ = (
+        UniqueConstraint(
+            "name",
+            "type",
+            "original_identifier",
+            "parent_id",
+            name="uix_dimensions_name_type_original_parent",
+        ),
     )

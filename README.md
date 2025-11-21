@@ -75,6 +75,9 @@ Data import scripts are located in the [`src/scripts/`](src/scripts/) directory.
 Refer to this [documentation](src/scripts/README.md) for guidance on how to use them.
 
 ## Database Schema Overview
+Unique identifier for Dimensions:\
+`original_identifier` + `type` + `budget_id` + `name`\
+This unique identifier is available via join of `Dimension` and `Expense` tables.
 ```mermaid
 erDiagram
 	Dimension {
@@ -83,16 +86,23 @@ erDiagram
 	  ENUM type "Not Nullable; MINISTRY | EXPENSE_TYPE | ..."
 	  STRING name "Not Nullable"
 	  STRING name_translation "Nullable"
-	  INTEGER budget_id FK "Not Nullable"
 	  INTEGER parent_id FK "Nullable"
   }
-  Dimension ||--|{ ExpenseDimensions : has
+  Dimension ||--|{ expense_dimension_association_table : has
   expense_dimension_association_table {
 	  INTEGER expense_id PK "Not Nullable"
 	  INTEGER category_id PK "Not Nullable"
 	}
-	ExpenseDimensions }|--|| Expense : has
-	Budget ||--|{ Expense : contains
+	expense_dimension_association_table }|--|| Expense : has
+  Expense {
+	  INTEGER id PK
+	  INTEGER budget_id FK "Not Nullable"
+	  STRING original_identifier "Not Nullable"
+	  FLOAT value "Not Nullable"
+	  DATETIME created_at "Not Nullable"
+	  DATETIME updated_at "Nullable"
+  }
+  Budget ||--|{ Expense : contains
 	Budget {
 	  INTEGER id PK
 	  STRING original_identifier "Not Nullable"
@@ -107,14 +117,6 @@ erDiagram
 	  DATETIME created_at "Not Nullable"
 	  DATETIME updated_at "Nullable"
 	}
-  Expense {
-	  INTEGER id PK
-	  INTEGER budget_id FK "Not Nullable"
-	  STRING original_identifier "Not Nullable"
-	  FLOAT value "Not Nullable"
-	  DATETIME created_at "Not Nullable"
-	  DATETIME updated_at "Nullable"
-  }
   ConversionRate{
 	  STRING name PK "e.g. RUB_USD"
 	  FLOAT value "Not Nullable"

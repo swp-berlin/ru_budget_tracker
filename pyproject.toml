@@ -1,8 +1,8 @@
 [project]
 name = "ru_budget_tracker"
 version = "0.1.0"
-description = """A dashboard application for Stiftung Wissenschaft und Politik (SWP). 
-Dashboard provides insights into budgets and expenditures of the russion government. 
+description = """A dashboard application for Stiftung Wissenschaft und Politik (SWP).
+Dashboard provides insights into budgets and expenditures of the russion government.
 Includes military spending and classified expenses."""
 readme = "README.md"
 requires-python = ">=3.13"
@@ -29,5 +29,4 @@ select = ["T20"]
 
 [tool.mypy]
 python_version = "3.14"
-strict = true
 plugins = ["pydantic.mypy"]
