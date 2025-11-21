@@ -12,6 +12,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     func,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import date, datetime
@@ -110,27 +111,36 @@ class Dimension(Base):  # type: ignore[misc]
     __tablename__ = "dimensions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    # Optional parent dimension for hierarchical structuring (e.g., chapter -> subchapter)
+    # Optional parent dimension for hierarchical structuring (e.g., programm -> subprogramm)
     parent_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("dimensions.id", ondelete="SET NULL"),
         nullable=True,
     )
+    # The original identifier from the data source
+    original_identifier: Mapped[str] = mapped_column(String, nullable=False)
     # Type of the dimension (e.g., MINISTRY, CHAPTER, PROGRAMM, EXPENSE_TYPE)
     type: Mapped[DimensionTypeLiteral] = mapped_column(String, nullable=False)
-    # The original identifier from the data source
-    original_identifier: Mapped[str] = mapped_column(
-        String, nullable=False, index=True, unique=True
-    )
     name: Mapped[str] = mapped_column(String, nullable=False)
     # Translated to english
     name_translated: Mapped[str] = mapped_column(String, nullable=True)
     # Self-referential relationship to parent dimension
-    parent: Mapped["Dimension | None"] = relationship("Dimension", remote_side=[id])
+    parent: Mapped["Dimension | None"] = relationship("Dimension", remote_side=[id], lazy="noload")
     # Relationship to expenses
     expenses: Mapped[list["Expense"]] = relationship(
         secondary=expense_dimension_association_table,
         back_populates="dimensions",
         lazy="joined",
         uselist=False,
+    )
+
+    # for a given budget, the combination of budget_id, type and original_identifier should be unique
+    __table_args__ = (
+        UniqueConstraint(
+            "name",
+            "type",
+            "original_identifier",
+            "parent_id",
+            name="uix_dimensions_name_type_original_parent",
+        ),
     )

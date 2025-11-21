@@ -14,3 +14,7 @@ wheels/
 
 # database files
 *.db
+
+# data-files
+*.xlsx
+*.xls
