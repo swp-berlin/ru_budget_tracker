@@ -83,7 +83,7 @@ jobs:
 
       - name: Copy Docker compose
         run: |
-          mkdir -p /home/jan/ru_budget_tracker
+          ssh staging 'mkdir -p /home/jan/ru_budget_tracker'
           scp -o StrictHostKeyChecking=no docker-compose.staging.yml staging:/home/jan/ru_budget_tracker/docker-compose.yml
 
       - name: Start services
