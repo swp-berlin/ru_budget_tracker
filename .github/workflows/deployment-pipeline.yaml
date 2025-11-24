@@ -1,4 +1,4 @@
-name: Publish Docker image
+name: Deployment Pipeline
 
 on:
   workflow_dispatch:
@@ -49,6 +49,8 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
 
+    needs: build-and-push-image
+
     permissions:
       contents: read
       packages: read
@@ -60,7 +62,7 @@ jobs:
       - name: Create Docker compose for staging
         uses: cuchi/jinja2-action@8bd801365a8d36a0b20f45ee969161685de7785a
         with:
-          teamplate: docker-compose.yaml.j2
+          template: docker-compose.yaml.j2
           output: docker-compose.staging.yml
           strict: true
           variables: |
