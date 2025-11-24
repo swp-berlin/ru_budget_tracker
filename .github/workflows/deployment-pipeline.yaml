@@ -63,7 +63,7 @@ jobs:
         uses: cuchi/jinja2-action@8bd801365a8d36a0b20f45ee969161685de7785a
         with:
           template: docker-compose.yaml.j2
-          output: docker-compose.staging.yml
+          output_file: docker-compose.staging.yml
           strict: true
           variables: |
             image_tag=sha-${{ github.sha }}
