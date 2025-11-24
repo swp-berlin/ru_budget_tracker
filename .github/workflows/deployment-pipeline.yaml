@@ -35,7 +35,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=sha
+            type=sha,format=short,prefix=
 
       - name: Build and push Docker image
         id: push
@@ -61,6 +61,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3
 
+      - name: Extract short SHA
+        id: sha_short
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
       - name: Create Docker compose for staging
         uses: cuchi/jinja2-action@8bd801365a8d36a0b20f45ee969161685de7785a
         with:
@@ -68,7 +72,7 @@ jobs:
           output_file: docker-compose.staging.yml
           strict: true
           variables: |
-            image_tag=sha-${{ github.sha }}
+            image_tag=${{ steps.sha_short.outputs.sha_short }}
 
       - name: Configure SSH
         run: |
