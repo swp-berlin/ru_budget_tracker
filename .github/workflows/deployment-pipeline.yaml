@@ -78,6 +78,7 @@ jobs:
           cat >>~/.ssh/config <<END
           Host staging
             HostName ${{ vars.SSH_HOST }}
+            Port ${{ vars.SSH_PORT }}
             User ${{ vars.SSH_USER }}
             IdentityFile ~/.ssh/id_rsa
             StrictHostKeyChecking no
