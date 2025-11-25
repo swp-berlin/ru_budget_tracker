@@ -5,20 +5,29 @@ window.dash_clientside = window.dash_clientside || {};
 window.dash_clientside.clientside = {
   /**
    * Finds a Plotly treemap node by its label text and simulates a click on it.
-   * This function is triggered by a clientside_callback in Dash.
+   * This function is triggered by a clientside_callback in Dash when URL or figure changes.
    *
-   * @param {object} focusNodeData - The data from the `focus-node-store`.
-   *                                 Expected to be `{ node: "Node Label", timestamp: "..." }`.
+   * @param {string} search - The URL search string (query parameters)
+   * @param {object} figure - The treemap figure object (used to detect figure updates)
    * @returns {string} A status message for the dummy output component.
    */
-  findAndClickSlice: function (focusNodeData) {
-    // Guard against empty data on app load
-    if (!focusNodeData || !focusNodeData.node) {
-      return `No node specified at ${new Date().toISOString()}`;
+  findAndClickSlice: function (search, figure) {
+    // Parse the URL search string to get the focus parameter
+    if (!search) {
+      return `No search parameters at ${new Date().toISOString()}`;
+    }
+
+    // Parse query parameters from URL
+    const params = new URLSearchParams(search.replace('?', ''));
+    const focusNode = params.get('focus');
+
+    // Guard against empty focus parameter
+    if (!focusNode) {
+      return `No focus parameter found at ${new Date().toISOString()}`;
     }
 
     // Decode the focus node in case it's URL-encoded
-    const focusNode = decodeURIComponent(focusNodeData.node).trim();
+    const decodedFocusNode = decodeURIComponent(focusNode).trim();
 
     /**
      * Function to find and click the target slice using the specified DOM traversal strategy
@@ -87,14 +96,14 @@ window.dash_clientside.clientside = {
     const maxAttempts = 5; // Maximum polling attempts
     const pollInterval = 500; // Milliseconds between attempts
 
-    // Use longer initial delay if this might be a subsequent load or retrigger
-    const initialDelay = focusNodeData.retrigger ? 500 : 300;
+    // Use longer initial delay to allow treemap to render
+    const initialDelay = 300;
 
     const pollForSlice = () => {
       attempts++;
 
       // Try to find and click the slice
-      if (findAndClickSlice(focusNode)) {
+      if (findAndClickSlice(decodedFocusNode)) {
         return;
       }
 
@@ -108,6 +117,6 @@ window.dash_clientside.clientside = {
     setTimeout(pollForSlice, initialDelay);
 
     // Return a status message for the dummy output component
-    return `Search triggered for '${focusNode}' at ${new Date().toISOString()}`;
+    return `Search triggered for '${decodedFocusNode}' at ${new Date().toISOString()}`;
   }
 };
