@@ -1,5 +1,3 @@
-from typing import Any, Sequence
-
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -13,16 +11,13 @@ from dash import (
     html,
     register_page,
 )
-from sqlalchemy import RowMapping, select
 
-from database import get_sync_session
-from models import Budget, Dimension, Expense, ViewByDimensionTypeLiteral
-from utils import transform_data
+from models import ViewByDimensionTypeLiteral
+from utils import TreemapTransformer, fetch_budgets, fetch_treemap_data
 from utils.definitions import (
     LanguageTypeLiteral,
     SpendingScopeLiteral,
     SpendingTypeLiteral,
-    HIERARCHY_OBJECTS,
 )
 
 import logging
@@ -31,84 +26,6 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 register_page(__name__, path="/")
-
-
-def fetch_budgets() -> list[dict[str, Any]]:
-    """Load all budgets from the database."""
-    with get_sync_session() as session:
-        budgets = (
-            session.execute(select(Budget.id, Budget.name, Budget.name_translated, Budget.type))
-            .unique()
-            .mappings()
-            .all()
-        )
-    return [dict(budget) for budget in budgets]
-
-
-def fetch_data(**kwargs) -> Sequence[RowMapping]:
-    """
-    Load data from the database based on provided filters.
-    Loads budgets, expenses, and dimensions, applies filters, and returns the result set.
-    Query is built dynamically and uses a recursive CTE to fetch the full dimension hierarchy.
-    Args:
-        **kwargs: Filter parameters such as budget_dataset, viewby, spending_type, spending_scope.
-    Returns:
-        pd.DataFrame: The loaded and transformed data.
-    """
-    # Build the base select statement for the CTE
-    base_select_stmt = select(
-        Dimension.id.label("dimension_id"),
-        Dimension.parent_id.label("dimension_parent_id"),
-        Dimension.type.label("dimension_type"),
-        Dimension.name.label("dimension_name"),
-        Dimension.name_translated.label("dimension_name_translated"),
-    ).where(Dimension.type.in_(HIERARCHY_OBJECTS))
-    # If dataset filter is provided, add a where clause
-    cte = base_select_stmt
-    if kwargs.get("budget_dataset") is not None:
-        cte = cte.where(
-            Dimension.id.in_(
-                select(Dimension.id)
-                .join(Dimension.expenses)
-                .where(Expense.budget_id == kwargs.get("budget_dataset"))
-            )
-        )
-
-    # If spending type filter is provided, add a where clause
-    if kwargs.get("spending_type") != "ALL":
-        cte = cte.where(
-            Dimension.id.in_(
-                select(Dimension.id)
-                .join(Dimension.expenses)
-                .where(Expense.dimensions.any(Dimension.name == kwargs.get("spending_type")))
-            )
-        )
-    # Finalize the CTE
-    cte = cte.cte("dimension_hierarchy", recursive=True)
-    # Recursive part to get parent dimensions
-    parent_dimensions = base_select_stmt.join(cte, Dimension.id == cte.c.dimension_parent_id)
-    # Union the base and recursive parts
-    cte = cte.union_all(parent_dimensions)
-
-    # Main select statement joining budgets, expenses, and dimensions
-    select_stmt = (
-        select(
-            Budget.id.label("budget_id"),
-            Budget.name.label("budget_name"),
-            Budget.name_translated.label("budget_name_translated"),
-            Expense.id.label("expense_id"),
-            Expense.value.label("expense_value"),
-            cte,
-        )
-        .select_from(cte)
-        .join(Dimension.expenses, isouter=True)
-        .join(Expense.budget, isouter=True)
-    )
-
-    with get_sync_session() as session:
-        result = session.execute(select_stmt).mappings().all()
-
-    return result
 
 
 def generate_figure(
@@ -164,7 +81,7 @@ def layout(**other_kwargs) -> html.Div:
             dcc.Location(id="url"),
             # This dummy div is the target for our clientside callback. It's required for the
             # callback to have an Output, but it doesn't need to be visible.
-            html.Div(id="dummy-output", style={"display": "none"}),
+            html.Div(id="dummy-treemap-output", style={"display": "none"}),
             # Add Buttons and dropdowns for filtering by budget type
             html.Div(
                 [
@@ -270,13 +187,16 @@ def update_figure_from_filters(
         go.Figure: The generated treemap figure to display in the dcc.Graph.
     """
     # Load data based on the selected filter
-    data = fetch_data(
+
+    data = fetch_treemap_data(
         budget_dataset=budget_dataset,
         viewby=viewby,
         spending_type=spending_type,
         spending_scope=spending_scope,
     )
-    df = transform_data(data)
+    transformer = TreemapTransformer(data, translated=False)
+    df = transformer.transform_data()
+
     # Generate and return the figure
     return generate_figure(df=df, viewby=viewby, language="EN")
 
@@ -284,7 +204,7 @@ def update_figure_from_filters(
 # Clientside callback to handle URL focus parameter and click simulation
 clientside_callback(
     ClientsideFunction(namespace="clientside", function_name="findAndClickSlice"),
-    Output("dummy-output", "children"),
+    Output("dummy-treemap-output", "children"),
     Input("url", "search"),  # Listen directly to URL changes
     Input("treemap-graph", "figure"),  # Also listen to figure updates to re-trigger focus
     prevent_initial_call=True,  # Only run when inputs change

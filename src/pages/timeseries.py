@@ -1,147 +1,108 @@
 import pandas as pd
-from datetime import datetime
 import plotly.express as px
-from dash import dcc, html, register_page
-from plotly.graph_objects import Figure
-from sqlalchemy import select
+import plotly.graph_objects as go
+from dash import (
+    Input,
+    Output,
+    callback,
+    dcc,
+    html,
+    register_page,
+)
 
-from database import get_sync_session
-from models import Budget, Expense, Dimension
+from models import ViewByDimensionTypeLiteral
+from utils.transform import BarchartTransformer
+from utils.definitions import (
+    SpendingScopeLiteral,
+    SpendingTypeLiteral,
+)
+from utils.fetch import fetch_barchart_data, fetch_budgets
+
 
 register_page(__name__, path="/timeseries")
 
 
-def load_data(original_identifier: str | None = None) -> pd.DataFrame:
-    """
-    Load budget and expense data from the database and return as a DataFrame.
-    Takes an optional original_identifier to filter budgets.
-    """
-    # Parse original_identifier to filter budgets if provided
-    original_identifier_filter = (
-        # Parsing logic here
-        str(original_identifier) if original_identifier is not None else None
-    )
-    # Build the select statement
-    # We need to fetch budgets along with their (summed) expenses and the
-    select_stmt = (
-        select(
-            Budget.id.label("budget_id"),
-            Budget.original_identifier.label("original_identifier"),
-            Budget.published_at.label("published_at"),
-            Budget.type.label("type"),
-            Expense.id.label("expense_id"),
-            Dimension.id.label("dimension_id"),
-            Dimension.type.label("dimension_type"),
-            Dimension.name.label("dimension_name"),
-            Dimension.name_translated.label("dimension_name_translated"),
-            Expense.value.label("expense_value"),
-        )
-        .join(Dimension.expenses, isouter=True)
-        .join(Expense.budget, isouter=True)
-    )
-
-    if original_identifier_filter is not None:
-        select_stmt = select_stmt.where(Budget.original_identifier == original_identifier_filter)
-
-    with get_sync_session() as session:
-        budgets = session.execute(select_stmt).unique().mappings().all()
-
-    expenses = [
-        budget["expense_value"] if budget["type"] != "TOTAL" else -budget["expense_value"]
-        for budget in budgets
-    ]
-    dates = [budget["published_at"] for budget in budgets]
-    types = [budget["type"] for budget in budgets]
-
-    df = pd.DataFrame({"expenses": expenses, "dates": dates, "types": types})
-    # Parse dates to datetime
-    df["dates"] = pd.to_datetime(df["dates"])
-    # Truncate dates to years
-    df["dates"] = df["dates"].dt.to_period("Y").dt.to_timestamp()
-
-    return df
-
-
-def update_figure(dataframe: pd.DataFrame) -> Figure:
-    fig = px.histogram(
-        data_frame=dataframe,
-        x="dates",
-        y="expenses",
-        color="types",
-        barmode="relative",
-    )
-    fig.update_layout(margin=dict(t=50, l=25, r=25, b=25))
-    return fig
-
-
 def layout(**other_unknown_query_strings: str | None) -> html.Div:
-    df = load_data()
-    fig = update_figure(df)
+    # Load budget data from database to populate dropdown options
+    budgets = fetch_budgets()
+
+    # Create dropdown options from budget data
+    # Using name_translated for display label and type for value
+    budget_options = []
+    for budget in budgets:
+        budget_options.append(
+            {
+                "label": budget["name_translated"]
+                or budget["name"],  # Use translated name if available, fallback to name
+                "value": budget["id"],  # Use budget type as the value
+            }
+        )
     return html.Div(
         [
+            # dcc.Location is used to read the URL from the browser's address bar.
+            # Its 'search' property (the query string) is used to get the 'focus' parameter.
+            dcc.Location(id="url"),
+            # Add Buttons and dropdowns for filtering by budget type
             html.Div(
                 [
                     html.H1("Filters: "),
                     dcc.Dropdown(
-                        id="budget-type-dropdown-1",
-                        options=[
-                            {"label": "DRAFT", "value": "DRAFT"},
-                            {"label": "LAW", "value": "LAW"},
-                            {"label": "REPORT", "value": "REPORT"},
-                            {"label": "TOTAL", "value": "TOTAL"},
-                        ],
-                        clearable=True,
-                        placeholder="Filter by Budget Type",
+                        id="budget-dataset-dropdown",
+                        options=budget_options,
+                        clearable=False,
+                        value=budget_options[0]["value"] if budget_options else None,
+                        placeholder=budget_options[0]["label"]
+                        if budget_options
+                        else "Select Budget",
+                        searchable=True,
                         style={"width": "200px"},
                     ),
                     dcc.Dropdown(
                         id="viewby-dropdown",
                         options=[
-                            {"label": "Ministry", "value": "ministry"},
-                            {"label": "Chapter", "value": "chapter"},
-                            {"label": "Program", "value": "program"},
+                            {"label": "Ministry", "value": "MINISTRY"},
+                            {"label": "Chapter", "value": "CHAPTER"},
+                            {"label": "Programm", "value": "PROGRAMM"},
                         ],
-                        clearable=True,
-                        placeholder="View by",
+                        clearable=False,
+                        value="MINISTRY",
+                        placeholder="Ministry",
                         style={"width": "200px"},
+                        disabled=True,
                     ),
                     dcc.Dropdown(
                         id="spending-type-dropdown",
                         options=[
-                            {"label": "all", "value": "all"},
-                            {"label": "military only", "value": "military_only"},
+                            {"label": "All", "value": "ALL"},
+                            {"label": "Military Only", "value": "MILITARY"},
                         ],
-                        clearable=True,
-                        placeholder="Filter by Spending type",
+                        clearable=False,
+                        placeholder="All",
+                        value="ALL",
                         style={"width": "200px"},
                     ),
                     dcc.Dropdown(
                         id="spending-scope-dropdown",
                         options=[
-                            {"label": "Billion RUB", "value": "absolut"},
-                            {
-                                "label": "% full-year GDP",
-                                "value": "percent_gdp_full_year",
-                            },
-                            {
-                                "label": "% year-to-year GDP",
-                                "value": "percent_gdp_year_to_year",
-                            },
+                            {"label": "Billion RUB", "value": "ABSOLUT"},
+                            {"label": "% full-year GDP", "value": "PERCENT_GDP_FULL_YEAR"},
+                            {"label": "% year-to-year GDP", "value": "PERCENT_GDP_YEAR_TO_YEAR"},
                             {
                                 "label": "% full-year spending",
-                                "value": "percent_full_year_spending",
+                                "value": "PERCENT_FULL_YEAR_SPENDING",
                             },
                             {
                                 "label": "% year-to-year spending",
-                                "value": "percent_year_to_year_spending",
+                                "value": "PERCENT_YEAR_TO_YEAR_SPENDING",
                             },
                             {
                                 "label": "% year-to-year revenue",
-                                "value": "percent_year_to_year_revenue",
+                                "value": "PERCENT_YEAR_TO_YEAR_REVENUE",
                             },
                         ],
-                        clearable=True,
-                        placeholder="View Spending in",
+                        clearable=False,
+                        value="ABSOLUT",
+                        placeholder="Billion RUB",
                         style={"width": "250px"},
                     ),
                     # Button to switch to Barchart page
@@ -157,8 +118,55 @@ def layout(**other_unknown_query_strings: str | None) -> html.Div:
                     "margin-top": "20px",
                 },
             ),
-            html.H2("This is our Barchart page"),
-            html.Div(f"Data points: {len(df)}"),
-            dcc.Graph(figure=fig),
+            dcc.Graph(id="timeseries-graph"),
         ]
     )
+
+
+def generate_figure(df: pd.DataFrame) -> go.Figure:
+    fig = px.histogram(
+        data_frame=df,
+        x="dates",
+        y="expenses",
+        color="types",
+        barmode="relative",
+    )
+    fig.update_layout(margin=dict(t=50, l=25, r=25, b=25))
+    return fig
+
+
+# Callback to populate the graph on load and when filters change
+@callback(
+    Output("timeseries-graph", "figure"),
+    Input("budget-dataset-dropdown", "value"),
+    Input("viewby-dropdown", "value"),
+    Input("spending-type-dropdown", "value"),
+    Input("spending-scope-dropdown", "value"),
+)
+def update_figure_from_filters(
+    budget_dataset: int | None = None,
+    viewby: ViewByDimensionTypeLiteral = "MINISTRY",
+    spending_type: SpendingTypeLiteral = "ALL",
+    spending_scope: SpendingScopeLiteral = "ABSOLUT",
+) -> go.Figure:
+    """
+    This callback is triggered on page load and when the budget type dropdown changes.
+    It loads the appropriate data and generates the treemap figure.
+
+    Args:
+        budget_type (str | None): The selected value from the budget type dropdown.
+
+    Returns:
+        go.Figure: The generated treemap figure to display in the dcc.Graph.
+    """
+    # Load data based on the selected filter
+    data = fetch_barchart_data(
+        budget_dataset=budget_dataset,
+        viewby=viewby,
+        spending_type=spending_type,
+        spending_scope=spending_scope,
+    )
+    transformer = BarchartTransformer(data, translated=False)
+    df = transformer.transform_data()
+    # Generate and return the figure
+    return generate_figure(df=df)
