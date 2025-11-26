@@ -20,6 +20,7 @@ from datetime import date, datetime
 BudgetTypeLiteral = Literal["DRAFT", "LAW", "REPORT", "TOTAL"]
 BudgetScopeLiteral = Literal["YEARLY", "QUARTERLY", "MONTHLY"]
 DimensionTypeLiteral = Literal["MINISTRY", "CHAPTER", "PROGRAMM", "EXPENSE_TYPE"]
+ViewByDimensionTypeLiteral = Literal["MINISTRY", "CHAPTER", "PROGRAMM"]
 
 
 class Budget(Base):  # type: ignore[misc]
@@ -101,6 +102,14 @@ class Expense(Base):  # type: ignore[misc]
         lazy="noload",
     )
     budget: Mapped["Budget"] = relationship("Budget", lazy="selectin", viewonly=True)
+
+    @property
+    def expense_type(self) -> str | None:
+        """Get the expense type dimension name if available."""
+        for dimension in self.dimensions:
+            if dimension.type == "EXPENSE_TYPE":
+                return dimension.name
+        return None
 
 
 class Dimension(Base):  # type: ignore[misc]

@@ -3,7 +3,7 @@ import networkx as nx
 import pandas as pd
 from sqlalchemy import RowMapping
 
-HIERARCHY_OBJECTS = ("MINISTRY", "CHAPTER", "PROGRAMM")
+from utils.definitions import HIERARCHY_OBJECTS
 
 
 def calculate_hierarchy_paths(
@@ -29,19 +29,21 @@ def prep_dataframe(
     colnames = []
     for i in range(df.shape[1]):
         if i == 0:
-            colnames.append("root")
+            colnames.append("ROOT")
         if i == 1:
-            colnames.append("ministry")
+            colnames.append("MINISTRY")
         if i == 2:
-            colnames.append("chapter")
+            colnames.append("CHAPTER")
         if i > 2:
-            colnames.append(f"program_lvl_{i - 2}")
+            colnames.append(f"PROGRAM_LVL_{i - 2}")
     df.columns = colnames
     return df
 
 
 def transform_data(rows: Sequence[RowMapping], translated: bool = False) -> pd.DataFrame:
     df = pd.DataFrame(rows)
+    if df.empty:
+        return pd.DataFrame()
     df = df[df.dimension_type.isin(HIERARCHY_OBJECTS)]
     # Calculate all paths between dimensions
     paths = calculate_hierarchy_paths(df)
@@ -55,8 +57,8 @@ def transform_data(rows: Sequence[RowMapping], translated: bool = False) -> pd.D
     # Create dataframe from paths
     hierarchy_df = pd.DataFrame(paths)
     hierarchy_df = prep_dataframe(hierarchy_df)
-    hierarchy_df["expense_value"] = expense_column
-    hierarchy_df["root"] = 0
+    hierarchy_df["EXPENSE_VALUE"] = expense_column
+    hierarchy_df["ROOT"] = 0
 
     name_mapping = create_id_name_mapping(df, translated)
     hierarchy_df = replace_id_with_name(hierarchy_df, name_mapping, root_name="Federal Budget")
@@ -80,9 +82,9 @@ def replace_id_with_name(
 ) -> pd.DataFrame:
     """Replace dimension IDs in the dataframe with their corresponding names."""
     for col in dataframe.columns:
-        if col == "expense_value":
+        if col == "EXPENSE_VALUE":
             continue
-        if col == "root":
+        if col == "ROOT":
             dataframe[col] = root_name
             continue
         dataframe[col] = dataframe[col].map(id_name_mapping)

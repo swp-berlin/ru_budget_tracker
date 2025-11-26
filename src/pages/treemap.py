@@ -1,5 +1,4 @@
-from typing import Any
-from urllib.parse import parse_qs, urlparse, unquote
+from typing import Any, Sequence
 
 import pandas as pd
 import plotly.express as px
@@ -7,22 +6,24 @@ import plotly.graph_objects as go
 from dash import (
     ClientsideFunction,
     Input,
-    NoUpdate,
     Output,
     callback,
-    callback_context,
     clientside_callback,
     dcc,
     html,
-    no_update,
     register_page,
 )
-from sqlalchemy import and_, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy import RowMapping, select
 
 from database import get_sync_session
-from models import Budget, Dimension, Expense
-from scripts.transform_treemap.transform import transform_data
+from models import Budget, Dimension, Expense, ViewByDimensionTypeLiteral
+from utils import transform_data
+from utils.definitions import (
+    LanguageTypeLiteral,
+    SpendingScopeLiteral,
+    SpendingTypeLiteral,
+    HIERARCHY_OBJECTS,
+)
 
 import logging
 
@@ -32,44 +33,105 @@ logging.basicConfig(level=logging.INFO)
 register_page(__name__, path="/")
 
 
-def load_data(type_filter: str | None) -> pd.DataFrame:
+def fetch_budgets() -> list[dict[str, Any]]:
+    """Load all budgets from the database."""
+    with get_sync_session() as session:
+        budgets = (
+            session.execute(select(Budget.id, Budget.name, Budget.name_translated, Budget.type))
+            .unique()
+            .mappings()
+            .all()
+        )
+    return [dict(budget) for budget in budgets]
+
+
+def fetch_data(**kwargs) -> Sequence[RowMapping]:
+    """
+    Load data from the database based on provided filters.
+    Loads budgets, expenses, and dimensions, applies filters, and returns the result set.
+    Query is built dynamically and uses a recursive CTE to fetch the full dimension hierarchy.
+    Args:
+        **kwargs: Filter parameters such as budget_dataset, viewby, spending_type, spending_scope.
+    Returns:
+        pd.DataFrame: The loaded and transformed data.
+    """
+    # Build the base select statement for the CTE
+    base_select_stmt = select(
+        Dimension.id.label("dimension_id"),
+        Dimension.parent_id.label("dimension_parent_id"),
+        Dimension.type.label("dimension_type"),
+        Dimension.name.label("dimension_name"),
+        Dimension.name_translated.label("dimension_name_translated"),
+    ).where(Dimension.type.in_(HIERARCHY_OBJECTS))
+    # If dataset filter is provided, add a where clause
+    cte = base_select_stmt
+    if kwargs.get("budget_dataset") is not None:
+        cte = cte.where(
+            Dimension.id.in_(
+                select(Dimension.id)
+                .join(Dimension.expenses)
+                .where(Expense.budget_id == kwargs.get("budget_dataset"))
+            )
+        )
+
+    # If spending type filter is provided, add a where clause
+    if kwargs.get("spending_type") != "ALL":
+        cte = cte.where(
+            Dimension.id.in_(
+                select(Dimension.id)
+                .join(Dimension.expenses)
+                .where(Expense.dimensions.any(Dimension.name == kwargs.get("spending_type")))
+            )
+        )
+    # Finalize the CTE
+    cte = cte.cte("dimension_hierarchy", recursive=True)
+    # Recursive part to get parent dimensions
+    parent_dimensions = base_select_stmt.join(cte, Dimension.id == cte.c.dimension_parent_id)
+    # Union the base and recursive parts
+    cte = cte.union_all(parent_dimensions)
+
+    # Main select statement joining budgets, expenses, and dimensions
     select_stmt = (
         select(
             Budget.id.label("budget_id"),
+            Budget.name.label("budget_name"),
+            Budget.name_translated.label("budget_name_translated"),
             Expense.id.label("expense_id"),
-            Dimension.id.label("dimension_id"),
-            Dimension.parent_id.label("dimension_parent_id"),
-            Dimension.type.label("dimension_type"),
-            Dimension.name.label("dimension_name"),
-            Dimension.name_translated.label("dimension_name_translated"),
             Expense.value.label("expense_value"),
+            cte,
         )
+        .select_from(cte)
         .join(Dimension.expenses, isouter=True)
         .join(Expense.budget, isouter=True)
     )
 
-    # if type_filter:
-    #     select_stmt = select_stmt.where(Budget.type == type_filter)
-
     with get_sync_session() as session:
-        result = session.execute(select_stmt).unique().mappings().all()
+        result = session.execute(select_stmt).mappings().all()
 
-    df = transform_data(result)
-
-    return df
+    return result
 
 
-def generate_figure(df: pd.DataFrame, language: str) -> go.Figure:
+def generate_figure(
+    df: pd.DataFrame,
+    viewby: ViewByDimensionTypeLiteral = "MINISTRY",
+    language: LanguageTypeLiteral = "EN",
+) -> go.Figure:
+    path = [df.columns[i] for i in range(df.shape[1] - 1)]
+    if viewby != "MINISTRY":
+        path.remove("MINISTRY")
+    if viewby == "PROGRAMM":
+        path.remove("CHAPTER")
+
     fig = px.treemap(
         df,
-        path=[df.columns[i] for i in range(df.shape[1] - 1)],
-        values="expense_value",
+        path=path,
+        values="EXPENSE_VALUE",
     )
     fig.update_layout(margin=dict(t=50, l=25, r=25, b=25))
     return fig
 
 
-def layout(budgettype: Any = None, **other_unknown_query_strings: str | None) -> html.Div:
+def layout(**other_kwargs) -> html.Div:
     """
     Defines the static layout of the page. The graph is empty initially and
     will be populated by a callback.
@@ -81,15 +143,25 @@ def layout(budgettype: Any = None, **other_unknown_query_strings: str | None) ->
     Returns:
         html.Div: The Dash component tree for the page layout.
     """
+    # Load budget data from database to populate dropdown options
+    budgets = fetch_budgets()
+
+    # Create dropdown options from budget data
+    # Using name_translated for display label and type for value
+    budget_options = []
+    for budget in budgets:
+        budget_options.append(
+            {
+                "label": budget["name_translated"]
+                or budget["name"],  # Use translated name if available, fallback to name
+                "value": budget["id"],  # Use budget type as the value
+            }
+        )
     return html.Div(
         [
             # dcc.Location is used to read the URL from the browser's address bar.
             # Its 'search' property (the query string) is used to get the 'focus' parameter.
             dcc.Location(id="url"),
-            # dcc.Store is a component for storing data in the user's browser.
-            # We use it here to hold the name of the treemap node we want to zoom in on.
-            # This allows us to pass the value from the URL to our clientside callback.
-            dcc.Store(id="focus-store"),
             # This dummy div is the target for our clientside callback. It's required for the
             # callback to have an Output, but it doesn't need to be visible.
             html.Div(id="dummy-output", style={"display": "none"}),
@@ -98,60 +170,61 @@ def layout(budgettype: Any = None, **other_unknown_query_strings: str | None) ->
                 [
                     html.H1("Filters: "),
                     dcc.Dropdown(
-                        id="budget-type-dropdown-1",
-                        options=[
-                            {"label": "DRAFT", "value": "DRAFT"},
-                            {"label": "LAW", "value": "LAW"},
-                            {"label": "REPORT", "value": "REPORT"},
-                            {"label": "TOTAL", "value": "TOTAL"},
-                        ],
-                        value=budgettype,
-                        clearable=True,
-                        placeholder="Filter by Budget Type",
+                        id="budget-dataset-dropdown",
+                        options=budget_options,
+                        clearable=False,
+                        value=budget_options[0]["value"] if budget_options else None,
+                        placeholder=budget_options[0]["label"]
+                        if budget_options
+                        else "Select Budget",
+                        searchable=True,
                         style={"width": "200px"},
                     ),
                     dcc.Dropdown(
                         id="viewby-dropdown",
                         options=[
-                            {"label": "Ministry", "value": "ministry"},
-                            {"label": "Chapter", "value": "chapter"},
-                            {"label": "Program", "value": "program"},
+                            {"label": "Ministry", "value": "MINISTRY"},
+                            {"label": "Chapter", "value": "CHAPTER"},
+                            {"label": "Programm", "value": "PROGRAMM"},
                         ],
-                        clearable=True,
-                        placeholder="View by",
+                        clearable=False,
+                        value="MINISTRY",
+                        placeholder="Ministry",
                         style={"width": "200px"},
                     ),
                     dcc.Dropdown(
                         id="spending-type-dropdown",
                         options=[
-                            {"label": "all", "value": "all"},
-                            {"label": "military only", "value": "military_only"},
+                            {"label": "All", "value": "ALL"},
+                            {"label": "Military Only", "value": "MILITARY"},
                         ],
-                        clearable=True,
-                        placeholder="Filter by Spending type",
+                        clearable=False,
+                        placeholder="All",
+                        value="ALL",
                         style={"width": "200px"},
                     ),
                     dcc.Dropdown(
                         id="spending-scope-dropdown",
                         options=[
-                            {"label": "Billion RUB", "value": "absolut"},
-                            {"label": "% full-year GDP", "value": "percent_gdp_full_year"},
-                            {"label": "% year-to-year GDP", "value": "percent_gdp_year_to_year"},
+                            {"label": "Billion RUB", "value": "ABSOLUT"},
+                            {"label": "% full-year GDP", "value": "PERCENT_GDP_FULL_YEAR"},
+                            {"label": "% year-to-year GDP", "value": "PERCENT_GDP_YEAR_TO_YEAR"},
                             {
                                 "label": "% full-year spending",
-                                "value": "percent_full_year_spending",
+                                "value": "PERCENT_FULL_YEAR_SPENDING",
                             },
                             {
                                 "label": "% year-to-year spending",
-                                "value": "percent_year_to_year_spending",
+                                "value": "PERCENT_YEAR_TO_YEAR_SPENDING",
                             },
                             {
                                 "label": "% year-to-year revenue",
-                                "value": "percent_year_to_year_revenue",
+                                "value": "PERCENT_YEAR_TO_YEAR_REVENUE",
                             },
                         ],
-                        clearable=True,
-                        placeholder="View Spending in",
+                        clearable=False,
+                        value="ABSOLUT",
+                        placeholder="Billion RUB",
                         style={"width": "250px"},
                     ),
                     # Button to switch to Barchart page
@@ -167,8 +240,6 @@ def layout(budgettype: Any = None, **other_unknown_query_strings: str | None) ->
                     "margin-top": "20px",
                 },
             ),
-            html.H2("This is our Treemap page"),
-            html.Div(f"Budget type: {budgettype}"),
             dcc.Graph(id="treemap-graph"),
         ]
     )
@@ -177,9 +248,17 @@ def layout(budgettype: Any = None, **other_unknown_query_strings: str | None) ->
 # Callback to populate the graph on load and when filters change
 @callback(
     Output("treemap-graph", "figure"),
-    Input("budget-type-dropdown-1", "value"),
+    Input("budget-dataset-dropdown", "value"),
+    Input("viewby-dropdown", "value"),
+    Input("spending-type-dropdown", "value"),
+    Input("spending-scope-dropdown", "value"),
 )
-def update_figure_from_filters(budget_type: str | None) -> go.Figure:
+def update_figure_from_filters(
+    budget_dataset: int | None = None,
+    viewby: ViewByDimensionTypeLiteral = "MINISTRY",
+    spending_type: SpendingTypeLiteral = "ALL",
+    spending_scope: SpendingScopeLiteral = "ABSOLUT",
+) -> go.Figure:
     """
     This callback is triggered on page load and when the budget type dropdown changes.
     It loads the appropriate data and generates the treemap figure.
@@ -191,9 +270,15 @@ def update_figure_from_filters(budget_type: str | None) -> go.Figure:
         go.Figure: The generated treemap figure to display in the dcc.Graph.
     """
     # Load data based on the selected filter
-    df = load_data(budget_type)
+    data = fetch_data(
+        budget_dataset=budget_dataset,
+        viewby=viewby,
+        spending_type=spending_type,
+        spending_scope=spending_scope,
+    )
+    df = transform_data(data)
     # Generate and return the figure
-    return generate_figure(df, "en")
+    return generate_figure(df=df, viewby=viewby, language="EN")
 
 
 # Clientside callback to handle URL focus parameter and click simulation

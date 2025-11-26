@@ -6,6 +6,7 @@ from models.budget import (
     Dimension,
     DimensionTypeLiteral,
     expense_dimension_association_table,
+    ViewByDimensionTypeLiteral,
 )
 from models.conversion_rate import ConversionRate
 from models.base import Base
@@ -20,4 +21,5 @@ __all__ = [
     "ConversionRate",
     "DimensionTypeLiteral",
     "expense_dimension_association_table",
+    "ViewByDimensionTypeLiteral",
 ]
