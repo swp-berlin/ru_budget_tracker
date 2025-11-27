@@ -10,7 +10,6 @@ dependencies = [
     "aiosqlite>=0.21.0",
     "alembic>=1.17.1",
     "dash>=3.2.0",
-    "faker>=37.12.0",
     "gunicorn>=23.0.0",
     "networkx>=3.5",
     "pandas>=2.3.3",
@@ -19,6 +18,10 @@ dependencies = [
     "pydantic-settings>=2.11.0",
     "sqlalchemy>=2.0.44",
 ]
+
+[dependency-groups]
+dev = ["nbformat>=5.10.4", "faker>=37.12.0"]
+
 [tool.uv]
 package = false
 
@@ -34,8 +37,3 @@ select = ["T20"]
 [tool.mypy]
 python_version = "3.14"
 plugins = ["pydantic.mypy"]
-
-[dependency-groups]
-dev = [
-    "nbformat>=5.10.4",
-]
