@@ -164,7 +164,7 @@ def parse_law_expenses(merged_rows: List[MergedRow], dimensions: List[Dimension]
                 expense.dimensions.append(dim)
 
         if row.subchapter_code and row.chapter_code:
-            subchapter_id = f"{row.chapter_code}-{row.subchapter_code}"
+            subchapter_id = f"{row.chapter_code}{row.subchapter_code}"
             dim = dim_lookup.get(("SUBCHAPTER", subchapter_id))
             if dim:
                 expense.dimensions.append(dim)
