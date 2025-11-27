@@ -111,6 +111,15 @@ def fetch_barchart_data(**kwargs) -> Sequence[RowMapping]:
     if kwargs.get("budget_dataset") is not None:
         select_stmt = select_stmt.where(Budget.id == kwargs.get("budget_dataset"))
 
+    if kwargs.get("spending_type") != "ALL":
+        select_stmt = select_stmt.where(
+            Dimension.id.in_(
+                select(Dimension.id)
+                .join(Dimension.expenses)
+                .where(Expense.dimensions.any(Dimension.name == kwargs.get("spending_type")))
+            )
+        )
+
     with get_sync_session() as session:
         budgets = session.execute(select_stmt).unique().mappings().all()
 
