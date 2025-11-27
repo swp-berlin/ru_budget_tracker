@@ -17,6 +17,7 @@ engine = create_engine(
     future=True,
     pool_pre_ping=True,
     pool_recycle=1_800,
+    connect_args={"timeout": 60},
 )
 
 LocalSyncSession = sessionmaker(
