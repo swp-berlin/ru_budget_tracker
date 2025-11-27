@@ -60,7 +60,7 @@ def parse_law_dimensions(merged_rows: List[MergedRow]) -> List[Dimension]:
 
         # SUBCHAPTER
         if row.subchapter_code and not row.program_code:
-            subchapter_id = f"{row.chapter_code}-{row.subchapter_code}"
+            subchapter_id = f"{row.chapter_code}{row.subchapter_code}"
             dimensions.append(Dimension(
                 original_identifier=subchapter_id,
                 type="SUBCHAPTER",

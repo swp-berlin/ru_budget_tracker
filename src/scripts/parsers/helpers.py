@@ -154,7 +154,7 @@ def clean_code_value(value) -> Optional[str]:
     """Clean a code value, returning None if empty."""
     if pd.isna(value):
         return None
-    cleaned = str(value).strip()
+    cleaned = str(value).strip().replace(" ", "")
     if cleaned.lower() == "nan" or cleaned == "":
         return None
     return cleaned
