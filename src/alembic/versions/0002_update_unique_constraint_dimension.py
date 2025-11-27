@@ -7,11 +7,11 @@ Create Date: 2025-11-21 10:20:08.646887
 """
 
 from alembic import op
-import sqlalchemy as sa
+import sqlalchemy as sa  # noqa: F401
 from database import get_sync_session  # noqa: F401
 
 
-# revision identifiers, used by Alembic.
+# Revision identifiers, used by Alembic for version tracking
 revision = "0002"  # pragma: allowlist secret
 down_revision = "0001"  # pragma: allowlist secret
 branch_labels = None
