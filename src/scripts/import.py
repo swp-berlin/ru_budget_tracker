@@ -18,15 +18,13 @@ import logging
 # Add parent to path if needed
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from models import Budget, Dimension, Expense
 from database.sessions import get_sync_session
 from parsers import parse_law_file
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -34,15 +32,15 @@ logger = logging.getLogger(__name__)
 # DATABASE OPERATIONS
 # =============================================================================
 
+
 def save_budget(session: Session, budget: Budget) -> int:
     """
     Save or update budget in database.
-    
+
     Returns: database ID
     """
-    existing = session.query(Budget).filter_by(
-        original_identifier=budget.original_identifier
-    ).first()
+    select_stmt = select(Budget).where(Budget.original_identifier == budget.original_identifier)
+    existing = session.scalars(select_stmt).first()
 
     if existing:
         budget.id = existing.id
@@ -63,18 +61,22 @@ def upsert_dimension(
 ) -> Dimension:
     """
     Upsert dimension with special parent_id handling:
-    
+
     1. If exists with same parent_id → skip (return existing)
     2. If exists with parent_id=None → update to new parent_id
     3. If exists with different non-null parent_id → add new row
     """
     # First: check for exact match (same parent_id) → skip
-    exact_match = session.query(Dimension).filter_by(
-        original_identifier=original_identifier,
-        type=dim_type,
-        name=name,
-        parent_id=parent_db_id,
-    ).first()
+    exact_match = (
+        session.query(Dimension)
+        .filter_by(
+            original_identifier=original_identifier,
+            type=dim_type,
+            name=name,
+            parent_id=parent_db_id,
+        )
+        .first()
+    )
 
     if exact_match:
         logger.debug(f"Exact match found: {original_identifier} ({dim_type})")
@@ -82,15 +84,21 @@ def upsert_dimension(
 
     # Second: check for match with parent_id=None → update
     if parent_db_id is not None:
-        null_parent = session.query(Dimension).filter_by(
-            original_identifier=original_identifier,
-            type=dim_type,
-            name=name,
-            parent_id=None,
-        ).first()
+        null_parent = (
+            session.query(Dimension)
+            .filter_by(
+                original_identifier=original_identifier,
+                type=dim_type,
+                name=name,
+                parent_id=None,
+            )
+            .first()
+        )
 
         if null_parent:
-            logger.debug(f"Updating null parent: {original_identifier} ({dim_type}) -> parent_id={parent_db_id}")
+            logger.debug(
+                f"Updating null parent: {original_identifier} ({dim_type}) -> parent_id={parent_db_id}"
+            )
             null_parent.parent_id = parent_db_id
             session.flush()
             return null_parent
@@ -110,18 +118,16 @@ def upsert_dimension(
 
 
 def _find_parent_db_id(
-    parent_identifier: str,
-    expected_type: str | None,
-    dim_map: Dict[tuple, Dimension]
+    parent_identifier: str, expected_type: str | None, dim_map: Dict[tuple, Dimension]
 ) -> int | None:
     """
     Find parent's DB id by its original_identifier.
-    
+
     Args:
         parent_identifier: The string identifier (e.g., "01")
         expected_type: Expected dimension type (e.g., "PROGRAM", "CHAPTER")
         dim_map: Mapping of (identifier, type) -> DB Dimension
-    
+
     Returns:
         The parent's database id, or None if not found
     """
@@ -132,16 +138,14 @@ def _find_parent_db_id(
 
 
 def save_dimensions(
-    session: Session,
-    dimensions: List[Dimension],
-    budget_db_id: int
+    session: Session, dimensions: List[Dimension], budget_db_id: int
 ) -> Dict[tuple, Dimension]:
     """
     Save dimensions using upsert logic:
     - Skip if exact match exists
     - Update if exists with parent_id=None
     - Add new row if exists with different parent_id
-    
+
     Returns: mapping of (identifier, type) -> DB dimension
     """
     dim_map: Dict[tuple, Dimension] = {}
@@ -168,11 +172,15 @@ def save_dimensions(
 
         # dim.parent_id is a string identifier (e.g., "01")
         # We need to find the DB id of that parent
-        expected_parent_type = "PROGRAM" if dim.type == "PROGRAM" else "CHAPTER" if dim.type == "SUBCHAPTER" else None
-        parent_db_id = _find_parent_db_id(dim.parent_id, expected_parent_type, dim_map)
+        expected_parent_type = (
+            "PROGRAM" if dim.type == "PROGRAM" else "CHAPTER" if dim.type == "SUBCHAPTER" else None
+        )
+        parent_db_id = _find_parent_db_id(str(dim.parent_id), expected_parent_type, dim_map)
 
         if parent_db_id is None:
-            logger.warning(f"Parent '{dim.parent_id}' not found for {dim.original_identifier} ({dim.type})")
+            logger.warning(
+                f"Parent '{dim.parent_id}' not found for {dim.original_identifier} ({dim.type})"
+            )
 
         db_dim = upsert_dimension(
             session,
@@ -190,10 +198,7 @@ def save_dimensions(
 
 
 def save_expenses(
-    session: Session,
-    expenses: List[Expense],
-    budget_db_id: int,
-    dim_map: Dict[tuple, Dimension]
+    session: Session, expenses: List[Expense], budget_db_id: int, dim_map: Dict[tuple, Dimension]
 ) -> None:
     """Save expenses with dimension links."""
     for expense in expenses:
@@ -218,21 +223,22 @@ def save_expenses(
 # MAIN IMPORT FUNCTION
 # =============================================================================
 
+
 def import_law_file(file_path: Path) -> int:
     """
     Import a single LAW file.
-    
+
     Steps:
         1. Parse file (read ONCE) → budget, dimensions, expenses
         2. Save budget → get budget_db_id
         3. Save dimensions → get dim_map
         4. Save expenses with dimension links
-    
+
     Returns: budget database ID
     """
-    logger.info(f"\n{'='*60}")
+    logger.info(f"\n{'=' * 60}")
     logger.info(f"Importing: {file_path.name}")
-    logger.info(f"{'='*60}")
+    logger.info(f"{'=' * 60}")
 
     # Step 1: Parse (file read ONCE here)
     budget, dimensions, expenses = parse_law_file(file_path)
@@ -252,6 +258,7 @@ def import_law_file(file_path: Path) -> int:
 # CLI
 # =============================================================================
 
+
 def main():
     parser = argparse.ArgumentParser(description="Import budget data")
     parser.add_argument("--years", nargs="+", type=int, help="Years to import")
@@ -259,8 +266,14 @@ def main():
     parser.add_argument(
         "--data-dir",
         type=Path,
-        default=Path("data/import_files/clean/laws"),
-        help="Directory with import files"
+        default=Path(__file__).parent.parent / "data" / "import_files" / "clean",
+        help="Directory with import files",
+    )
+    parser.add_argument(
+        "--prefix",
+        type=str,
+        default="law",
+        help="Prefix of the import files (e.g., 'law' for 'law_2024.xlsx')",
     )
     args = parser.parse_args()
 
@@ -268,9 +281,11 @@ def main():
     if args.file:
         files = [args.file]
     elif args.years:
-        files = [args.data_dir / f"law_{y}.xlsx" for y in args.years]
+        files = [args.data_dir / f"{args.prefix}s" / f"{args.prefix}_{y}.xlsx" for y in args.years]
     else:
-        files = [args.data_dir / f"law_{y}.xlsx" for y in range(2018, 2026)]
+        files = [
+            args.data_dir / f"{args.prefix}s" / f"{args.prefix}_{y}.xlsx" for y in range(2018, 2026)
+        ]
 
     # Import
     success, failed = [], []
@@ -289,7 +304,7 @@ def main():
             failed.append((f.name, str(e)))
 
     # Summary
-    logger.info(f"\n{'='*60}")
+    logger.info(f"\n{'=' * 60}")
     logger.info(f"DONE: {len(success)} success, {len(failed)} failed")
     if failed:
         for name, err in failed:
