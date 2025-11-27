@@ -117,22 +117,20 @@ def parse_law_dimensions(merged_rows: List[MergedRow]) -> List[Dimension]:
 
 
 def _find_parent_program(program_code: str, find_dim) -> Optional[str]:
-    """Find parent program by walking up the hierarchy."""
-    parts = program_code.strip().split()
-    if len(parts) <= 1:
+    """Find parent program by walking up the hierarchy (character-based)."""
+    code = program_code.strip()
+    
+    if len(code) <= 1:
         return None
-
-    # Try progressively shorter versions
-    for i in range(len(parts) - 1, 0, -1):
-        candidate = " ".join(parts[:i])
+    
+    # Try progressively longer prefixes, return the longest match
+    longest_match = None
+    for length in range(1, len(code)):
+        candidate = code[:length]
         if find_dim(candidate, "PROGRAM"):
-            return candidate
-
-    # Try first part alone
-    if find_dim(parts[0], "PROGRAM"):
-        return parts[0]
-
-    return None
+            longest_match = candidate
+    
+    return longest_match
 
 
 def parse_law_expenses(merged_rows: List[MergedRow], dimensions: List[Dimension]) -> List[Expense]:
