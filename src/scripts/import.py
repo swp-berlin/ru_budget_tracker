@@ -21,7 +21,7 @@ import logging
 # Add parent to path if needed
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 from models import Budget, Dimension, Expense
 from database.sessions import get_sync_session
@@ -70,37 +70,38 @@ def upsert_dimension(
     3. If exists with different non-null parent_id → add new row
     """
     # First: check for exact match (same parent_id) → skip
+    # Use case-insensitive name matching (lower(name) == lower(:name))
     exact_match = (
         session.query(Dimension)
-        .filter_by(
-            original_identifier=original_identifier,
-            type=dim_type,
-            name=name,
-            parent_id=parent_db_id,
+        .filter(
+            Dimension.original_identifier == original_identifier,
+            Dimension.type == dim_type,
+            func.lower(Dimension.name) == (name.lower() if name is not None else None),
+            Dimension.parent_id == parent_db_id,
         )
         .first()
     )
 
     if exact_match:
-        logger.debug(f"Exact match found: {original_identifier} ({dim_type})")
+        logger.debug(f"Exact match found (case-insensitive): {original_identifier} ({dim_type})")
         return exact_match
 
     # Second: check for match with parent_id=None → update
     if parent_db_id is not None:
         null_parent = (
             session.query(Dimension)
-            .filter_by(
-                original_identifier=original_identifier,
-                type=dim_type,
-                name=name,
-                parent_id=None,
+            .filter(
+                Dimension.original_identifier == original_identifier,
+                Dimension.type == dim_type,
+                func.lower(Dimension.name) == (name.lower() if name is not None else None),
+                Dimension.parent_id.is_(None),
             )
             .first()
         )
 
         if null_parent:
             logger.debug(
-                f"Updating null parent: {original_identifier} ({dim_type}) -> parent_id={parent_db_id}"
+                f"Updating null parent (case-insensitive match): {original_identifier} ({dim_type}) -> parent_id={parent_db_id}"
             )
             null_parent.parent_id = parent_db_id
             session.flush()
