@@ -206,8 +206,8 @@ def parse_law_file(file_path: Path) -> Tuple[Budget, List[Dimension], List[Expen
     header_idx = find_header_row(df)
     col_mapping = get_column_mapping(df.iloc[header_idx])
 
-    # 4. Merge multi-line rows
-    merged_rows = merge_rows(df, header_idx, col_mapping)
+    # 4. Merge multi-line rows (LAW values are in thousands → multiply by 1000)
+    merged_rows = merge_rows(df, header_idx, col_mapping, multiplier=1000.0)
 
     # 5. Parse dimensions
     dimensions = parse_law_dimensions(merged_rows)
