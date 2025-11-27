@@ -152,3 +152,14 @@ class Dimension(Base):  # type: ignore[misc]
             name="uix_dimensions_name_type_original_parent",
         ),
     )
+
+    # for a given budget, the combination of budget_id, type and original_identifier should be unique
+    __table_args__ = (
+        UniqueConstraint(
+            "name",
+            "type",
+            "original_identifier",
+            "parent_id",
+            name="uix_dimensions_name_type_original_parent",
+        ),
+    )
