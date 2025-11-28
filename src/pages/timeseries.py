@@ -1,9 +1,11 @@
+from typing import Any
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from dash import (
     Input,
     Output,
+    State,
     callback,
     dcc,
     html,
@@ -45,80 +47,116 @@ def layout(**other_unknown_query_strings: str | None) -> html.Div:
             # Add Buttons and dropdowns for filtering by budget type
             html.Div(
                 [
-                    html.H1("Filters: "),
-                    dcc.Dropdown(
-                        id="budget-dataset-dropdown",
-                        options=budget_options,
-                        clearable=False,
-                        value=budget_options[0]["value"] if budget_options else None,
-                        placeholder=budget_options[0]["label"]
-                        if budget_options
-                        else "Select Budget",
-                        searchable=True,
-                        style={"width": "200px"},
-                    ),
-                    dcc.Dropdown(
-                        id="viewby-dropdown",
-                        options=[
-                            {"label": "Ministry", "value": "MINISTRY"},
-                            {"label": "Chapter", "value": "CHAPTER"},
-                            {"label": "Programm", "value": "PROGRAMM"},
+                    html.Div(
+                        [
+                            html.H1("Filters: "),
+                            dcc.Dropdown(
+                                id="budget-dataset-dropdown",
+                                options=budget_options,
+                                clearable=False,
+                                value=budget_options[0]["value"] if budget_options else None,
+                                placeholder=budget_options[0]["label"]
+                                if budget_options
+                                else "Select Budget",
+                                searchable=True,
+                                style={"width": "100px"},
+                            ),
+                            dcc.Dropdown(
+                                id="viewby-dropdown",
+                                options=[
+                                    {"label": "Ministry", "value": "MINISTRY"},
+                                    {"label": "Chapter", "value": "CHAPTER"},
+                                    {"label": "Programm", "value": "PROGRAMM"},
+                                ],
+                                clearable=False,
+                                value="MINISTRY",
+                                placeholder="Ministry",
+                                style={"width": "150px"},
+                                disabled=True,
+                            ),
+                            dcc.Dropdown(
+                                id="spending-type-dropdown",
+                                options=[
+                                    {"label": "All", "value": "ALL"},
+                                    {"label": "Military Only", "value": "MILITARY"},
+                                ],
+                                clearable=False,
+                                placeholder="All",
+                                value="ALL",
+                                style={"width": "150px"},
+                            ),
+                            dcc.Dropdown(
+                                id="spending-scope-dropdown",
+                                options=[
+                                    {"label": "Billion RUB", "value": "ABSOLUT"},
+                                    {"label": "% full-year GDP", "value": "PERCENT_GDP_FULL_YEAR"},
+                                    {
+                                        "label": "% year-to-year GDP",
+                                        "value": "PERCENT_GDP_YEAR_TO_YEAR",
+                                    },
+                                    {
+                                        "label": "% full-year spending",
+                                        "value": "PERCENT_FULL_YEAR_SPENDING",
+                                    },
+                                    {
+                                        "label": "% year-to-year spending",
+                                        "value": "PERCENT_YEAR_TO_YEAR_SPENDING",
+                                    },
+                                    {
+                                        "label": "% year-to-year revenue",
+                                        "value": "PERCENT_YEAR_TO_YEAR_REVENUE",
+                                    },
+                                ],
+                                clearable=False,
+                                value="ABSOLUT",
+                                placeholder="Billion RUB",
+                                style={"width": "200px"},
+                            ),
                         ],
-                        clearable=False,
-                        value="MINISTRY",
-                        placeholder="Ministry",
-                        style={"width": "200px"},
-                        disabled=True,
+                        style={
+                            "display": "flex",
+                            "flex-wrap": "wrap",
+                            "justify-content": "flex-start",
+                            "gap": "10px",
+                        },
                     ),
-                    dcc.Dropdown(
-                        id="spending-type-dropdown",
-                        options=[
-                            {"label": "All", "value": "ALL"},
-                            {"label": "Military Only", "value": "MILITARY"},
+                    html.Div(
+                        [
+                            html.Div(
+                                [
+                                    html.Button("Download CSV", id="btn-download-csv"),
+                                    dcc.Download(id="download-barchart-data"),
+                                ]
+                            ),
+                            dcc.Link(
+                                html.Button("Treemap"),
+                                href="/",
+                            ),
+                            dcc.Link(
+                                html.Button("About"),
+                                href="/about",
+                            ),
                         ],
-                        clearable=False,
-                        placeholder="All",
-                        value="ALL",
-                        style={"width": "200px"},
-                    ),
-                    dcc.Dropdown(
-                        id="spending-scope-dropdown",
-                        options=[
-                            {"label": "Billion RUB", "value": "ABSOLUT"},
-                            {"label": "% full-year GDP", "value": "PERCENT_GDP_FULL_YEAR"},
-                            {"label": "% year-to-year GDP", "value": "PERCENT_GDP_YEAR_TO_YEAR"},
-                            {
-                                "label": "% full-year spending",
-                                "value": "PERCENT_FULL_YEAR_SPENDING",
-                            },
-                            {
-                                "label": "% year-to-year spending",
-                                "value": "PERCENT_YEAR_TO_YEAR_SPENDING",
-                            },
-                            {
-                                "label": "% year-to-year revenue",
-                                "value": "PERCENT_YEAR_TO_YEAR_REVENUE",
-                            },
-                        ],
-                        clearable=False,
-                        value="ABSOLUT",
-                        placeholder="Billion RUB",
-                        style={"width": "250px"},
-                    ),
-                    # Button to switch to Barchart page
-                    dcc.Link(
-                        html.Button("Go to Treemap"),
-                        href="/",
+                        style={
+                            "display": "flex",
+                            "flex-wrap": "wrap",
+                            "justify-content": "flex-end",
+                            "gap": "10px",
+                        },
                     ),
                 ],
                 style={
                     "display": "flex",
+                    "flex-wrap": "wrap",
+                    "justify-content": "space-between",
                     "gap": "10px",
                     "margin-bottom": "20px",
                     "margin-top": "20px",
                 },
             ),
-            dcc.Graph(id="timeseries-graph"),
+            # Graph to display the treemap
+            dcc.Store(id="barchart-store"),
+            dcc.Graph(id="barchart-graph"),
         ]
     )
 
@@ -137,7 +175,7 @@ def generate_figure(df: pd.DataFrame) -> go.Figure:
 
 # Callback to populate the graph on load and when filters change
 @callback(
-    Output("timeseries-graph", "figure"),
+    Output("barchart-graph", "figure"),
     Input("budget-dataset-dropdown", "value"),
     Input("viewby-dropdown", "value"),
     Input("spending-type-dropdown", "value"),
@@ -170,3 +208,30 @@ def update_figure_from_filters(
     df = transformer.transform_data()
     # Generate and return the figure
     return generate_figure(df=df)
+
+
+@callback(
+    Output("download-barchart-data", "data"),
+    Input("btn-download-csv", "n_clicks"),
+    State("barchart-store", "data"),
+    prevent_initial_call=True,
+)
+def download_data(n_clicks, data) -> dict[str, Any]:
+    """
+    Callback to download the current treemap data as a csv file.
+    Returns:
+        dict[str, Any]: The data for download.
+    """
+    return dcc.send_data_frame(  # type: ignore
+        pd.DataFrame(
+            fetch_barchart_data(
+                budget_dataset=data["budget_dataset"],
+                viewby=data["viewby"],
+                spending_type=data["spending_type"],
+                spending_scope=data["spending_scope"],
+            )
+        ).to_csv,
+        "treemap_data.csv",
+        sep=";",
+        index=False,
+    )
