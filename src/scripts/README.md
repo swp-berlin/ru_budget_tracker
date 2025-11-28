@@ -13,8 +13,12 @@ For exammple data import scripts.
     - [Mapping Expenses to Dimensions](#mapping-expenses-to-dimensions)
 
 ## Importing Data
-To import data into the database, you have to create an import script in this directory.
-You can refer to the [`example_import_script.py`](src/scripts/example_import_script.py) for guidance on how to implement the import logic and handle relationships between expenses and dimensions. Please consider the following explanation, guidelines and tips before creating your own import scripts.
+To import data into the database, you have to execute the [`import.py`](src/scripts/import.py) script. Since some of the xlsx files are corrupt, you firstlY need to execute [`fix_corrupt_excel_files.py`](src/scripts/fix_corrupt_excel_files.py). 
+
+this could be through 
+```{python}
+uv run python scripts/import.py --type all
+```
 
 ### Data Model
 The SQLAlchemy models defining the database schema can be found in the [`src/models/`](src/models/) directory.
