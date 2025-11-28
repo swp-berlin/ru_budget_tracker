@@ -60,7 +60,7 @@ def parse_law_dimensions(merged_rows: List[MergedRow]) -> List[Dimension]:
 
         # SUBCHAPTER
         if row.subchapter_code and not row.program_code:
-            subchapter_id = f"{row.chapter_code}-{row.subchapter_code}"
+            subchapter_id = f"{row.chapter_code}{row.subchapter_code}"
             dimensions.append(Dimension(
                 original_identifier=subchapter_id,
                 type="SUBCHAPTER",
@@ -117,22 +117,20 @@ def parse_law_dimensions(merged_rows: List[MergedRow]) -> List[Dimension]:
 
 
 def _find_parent_program(program_code: str, find_dim) -> Optional[str]:
-    """Find parent program by walking up the hierarchy."""
-    parts = program_code.strip().split()
-    if len(parts) <= 1:
+    """Find parent program by walking up the hierarchy (character-based)."""
+    code = program_code.strip()
+    
+    if len(code) <= 1:
         return None
-
-    # Try progressively shorter versions
-    for i in range(len(parts) - 1, 0, -1):
-        candidate = " ".join(parts[:i])
+    
+    # Try progressively longer prefixes, return the longest match
+    longest_match = None
+    for length in range(1, len(code)):
+        candidate = code[:length]
         if find_dim(candidate, "PROGRAM"):
-            return candidate
-
-    # Try first part alone
-    if find_dim(parts[0], "PROGRAM"):
-        return parts[0]
-
-    return None
+            longest_match = candidate
+    
+    return longest_match
 
 
 def parse_law_expenses(merged_rows: List[MergedRow], dimensions: List[Dimension]) -> List[Expense]:
@@ -164,7 +162,7 @@ def parse_law_expenses(merged_rows: List[MergedRow], dimensions: List[Dimension]
                 expense.dimensions.append(dim)
 
         if row.subchapter_code and row.chapter_code:
-            subchapter_id = f"{row.chapter_code}-{row.subchapter_code}"
+            subchapter_id = f"{row.chapter_code}{row.subchapter_code}"
             dim = dim_lookup.get(("SUBCHAPTER", subchapter_id))
             if dim:
                 expense.dimensions.append(dim)
@@ -208,8 +206,8 @@ def parse_law_file(file_path: Path) -> Tuple[Budget, List[Dimension], List[Expen
     header_idx = find_header_row(df)
     col_mapping = get_column_mapping(df.iloc[header_idx])
 
-    # 4. Merge multi-line rows
-    merged_rows = merge_rows(df, header_idx, col_mapping)
+    # 4. Merge multi-line rows (LAW values are in thousands → multiply by 1000)
+    merged_rows = merge_rows(df, header_idx, col_mapping, multiplier=1000.0)
 
     # 5. Parse dimensions
     dimensions = parse_law_dimensions(merged_rows)

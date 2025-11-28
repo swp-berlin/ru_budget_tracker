@@ -4,15 +4,18 @@ Budget import script.
 Clean, human-readable import logic. Each file is read ONCE.
 
 Usage:
-    python import.py                      # Import all laws 2018-2025
-    python import.py --years 2020 2021    # Import specific years
-    python import.py --file law_2024.xlsx # Import single file
+    python import.py                              # Import all laws 2018-2025
+    python import.py --years 2020 2021            # Import specific years (laws)
+    python import.py --file law_2024.xlsx         # Import single file
+    python import.py --type report --years 2018   # Import reports for 2018
+    python import.py --type report                # Import all reports 2018-2025
+    python import.py --type all                   # Import all laws and reports
 """
 
 import sys
 import argparse
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Dict, Literal
 import logging
 
 # Add parent to path if needed
@@ -22,7 +25,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from models import Budget, Dimension, Expense
 from database.sessions import get_sync_session
-from parsers import parse_law_file
+from parsers import parse_law_file, parse_report_file
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -56,7 +59,7 @@ def upsert_dimension(
     original_identifier: str,
     dim_type: str,
     name: str,
-    parent_db_id: int | None,  # Renamed for clarity: this is the DB id, not the string identifier
+    parent_db_id: int | None,
     name_translated: str | None = None,
 ) -> Dimension:
     """
@@ -220,13 +223,13 @@ def save_expenses(
 
 
 # =============================================================================
-# MAIN IMPORT FUNCTION
+# MAIN IMPORT FUNCTIONS
 # =============================================================================
 
 
-def import_law_file(file_path: Path) -> int:
+def import_budget_file(file_path: Path, file_type: Literal["law", "report"]) -> int:
     """
-    Import a single LAW file.
+    Import a single budget file (LAW or REPORT).
 
     Steps:
         1. Parse file (read ONCE) → budget, dimensions, expenses
@@ -237,11 +240,14 @@ def import_law_file(file_path: Path) -> int:
     Returns: budget database ID
     """
     logger.info(f"\n{'=' * 60}")
-    logger.info(f"Importing: {file_path.name}")
+    logger.info(f"Importing {file_type.upper()}: {file_path.name}")
     logger.info(f"{'=' * 60}")
 
     # Step 1: Parse (file read ONCE here)
-    budget, dimensions, expenses = parse_law_file(file_path)
+    if file_type == "law":
+        budget, dimensions, expenses = parse_law_file(file_path)
+    else:
+        budget, dimensions, expenses = parse_report_file(file_path)
 
     # Steps 2-4: Save to database
     with get_sync_session() as session:
@@ -254,6 +260,56 @@ def import_law_file(file_path: Path) -> int:
     return budget_db_id
 
 
+def import_law_file(file_path: Path) -> int:
+    """Import a single LAW file."""
+    return import_budget_file(file_path, "law")
+
+
+def import_report_file(file_path: Path) -> int:
+    """Import a single REPORT file."""
+    return import_budget_file(file_path, "report")
+
+
+# =============================================================================
+# FILE DISCOVERY
+# =============================================================================
+
+
+def get_law_files(data_dir: Path, years: List[int] | None = None) -> List[Path]:
+    """Get law files for specified years (or all years 2018-2025)."""
+    if years is None:
+        years = list(range(2018, 2026))
+    
+    laws_dir = data_dir / "laws"
+    return [laws_dir / f"law_{year}.xlsx" for year in years]
+
+
+def get_report_files(data_dir: Path, years: List[int] | None = None) -> List[Path]:
+    """
+    Get report files for specified years (or all years 2018-2025).
+    
+    Reports are named: report_YYYY_MM.xlsx
+    Returns all report files found for the specified years.
+    """
+    if years is None:
+        years = list(range(2018, 2026))
+    
+    reports_dir = data_dir / "reports"
+    
+    if not reports_dir.exists():
+        logger.warning(f"Reports directory not found: {reports_dir}")
+        return []
+    
+    files = []
+    for year in years:
+        # Find all report files for this year
+        pattern = f"report_{year}_*.xls*"
+        year_files = sorted(reports_dir.glob(pattern))
+        files.extend(year_files)
+    
+    return files
+
+
 # =============================================================================
 # CLI
 # =============================================================================
@@ -261,6 +317,13 @@ def import_law_file(file_path: Path) -> int:
 
 def main():
     parser = argparse.ArgumentParser(description="Import budget data")
+    parser.add_argument(
+        "--type",
+        type=str,
+        choices=["law", "report", "all"],
+        default="law",
+        help="Type of files to import: law, report, or all (default: law)",
+    )
     parser.add_argument("--years", nargs="+", type=int, help="Years to import")
     parser.add_argument("--file", type=Path, help="Single file to import")
     parser.add_argument(
@@ -269,39 +332,54 @@ def main():
         default=Path(__file__).parent.parent / "data" / "import_files" / "clean",
         help="Directory with import files",
     )
-    parser.add_argument(
-        "--prefix",
-        type=str,
-        default="law",
-        help="Prefix of the import files (e.g., 'law' for 'law_2024.xlsx')",
-    )
     args = parser.parse_args()
 
-    # Determine files
-    if args.file:
-        files = [args.file]
-    elif args.years:
-        files = [args.data_dir / f"{args.prefix}s" / f"{args.prefix}_{y}.xlsx" for y in args.years]
-    else:
-        files = [
-            args.data_dir / f"{args.prefix}s" / f"{args.prefix}_{y}.xlsx" for y in range(2018, 2026)
-        ]
-
-    # Import
     success, failed = [], []
 
-    for f in files:
-        if not f.exists():
-            logger.warning(f"File not found: {f}")
-            failed.append((f.name, "not found"))
-            continue
-
+    # Single file import
+    if args.file:
+        file_path = args.file
+        # Detect type from filename
+        if file_path.name.startswith("law"):
+            file_type = "law"
+        elif file_path.name.startswith("report"):
+            file_type = "report"
+        else:
+            logger.error(f"Cannot determine file type from filename: {file_path.name}")
+            sys.exit(1)
+        
         try:
-            import_law_file(f)
-            success.append(f.name)
+            import_budget_file(file_path, file_type)
+            success.append(file_path.name)
         except Exception as e:
             logger.error(f"Failed: {e}", exc_info=True)
-            failed.append((f.name, str(e)))
+            failed.append((file_path.name, str(e)))
+    
+    else:
+        # Batch import
+        files_to_import: List[tuple[Path, Literal["law", "report"]]] = []
+        
+        if args.type in ("law", "all"):
+            for f in get_law_files(args.data_dir, args.years):
+                files_to_import.append((f, "law"))
+        
+        if args.type in ("report", "all"):
+            for f in get_report_files(args.data_dir, args.years):
+                files_to_import.append((f, "report"))
+        
+        # Import files
+        for file_path, file_type in files_to_import:
+            if not file_path.exists():
+                logger.warning(f"File not found: {file_path}")
+                failed.append((file_path.name, "not found"))
+                continue
+
+            try:
+                import_budget_file(file_path, file_type)
+                success.append(file_path.name)
+            except Exception as e:
+                logger.error(f"Failed: {e}", exc_info=True)
+                failed.append((file_path.name, str(e)))
 
     # Summary
     logger.info(f"\n{'=' * 60}")

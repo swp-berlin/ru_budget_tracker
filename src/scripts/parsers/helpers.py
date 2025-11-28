@@ -154,13 +154,13 @@ def clean_code_value(value) -> Optional[str]:
     """Clean a code value, returning None if empty."""
     if pd.isna(value):
         return None
-    cleaned = str(value).strip()
+    cleaned = str(value).strip().replace(" ", "")
     if cleaned.lower() == "nan" or cleaned == "":
         return None
     return cleaned
 
 
-def merge_rows(df: pd.DataFrame, header_row_idx: int, col_mapping: Dict[str, int]) -> List[MergedRow]:
+def merge_rows(df: pd.DataFrame, header_row_idx: int, col_mapping: Dict[str, int], multiplier: float = 1.0) -> List[MergedRow]:
     """
     Merge multi-row entries where text spans multiple rows.
     
@@ -216,13 +216,13 @@ def merge_rows(df: pd.DataFrame, header_row_idx: int, col_mapping: Dict[str, int
         full_name = (accumulated_name + " " + name) if accumulated_name else name
         accumulated_name = ""
 
-        # Get value
+        # Get value (apply multiplier if provided)
         value = None
         if "value" in col_mapping:
             value_raw = row.iloc[col_mapping["value"]]
             if pd.notna(value_raw):
                 try:
-                    value = float(value_raw)
+                    value = float(value_raw) * multiplier
                 except (ValueError, TypeError):
                     pass
 
