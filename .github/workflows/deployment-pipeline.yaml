@@ -90,11 +90,11 @@ jobs:
 
       - name: Copy Docker compose
         run: |
-          ssh staging 'mkdir -p /home/jan/ru_budget_tracker'
-          scp -o StrictHostKeyChecking=no docker-compose.staging.yml staging:/home/jan/ru_budget_tracker/docker-compose.yml
+          ssh staging 'mkdir -p /home/deploy/ru_budget_tracker'
+          scp -o StrictHostKeyChecking=no docker-compose.staging.yml staging:/home/deploy/ru_budget_tracker/docker-compose.yml
 
       - name: Start services
         run: |
           ssh staging 'echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin'
-          ssh staging "docker compose -f /home/jan/ru_budget_tracker/docker-compose.yml pull"
-          ssh staging "docker compose -f /home/jan/ru_budget_tracker/docker-compose.yml up -d"
+          ssh staging "docker compose -f /home/deploy/ru_budget_tracker/docker-compose.yml pull"
+          ssh staging "docker compose -f /home/deploy/ru_budget_tracker/docker-compose.yml up -d"
