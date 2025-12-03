@@ -10,12 +10,13 @@ Usage:
     python import.py --type report --years 2018   # Import reports for 2018
     python import.py --type report                # Import all reports 2018-2025
     python import.py --type all                   # Import all laws and reports
+    python import.py --totals path/to/totals.xlsx # Import totals file
 """
 
 import sys
 import argparse
 from pathlib import Path
-from typing import List, Dict, Literal
+from typing import List, Dict, Literal, Optional, Tuple
 import logging
 
 # Add parent to path if needed
@@ -25,7 +26,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from models import Budget, Dimension, Expense
 from database.sessions import get_sync_session
-from parsers import parse_law_file, parse_report_file
+from parsers import parse_law_file, parse_report_file, parse_totals_file
+        
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -222,6 +224,57 @@ def save_expenses(
     logger.info(f"Saved {len(expenses)} expenses")
 
 
+def get_chapter_dimensions(session: Session, chapter_codes: List[str]) -> List[Dimension]:
+    """
+    Get existing CHAPTER dimensions from the database.
+    
+    If a chapter code exists multiple times (e.g., with different names),
+    only one is returned per code (the first one found).
+    
+    Args:
+        session: Database session
+        chapter_codes: List of chapter codes to find (e.g., ["01", "02", ..., "14"])
+        
+    Returns:
+        List of Dimension objects for matching chapters (one per code)
+    """
+    all_chapters = (
+        session.query(Dimension)
+        .filter(
+            Dimension.type == "CHAPTER",
+            Dimension.original_identifier.in_(chapter_codes),
+        )
+        .all()
+    )
+    
+    # Deduplicate: keep only one per original_identifier
+    seen_codes: set = set()
+    chapters: List[Dimension] = []
+    for chapter in all_chapters:
+        if chapter.original_identifier not in seen_codes:
+            seen_codes.add(chapter.original_identifier)
+            chapters.append(chapter)
+        else:
+            logger.debug(
+                f"Skipping duplicate chapter {chapter.original_identifier}: {chapter.name[:50]}"
+            )
+    
+    found_codes = {c.original_identifier for c in chapters}
+    missing = set(chapter_codes) - found_codes
+    
+    if missing:
+        logger.warning(f"Missing chapter dimensions: {sorted(missing)}")
+    
+    if len(all_chapters) != len(chapters):
+        logger.info(
+            f"Found {len(all_chapters)} chapter rows, deduplicated to {len(chapters)} unique codes"
+        )
+    else:
+        logger.info(f"Found {len(chapters)} of {len(chapter_codes)} chapter dimensions")
+    
+    return chapters
+
+
 # =============================================================================
 # MAIN IMPORT FUNCTIONS
 # =============================================================================
@@ -270,6 +323,92 @@ def import_report_file(file_path: Path) -> int:
     return import_budget_file(file_path, "report")
 
 
+def import_totals_file(file_path: Path) -> int:
+    """
+    Import a totals file.
+    
+    Creates per month (from 2018 onwards):
+    - 1 Budget for total revenue (TOTAL-REVENUE-YYYY-MM) with 1 expense, no dimensions
+    - 1 Budget for total expenses (TOTAL-EXPENSE-YYYY-MM) with 15 expenses:
+      - 1 total expense (no dimensions)
+      - 14 chapter expenses (each linked to one chapter)
+    
+    IMPORTANT: Law files must be imported first to create the CHAPTER dimensions.
+    
+    Returns: number of budgets imported
+    """
+    logger.info(f"\n{'=' * 60}")
+    logger.info(f"Importing TOTALS: {file_path.name}")
+    logger.info(f"{'=' * 60}")
+
+    budgets, chapter_codes, expenses_with_chapter = parse_totals_file(file_path)
+    
+    if not budgets:
+        logger.warning(f"No data found in {file_path.name}")
+        return 0
+
+    with get_sync_session() as session:
+        # Get existing chapter dimensions from the database
+        chapter_dimensions = get_chapter_dimensions(session, chapter_codes)
+        
+        if not chapter_dimensions:
+            logger.warning(
+                "No CHAPTER dimensions found in database. "
+                "Import LAW files first to create chapters."
+            )
+        
+        # Build lookup: chapter_code -> Dimension
+        chapter_lookup: Dict[str, Dimension] = {
+            dim.original_identifier: dim for dim in chapter_dimensions
+        }
+        
+        # Group expenses by budget identifier
+        expenses_by_budget: Dict[str, List[Tuple[Expense, Optional[str]]]] = {}
+        for budget_id, expense, chapter_code in expenses_with_chapter:
+            if budget_id not in expenses_by_budget:
+                expenses_by_budget[budget_id] = []
+            expenses_by_budget[budget_id].append((expense, chapter_code))
+        
+        # Save each budget and its expenses
+        count = 0
+        for budget in budgets:
+            budget_db_id = save_budget(session, budget)
+            
+            budget_expenses = expenses_by_budget.get(budget.original_identifier, [])
+            for expense, chapter_code in budget_expenses:
+                # Link to chapter dimension if specified
+                db_dims: List[Dimension] = []
+                if chapter_code:
+                    chapter_dim = chapter_lookup.get(chapter_code)
+                    if chapter_dim:
+                        db_dims.append(chapter_dim)
+                    else:
+                        logger.warning(f"Chapter {chapter_code} not found in database")
+                
+                new_expense = Expense(
+                    budget_id=budget_db_id,
+                    value=expense.value,
+                    dimensions=db_dims,
+                )
+                session.add(new_expense)
+            
+            count += 1
+        
+        session.commit()
+
+    # Summary
+    years = sorted(set(b.published_at.year for b in budgets))
+    revenue_count = len([b for b in budgets if "REVENUE" in b.original_identifier])
+    expense_count = len([b for b in budgets if "EXPENSE" in b.original_identifier])
+    
+    logger.info(f"✓ Imported {count} budgets")
+    logger.info(f"  Revenue budgets: {revenue_count} (1 expense each, no dimensions)")
+    logger.info(f"  Expense budgets: {expense_count} (15 expenses each: 1 total + 14 per chapter)")
+    logger.info(f"  Years: {min(years)} - {max(years)}")
+    
+    return count
+
+
 # =============================================================================
 # FILE DISCOVERY
 # =============================================================================
@@ -278,7 +417,7 @@ def import_report_file(file_path: Path) -> int:
 def get_law_files(data_dir: Path, years: List[int] | None = None) -> List[Path]:
     """Get law files for specified years (or all years 2018-2025)."""
     if years is None:
-        years = list(range(2018, 2026))
+        years = list(range(2018, 2027))
     
     laws_dir = data_dir / "laws"
     return [laws_dir / f"law_{year}.xlsx" for year in years]
@@ -292,7 +431,7 @@ def get_report_files(data_dir: Path, years: List[int] | None = None) -> List[Pat
     Returns all report files found for the specified years.
     """
     if years is None:
-        years = list(range(2018, 2026))
+        years = list(range(2018, 2027))
     
     reports_dir = data_dir / "reports"
     
@@ -326,6 +465,7 @@ def main():
     )
     parser.add_argument("--years", nargs="+", type=int, help="Years to import")
     parser.add_argument("--file", type=Path, help="Single file to import")
+    parser.add_argument("--totals", type=Path, help="Path to totals file to import")
     parser.add_argument(
         "--data-dir",
         type=Path,
@@ -335,6 +475,18 @@ def main():
     args = parser.parse_args()
 
     success, failed = [], []
+
+    # Import totals file if specified
+    if args.totals:
+        if not args.totals.exists():
+            logger.error(f"Totals file not found: {args.totals}")
+            sys.exit(1)
+        try:
+            import_totals_file(args.totals)
+            success.append(args.totals.name)
+        except Exception as e:
+            logger.error(f"Failed to import totals: {e}", exc_info=True)
+            failed.append((args.totals.name, str(e)))
 
     # Single file import
     if args.file:
@@ -355,8 +507,8 @@ def main():
             logger.error(f"Failed: {e}", exc_info=True)
             failed.append((file_path.name, str(e)))
     
-    else:
-        # Batch import
+    elif not args.totals:
+        # Batch import (only if not just importing totals)
         files_to_import: List[tuple[Path, Literal["law", "report"]]] = []
         
         if args.type in ("law", "all"):
