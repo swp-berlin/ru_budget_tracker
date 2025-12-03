@@ -24,6 +24,33 @@ from .helpers import (
 logger = logging.getLogger(__name__)
 
 
+# =============================================================================
+# NAME NORMALIZATION
+# =============================================================================
+
+# Chapter name replacements for consistency across years
+# Format: {old_name: new_name}
+CHAPTER_NAME_REPLACEMENTS = {
+    "Обслуживание государственного (муниципального) долга": 
+        "Обслуживание государственного и муниципального долга",
+}
+
+
+def normalize_chapter_name(name: str) -> str:
+    """
+    Normalize chapter names for consistency across different law years.
+    
+    Some chapters have slightly different names in different years
+    (e.g., law_2020 uses parentheses instead of 'и').
+    """
+    return CHAPTER_NAME_REPLACEMENTS.get(name, name)
+
+
+# =============================================================================
+# PARSING FUNCTIONS
+# =============================================================================
+
+
 def parse_law_budget(file_path: Path) -> Budget:
     """Parse budget metadata from a LAW file."""
     metadata = extract_budget_metadata_from_filename(file_path)
@@ -71,10 +98,11 @@ def parse_law_dimensions(merged_rows: List[MergedRow]) -> List[Dimension]:
 
         # CHAPTER
         if row.chapter_code and not row.subchapter_code and not row.program_code:
+            chapter_name = normalize_chapter_name(name)  # Normalize for consistency
             dimensions.append(Dimension(
                 original_identifier=row.chapter_code,
                 type="CHAPTER",
-                name=name,
+                name=chapter_name,
                 name_translated=None,
                 parent_id=None,
             ))
