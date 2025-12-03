@@ -13,11 +13,13 @@ For exammple data import scripts.
     - [Mapping Expenses to Dimensions](#mapping-expenses-to-dimensions)
 
 ## Importing Data
-To import data into the database, you have to execute the [`import.py`](src/scripts/import.py) script. Since some of the xlsx files are corrupt, you firstlY need to execute [`fix_corrupt_excel_files.py`](src/scripts/fix_corrupt_excel_files.py). 
+To import data into the database, you have to execute the [`import.py`](src/scripts/import.py) script. Since some of the xlsx files are corrupt, you firstly need to execute [`fix_corrupt_excel_files.py`](src/scripts/fix_corrupt_excel_files.py). 
 
 this could be through 
 ```{python}
-uv run python scripts/import.py --type all
+uv run python scripts/fix_corrupt_excel_files.py
+uv run python scripts/import.py --type all 
+uv run python scripts/import.py --totals data/import_files/raw/totals/totals_2026.xlsx
 ```
 
 ### Data Model
