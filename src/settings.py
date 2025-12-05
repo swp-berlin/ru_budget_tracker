@@ -43,6 +43,8 @@ class Settings(BaseSettings):
         env_nested_delimiter="__",
     )
     database: Database = Database()
+    # OpenAI API key for translation scripts (optional)
+    openai_api_key: str | None = None
 
 
 settings = Settings()
