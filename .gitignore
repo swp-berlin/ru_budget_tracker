@@ -7,6 +7,9 @@ wheels/
 *.egg-info
 *.log
 
+# environemnt files
+.env
+
 # IDE files
 .DS_Store
 
