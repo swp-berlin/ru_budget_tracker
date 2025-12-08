@@ -26,14 +26,18 @@ data/import_files/
     reports/
     totals/
     conversion_tables/
-      gdp/
       ppp/
+      gdp/
         rosstat/
         minekonom/
   clean/
     laws/
     reports/
     translations/
+    conversion_tables/
+      ppp/
+
+
 ```
 
 ## Naming conventions
