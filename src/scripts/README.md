@@ -17,9 +17,17 @@ To import data into the database, you have to execute the [`import.py`](src/scri
 
 this could be through 
 ```{python}
+# this will read in xlsx and xls files for budgets and reports and clean up corrupted excel versions
 uv run python scripts/fix_corrupt_excel_files.py
+
+# this will read in the budget reports and budget laws in the sequence laws - reports. 
 uv run python scripts/import.py --type all 
+
+# this will read in the totals for the respective budgets from the Finance Ministry 
 uv run python scripts/import.py --totals data/import_files/raw/totals/totals_2026.xlsx
+
+# This will run the translation pipeline, which will query unique dimension names, check whether they have been translated before and translate the unseen ones with gpto4-mini
+uv run python scripts/translations.py --batch-size 25
 ```
 
 ### Data Model
