@@ -1,32 +1,45 @@
 # Scripts
 
-This directory contains various scripts used for development and maintenance of the project.
-For exammple data import scripts.
+This directory contains various scripts used for development and maintenance of the project,
+for example data import scripts.
 
 ## Table of Contents
 - [Scripts](#scripts)
   - [Table of Contents](#table-of-contents)
   - [Importing Data](#importing-data)
-    - [Data Model](#data-model)
-    - [SQL Queries](#sql-queries)
     - [Order of Import](#order-of-import)
-    - [Mapping Expenses to Dimensions](#mapping-expenses-to-dimensions)
+    - [Commands](#commands)
 
 ## Importing Data
-To import data into the database, you have to execute the [`import.py`](src/scripts/import.py) script. Since some of the xlsx files are corrupt, you firstly need to execute [`fix_corrupt_excel_files.py`](src/scripts/fix_corrupt_excel_files.py). 
 
-this could be through 
-```{python}
-# this will read in xlsx and xls files for budgets and reports and clean up corrupted excel versions
+To import data into the database, use [`import.py`](src/scripts/import.py).
+
+Since some of the Excel files can be corrupt, run the fixer first:
+[`fix_corrupt_excel_files.py`](src/scripts/fix_corrupt_excel_files.py).
+
+### Order of Import
+1. Fix Excel files
+2. Import budgets (laws/reports)
+3. Import totals (depends on chapter dimensions created by laws)
+4. (Optional) Import GDP conversion data
+5. Run translations
+
+### Commands
+
+```bash
+# 1) Clean up corrupted xlsx/xls files
 uv run python scripts/fix_corrupt_excel_files.py
 
-# this will read in the budget reports and budget laws in the sequence laws - reports. 
-uv run python scripts/import.py --type all 
+# 2) Import budgets (laws + reports)
+uv run python scripts/import.py budget --type all
 
-# this will read in the totals for the respective budgets from the Finance Ministry 
-uv run python scripts/import.py --totals data/import_files/raw/totals/totals_2026.xlsx
+# 3) Import totals (requires CHAPTER dims from law imports)
+uv run python scripts/import.py totals data/import_files/raw/totals/totals_2026.xlsx
 
-# This will run the translation pipeline, which will query unique dimension names, check whether they have been translated before and translate the unseen ones with gpto4-mini
+# 4) Import GDP (auto-discover from raw/conversion_tables/gdp/...)
+uv run python scripts/import.py gdp
+
+# 5) Run translation pipeline (translates unseen dimension names)
 uv run python scripts/translations.py --batch-size 25
 ```
 
