@@ -21,10 +21,15 @@ from .law_parser import parse_law_file
 from .report_parser import parse_report_file
 from .totals_parser import parse_totals_file
 from .gdp_parser import parse_gdp_files
+from .ppp_parser import fetch_ppp_rates, fetch_ppp_data, save_ppp_csv, fetch_ppp_api_data
 
 __all__ = [
     "parse_law_file",
     "parse_report_file",
     "parse_totals_file",
     "parse_gdp_files",
+    "fetch_ppp_rates",
+    "fetch_ppp_data",
+    "save_ppp_csv",
+    "fetch_ppp_api_data",
 ]

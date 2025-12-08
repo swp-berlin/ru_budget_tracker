@@ -15,10 +15,12 @@ Examples:
   python import.py totals path/to/totals.xlsx
   python import.py gdp
   python import.py gdp --rosstat path/to/rosstat.xlsx --minekonom path/to/minekonom.xlsx
+  python import.py ppp
 
 Notes:
   - Totals import expects CHAPTER dimensions to exist (import LAW files first).
   - GDP auto-discovery searches under: <data-dir-parent>/raw/conversion_tables/gdp/{rosstat,minekonom}/
+  - PPP fetches from World Bank API, falls back to CSV cache on failure.
 """
 
 import sys
@@ -34,7 +36,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from models import Budget, Dimension, Expense, ConversionRate
 from database.sessions import get_sync_session
-from parsers import parse_law_file, parse_report_file, parse_totals_file
+from parsers import (
+    parse_law_file,
+    parse_report_file,
+    parse_totals_file,
+    fetch_ppp_rates,
+    save_ppp_csv,
+    fetch_ppp_api_data,
+)
         
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -285,6 +294,7 @@ def get_chapter_dimensions(session: Session, chapter_codes: List[str]) -> List[D
 
 ## GDP FUNCTIONS 
 
+
 def save_conversion_rates(session, rates: List) -> Tuple[int, int]:
     """
     Save ConversionRate entries to database (upsert by name).
@@ -470,6 +480,38 @@ def import_gdp_data(rosstat_path: Path, minekonom_path: Path) -> None:
     logger.info(f"✓ Yearly GDP: {y_ins} inserted, {y_upd} updated")
 
 
+def import_ppp_data(save_csv: bool = True) -> None:
+    """
+    Import PPP data from World Bank API (with CSV fallback).
+    
+    Creates ConversionRate entries:
+    - Yearly: ppp_YYYY (e.g., ppp_2024)
+    - Imputed: ppp_YYYY_imputed_SSSS (e.g., ppp_2025_imputed_2024)
+    
+    Args:
+        save_csv: If True, updates CSV cache when API fetch succeeds
+    """
+    logger.info("Fetching PPP data...")
+    
+    # Try to update CSV cache if API works
+    if save_csv:
+        try:
+            ppp_data = fetch_ppp_api_data()
+            save_ppp_csv(ppp_data)
+        except Exception as e:
+            logger.warning(f"Could not update CSV cache: {e}")
+    
+    rates = fetch_ppp_rates()
+    
+    with get_sync_session() as session:
+        ins, upd = save_conversion_rates(session, rates)
+        session.commit()
+    
+    logger.info(f"✓ PPP: {ins} inserted, {upd} updated")
+
+
+
+
 
 # =============================================================================
 # FILE DISCOVERY
@@ -588,6 +630,16 @@ def main():
     p_gdp.add_argument("--rosstat", type=Path, help="Path to Rosstat quarterly GDP file")
     p_gdp.add_argument("--minekonom", type=Path, help="Path to Minekonom yearly GDP file")
 
+    # -------------------------
+    # ppp subcommand
+    # -------------------------
+    p_ppp = subparsers.add_parser("ppp", help="Import PPP conversion data from World Bank")
+    p_ppp.add_argument(
+        "--no-save-csv",
+        action="store_true",
+        help="Don't update CSV cache when API fetch succeeds",
+    )
+
     args = parser.parse_args()
 
     success, failed = [], []
@@ -669,6 +721,17 @@ def main():
         except Exception as e:
             logger.error(f"GDP import failed: {e}", exc_info=True)
             failed.append(("GDP data", str(e)))
+
+    # =========================
+    # ppp command
+    # =========================
+    elif args.command == "ppp":
+        try:
+            import_ppp_data(save_csv=not args.no_save_csv)
+            success.append("PPP data")
+        except Exception as e:
+            logger.error(f"PPP import failed: {e}", exc_info=True)
+            failed.append(("PPP data", str(e)))
 
     # Summary
     logger.info(f"\n{'=' * 60}")
