@@ -1,16 +1,24 @@
 """
-Budget import script.
+Budget import CLI.
 
-Clean, human-readable import logic. Each file is read ONCE.
+Reads each input file once and writes parsed data to the database.
 
-Usage:
-    python import.py                              # Import all laws 2018-2025
-    python import.py --years 2020 2021            # Import specific years (laws)
-    python import.py --file law_2024.xlsx         # Import single file
-    python import.py --type report --years 2018   # Import reports for 2018
-    python import.py --type report                # Import all reports 2018-2025
-    python import.py --type all                   # Import all laws and reports
-    python import.py --totals path/to/totals.xlsx # Import totals file
+Commands:
+  budget   Import LAW/REPORT budget files
+  totals   Import totals spreadsheet (monthly aggregates)
+  gdp      Import GDP conversion data (Rosstat + Minekonom)
+
+Examples:
+  python import.py budget
+  python import.py budget --type report --years 2018 2019
+  python import.py budget --file path/to/law_2024.xlsx
+  python import.py totals path/to/totals.xlsx
+  python import.py gdp
+  python import.py gdp --rosstat path/to/rosstat.xlsx --minekonom path/to/minekonom.xlsx
+
+Notes:
+  - Totals import expects CHAPTER dimensions to exist (import LAW files first).
+  - GDP auto-discovery searches under: <data-dir-parent>/raw/conversion_tables/gdp/{rosstat,minekonom}/
 """
 
 import sys
@@ -24,7 +32,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from models import Budget, Dimension, Expense
+from models import Budget, Dimension, Expense, ConversionRate
 from database.sessions import get_sync_session
 from parsers import parse_law_file, parse_report_file, parse_totals_file
         
@@ -275,6 +283,33 @@ def get_chapter_dimensions(session: Session, chapter_codes: List[str]) -> List[D
     return chapters
 
 
+## GDP FUNCTIONS 
+
+def save_conversion_rates(session, rates: List) -> Tuple[int, int]:
+    """
+    Save ConversionRate entries to database (upsert by name).
+    
+    Returns: (inserted_count, updated_count)
+    """
+    inserted, updated = 0, 0
+    
+    for rate in rates:
+        existing = session.query(ConversionRate).filter_by(name=rate.name).first()
+        if existing:
+            existing.value = rate.value
+            existing.started_at = rate.started_at
+            existing.ended_at = rate.ended_at
+            updated += 1
+        else:
+            session.add(rate)
+            inserted += 1
+    
+    session.flush()
+    return inserted, updated
+
+
+
+
 # =============================================================================
 # MAIN IMPORT FUNCTIONS
 # =============================================================================
@@ -408,6 +443,33 @@ def import_totals_file(file_path: Path) -> int:
     
     return count
 
+def import_gdp_data(rosstat_path: Path, minekonom_path: Path) -> None:
+    """
+    Import GDP data from Rosstat and Minekonom files.
+    
+    Creates ConversionRate entries:
+    - Quarterly: gdp_YYYY_qN (e.g., gdp_2024_q1)
+    - Yearly: gdp_YYYY (e.g., gdp_2024)
+    - Estimates: gdp_YYYY_qN_estimate or gdp_YYYY_estimate
+    """
+    from parsers import parse_gdp_files
+    from database.sessions import get_sync_session
+    
+    logger.info(f"Parsing GDP files...")
+    logger.info(f"  Rosstat: {rosstat_path}")
+    logger.info(f"  Minekonom: {minekonom_path}")
+    
+    quarterly_rates, yearly_rates = parse_gdp_files(rosstat_path, minekonom_path)
+    
+    with get_sync_session() as session:
+        q_ins, q_upd = save_conversion_rates(session, quarterly_rates)
+        y_ins, y_upd = save_conversion_rates(session, yearly_rates)
+        session.commit()
+    
+    logger.info(f"✓ Quarterly GDP: {q_ins} inserted, {q_upd} updated")
+    logger.info(f"✓ Yearly GDP: {y_ins} inserted, {y_upd} updated")
+
+
 
 # =============================================================================
 # FILE DISCOVERY
@@ -449,6 +511,30 @@ def get_report_files(data_dir: Path, years: List[int] | None = None) -> List[Pat
     return files
 
 
+def find_gdp_files(raw_dir: Path) -> Tuple[Path, Path]:
+    """
+    Auto-discover GDP files in the raw data directory.
+    
+    Expects:
+        raw_dir/conversion_tables/gdp/rosstat/*.xlsx
+        raw_dir/conversion_tables/gdp/minekonom/*.xlsx
+    
+    Returns: (rosstat_path, minekonom_path)
+    """
+    rosstat_dir = raw_dir / "conversion_tables" / "gdp" / "rosstat"
+    minekonom_dir = raw_dir / "conversion_tables" / "gdp" / "minekonom"
+    
+    rosstat_files = list(rosstat_dir.glob("*.xlsx")) if rosstat_dir.exists() else []
+    minekonom_files = list(minekonom_dir.glob("*.xlsx")) if minekonom_dir.exists() else []
+    
+    if not rosstat_files:
+        raise FileNotFoundError(f"No Rosstat files found in {rosstat_dir}")
+    if not minekonom_files:
+        raise FileNotFoundError(f"No Minekonom files found in {minekonom_dir}")
+    
+    return rosstat_files[0], minekonom_files[0]
+
+
 # =============================================================================
 # CLI
 # =============================================================================
@@ -456,75 +542,69 @@ def get_report_files(data_dir: Path, years: List[int] | None = None) -> List[Pat
 
 def main():
     parser = argparse.ArgumentParser(description="Import budget data")
-    parser.add_argument(
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    # -------------------------
+    # budget subcommand
+    # -------------------------
+    p_budget = subparsers.add_parser("budget", help="Import budget laws/reports")
+    p_budget.add_argument(
         "--type",
-        type=str,
         choices=["law", "report", "all"],
         default="law",
-        help="Type of files to import: law, report, or all (default: law)",
+        help="Type of files to import (default: law)",
     )
-    parser.add_argument("--years", nargs="+", type=int, help="Years to import")
-    parser.add_argument("--file", type=Path, help="Single file to import")
-    parser.add_argument("--totals", type=Path, help="Path to totals file to import")
-    parser.add_argument(
+    p_budget.add_argument("--years", nargs="+", type=int, help="Years to import")
+    p_budget.add_argument("--file", type=Path, help="Single file to import")
+    p_budget.add_argument(
         "--data-dir",
         type=Path,
         default=Path(__file__).parent.parent / "data" / "import_files" / "clean",
         help="Directory with import files",
     )
+
+    # -------------------------
+    # totals subcommand
+    # -------------------------
+    p_totals = subparsers.add_parser("totals", help="Import totals file")
+    p_totals.add_argument("totals_path", type=Path, help="Path to totals xlsx")
+    p_totals.add_argument(
+        "--data-dir",
+        type=Path,
+        default=Path(__file__).parent.parent / "data" / "import_files" / "clean",
+        help="Directory with import files (used to locate related dirs if needed)",
+    )
+
+    # -------------------------
+    # gdp subcommand
+    # -------------------------
+    p_gdp = subparsers.add_parser("gdp", help="Import GDP conversion data")
+    p_gdp.add_argument(
+        "--data-dir",
+        type=Path,
+        default=Path(__file__).parent.parent / "data" / "import_files" / "clean",
+        help="Directory with import files (used to locate raw/ for auto-discovery)",
+    )
+    p_gdp.add_argument("--rosstat", type=Path, help="Path to Rosstat quarterly GDP file")
+    p_gdp.add_argument("--minekonom", type=Path, help="Path to Minekonom yearly GDP file")
+
     args = parser.parse_args()
 
     success, failed = [], []
 
-    # Import totals file if specified
-    if args.totals:
-        if not args.totals.exists():
-            logger.error(f"Totals file not found: {args.totals}")
-            sys.exit(1)
-        try:
-            import_totals_file(args.totals)
-            success.append(args.totals.name)
-        except Exception as e:
-            logger.error(f"Failed to import totals: {e}", exc_info=True)
-            failed.append((args.totals.name, str(e)))
-
-    # Single file import
-    if args.file:
-        file_path = args.file
-        # Detect type from filename
-        if file_path.name.startswith("law"):
-            file_type = "law"
-        elif file_path.name.startswith("report"):
-            file_type = "report"
-        else:
-            logger.error(f"Cannot determine file type from filename: {file_path.name}")
-            sys.exit(1)
-        
-        try:
-            import_budget_file(file_path, file_type)
-            success.append(file_path.name)
-        except Exception as e:
-            logger.error(f"Failed: {e}", exc_info=True)
-            failed.append((file_path.name, str(e)))
-    
-    elif not args.totals:
-        # Batch import (only if not just importing totals)
-        files_to_import: List[tuple[Path, Literal["law", "report"]]] = []
-        
-        if args.type in ("law", "all"):
-            for f in get_law_files(args.data_dir, args.years):
-                files_to_import.append((f, "law"))
-        
-        if args.type in ("report", "all"):
-            for f in get_report_files(args.data_dir, args.years):
-                files_to_import.append((f, "report"))
-        
-        # Import files
-        for file_path, file_type in files_to_import:
-            if not file_path.exists():
-                logger.warning(f"File not found: {file_path}")
-                failed.append((file_path.name, "not found"))
-                continue
+    # =========================
+    # budget command
+    # =========================
+    if args.command == "budget":
+        if args.file:
+            file_path = args.file
+            if file_path.name.startswith("law"):
+                file_type = "law"
+            elif file_path.name.startswith("report"):
+                file_type = "report"
+            else:
+                logger.error(f"Cannot determine file type from filename: {file_path.name}")
+                sys.exit(1)
 
             try:
                 import_budget_file(file_path, file_type)
@@ -532,6 +612,63 @@ def main():
             except Exception as e:
                 logger.error(f"Failed: {e}", exc_info=True)
                 failed.append((file_path.name, str(e)))
+
+        else:
+            files_to_import: List[tuple[Path, Literal["law", "report"]]] = []
+
+            if args.type in ("law", "all"):
+                for f in get_law_files(args.data_dir, args.years):
+                    files_to_import.append((f, "law"))
+
+            if args.type in ("report", "all"):
+                for f in get_report_files(args.data_dir, args.years):
+                    files_to_import.append((f, "report"))
+
+            for file_path, file_type in files_to_import:
+                if not file_path.exists():
+                    logger.warning(f"File not found: {file_path}")
+                    failed.append((file_path.name, "not found"))
+                    continue
+                try:
+                    import_budget_file(file_path, file_type)
+                    success.append(file_path.name)
+                except Exception as e:
+                    logger.error(f"Failed: {e}", exc_info=True)
+                    failed.append((file_path.name, str(e)))
+
+    # =========================
+    # totals command
+    # =========================
+    elif args.command == "totals":
+        totals_path = args.totals_path
+        if not totals_path.exists():
+            logger.error(f"Totals file not found: {totals_path}")
+            sys.exit(1)
+        try:
+            import_totals_file(totals_path)
+            success.append(totals_path.name)
+        except Exception as e:
+            logger.error(f"Failed to import totals: {e}", exc_info=True)
+            failed.append((totals_path.name, str(e)))
+
+    # =========================
+    # gdp command
+    # =========================
+    elif args.command == "gdp":
+        try:
+            if args.rosstat and args.minekonom:
+                rosstat_path, minekonom_path = args.rosstat, args.minekonom
+            elif args.rosstat or args.minekonom:
+                raise SystemExit("Provide both --rosstat and --minekonom, or neither (for auto-discovery).")
+            else:
+                raw_dir = args.data_dir.parent / "raw"
+                rosstat_path, minekonom_path = find_gdp_files(raw_dir)
+
+            import_gdp_data(rosstat_path, minekonom_path)
+            success.append("GDP data")
+        except Exception as e:
+            logger.error(f"GDP import failed: {e}", exc_info=True)
+            failed.append(("GDP data", str(e)))
 
     # Summary
     logger.info(f"\n{'=' * 60}")
