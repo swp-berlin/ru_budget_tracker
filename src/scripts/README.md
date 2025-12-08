@@ -39,6 +39,9 @@ uv run python scripts/import.py totals data/import_files/raw/totals/totals_2026.
 # 4) Import GDP (auto-discover from raw/conversion_tables/gdp/...)
 uv run python scripts/import.py gdp
 
+# 4) Import PPP (from WorldBank API)
+uv run python scripts/import.py ppp
+
 # 5) Run translation pipeline (translates unseen dimension names)
 uv run python scripts/translations.py --batch-size 25
 ```

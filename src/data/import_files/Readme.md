@@ -27,6 +27,7 @@ data/import_files/
     totals/
     conversion_tables/
       gdp/
+      ppp/
         rosstat/
         minekonom/
   clean/
@@ -101,7 +102,26 @@ Notes:
 
 * Access typically requires a Russia-located VPN.
 * Updates are usually published **twice per year** (often around **April** and **September**).
-* One VPN option that has worked reliably: [https://www.vpn-naoborot.com/](https://www.vpn-naoborot.com/)
+* One VPN option that has worked reliably (anecdotally): [https://www.vpn-naoborot.com/](https://www.vpn-naoborot.com/)
+
+### PPP conversion factor (World Bank)
+
+PPP conversion factors are fetched from the World Bank indicator:
+
+* `PA.NUS.PPP` — **PPP conversion factor, GDP (LCU per international $)**
+
+Recommended workflow:
+
+* Prefer **API fetch** at runtime; keep a **CSV cache** as fallback.
+* Place/maintain the cache at: `raw/conversion_tables/ppp/ppp.csv` (or wherever your parser expects it).
+
+API endpoint:
+
+* `https://api.worldbank.org/v2/country/RUS/indicator/PA.NUS.PPP?format=json`
+
+Conversion direction reminder:
+
+* The indicator is **LCU per international $**, so converting **RUB → Intl$ (PPP)** is `RUB / PPP`.
 
 ## Contents
 
@@ -122,9 +142,10 @@ Source: [https://minfin.gov.ru/ru/document?id_4=80042-kratkaya_ezhemesyachnaya_i
 
 ### `raw/conversion_tables/`
 
-Conversion tables (includes GDP data used for conversions).
+Conversion tables used for conversions.
 
 Expected subfolders:
 
 * `raw/conversion_tables/gdp/rosstat/` (quarterly nominal GDP)
 * `raw/conversion_tables/gdp/minekonom/` (yearly/forecast GDP)
+* `raw/conversion_tables/ppp/` (PPP conversion factors; e.g., `ppp.csv` cache)
