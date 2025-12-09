@@ -43,6 +43,8 @@ class Settings(BaseSettings):
         env_nested_delimiter="__",
     )
     database: Database = Field(default_factory=lambda: Database())
+    # OpenAI API key for translation scripts (optional)
+    openai_api_key: str | None = None
 
 
 settings = Settings()

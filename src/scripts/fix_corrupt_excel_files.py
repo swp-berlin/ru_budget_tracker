@@ -95,7 +95,7 @@ def process_reports(raw_dir, clean_dir):
 
 
 def main():
-    base_dir = Path("src/data/import_files")
+    base_dir = Path("data/import_files")
 
     logger.info("Processing laws...")
     process_laws(base_dir / "raw/laws", base_dir / "clean/laws")

@@ -9,9 +9,10 @@ This folder needs to be filled **manually** (at least `raw/`). The import pipeli
 
 ## What you need to add (manual steps)
 
-1. **Add new source files to** `raw/` in the correct subfolders (see below).
+1. **Add new source files to `raw/`** in the correct subfolders (see below).
 2. **Follow the naming conventions** so the importer can discover files reliably.
 3. Run:
+
    * `fix_corrupt_excel_files.py` to populate/update `clean/`
    * `import.py ...` pointing at `clean/` (budgets) and using `raw/` where required (totals, GDP)
 
@@ -24,14 +25,18 @@ data/import_files/
     reports/
     totals/
     conversion_tables/
-      gdp/
       ppp/
+      gdp/
         rosstat/
         minekonom/
   clean/
     laws/
     reports/
     translations/
+    conversion_tables/
+      ppp/
+
+
 ```
 
 ## Naming conventions
@@ -72,9 +77,10 @@ If multiple files exist in a folder, the importer currently picks the **first ma
 
 Get the data via:
 
-* Interactive portal: <https://showdata.rosstat.gov.ru/report/280029/>
-* Rosstat national accounts page: <https://rosstat.gov.ru/statistics/accounts#>
-  * Direct Excel download links change frequently (example that may change): <https://rosstat.gov.ru/storage/mediabank/VVP_kvartal_s1995-2025.xlsx>
+* Interactive portal: [https://showdata.rosstat.gov.ru/report/280029/](https://showdata.rosstat.gov.ru/report/280029/)
+* Rosstat national accounts page: [https://rosstat.gov.ru/statistics/accounts#](https://rosstat.gov.ru/statistics/accounts#)
+
+  * Direct Excel download links change frequently (example that may change): [https://rosstat.gov.ru/storage/mediabank/VVP_kvartal_s1995-2025.xlsx](https://rosstat.gov.ru/storage/mediabank/VVP_kvartal_s1995-2025.xlsx)
 
 #### 2) Special case: latest completed quarter (estimate)
 
@@ -90,13 +96,13 @@ Example (Q3/2025):
 
 Source page (downloads are usually in compressed attachments containing an Excel file with the latest nominal GDP forecasts):
 
-* <https://economy.gov.ru/material/directions/makroec/prognozy_socialno_ekonomicheskogo_razvitiya/>
+* [https://economy.gov.ru/material/directions/makroec/prognozy_socialno_ekonomicheskogo_razvitiya/](https://economy.gov.ru/material/directions/makroec/prognozy_socialno_ekonomicheskogo_razvitiya/)
 
 Notes:
 
 * Access typically requires a Russia-located VPN.
 * Updates are usually published **twice per year** (often around **April** and **September**).
-* One VPN option that has worked reliably (anecdotally): <https://www.vpn-naoborot.com/>
+* One VPN option that has worked reliably (anecdotally): [https://www.vpn-naoborot.com/](https://www.vpn-naoborot.com/)
 
 ### PPP conversion factor (World Bank)
 
@@ -122,17 +128,17 @@ Conversion direction reminder:
 ### `raw/reports/`
 
 Budget reports (quarterly budget execution reports).
-Source: <https://roskazna.gov.ru/ispolnenie-byudzhetov/federalnyj-byudzhet/>
+Source: [https://roskazna.gov.ru/ispolnenie-byudzhetov/federalnyj-byudzhet/](https://roskazna.gov.ru/ispolnenie-byudzhetov/federalnyj-byudzhet/)
 
 ### `raw/laws/`
 
 Budget laws, amendments, and their budget listings (usually attachment 12, 15, 17).
-Source: <https://budget.gov.ru/%D0%91%D1%8E%D0%B4%D0%B6%D0%B5%D1%82/%D0%97%D0%B0%D0%BA%D0%BE%D0%BD-%D0%BE-%D0%B1%D1%8E%D0%B4%D0%B6%D0%B5%D1%82%D0%B5>
+Source: [https://budget.gov.ru/%D0%91%D1%8E%D0%B4%D0%B6%D0%B5%D1%82/%D0%97%D0%B0%D0%BA%D0%BE%D0%BD-%D0%BE-%D0%B1%D1%8E%D0%B4%D0%B6%D0%B5%D1%82%D0%B5](https://budget.gov.ru/%D0%91%D1%8E%D0%B4%D0%B6%D0%B5%D1%82/%D0%97%D0%B0%D0%BA%D0%BE%D0%BD-%D0%BE-%D0%B1%D1%8E%D0%B4%D0%B6%D0%B5%D1%82%D0%B5)
 
 ### `raw/totals/`
 
 Budget totals (total budget execution).
-Source: <https://minfin.gov.ru/ru/document?id_4=80042-kratkaya_ezhemesyachnaya_informatsiya_ob_ispolnenii_federalnogo_byudzheta_mlrd._rub._nakopleno_s_nachala_goda>
+Source: [https://minfin.gov.ru/ru/document?id_4=80042-kratkaya_ezhemesyachnaya_informatsiya_ob_ispolnenii_federalnogo_byudzheta_mlrd._rub._nakopleno_s_nachala_goda](https://minfin.gov.ru/ru/document?id_4=80042-kratkaya_ezhemesyachnaya_informatsiya_ob_ispolnenii_federalnogo_byudzheta_mlrd._rub._nakopleno_s_nachala_goda)
 
 ### `raw/conversion_tables/`
 
