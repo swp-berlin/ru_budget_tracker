@@ -15,12 +15,14 @@ from dash import (
 )
 
 from models import ViewByDimensionTypeLiteral
-from utils import TreemapTransformer, fetch_budgets, fetch_treemap_data
+from utils import TreemapTransformer, TremapDataFetcher, fetch_budgets
 from utils.definitions import (
     LanguageTypeLiteral,
     SpendingScopeLiteral,
     SpendingTypeLiteral,
 )
+from utils.calculate import Calculator
+from utils.helper import add_breaks
 
 import logging
 
@@ -29,24 +31,63 @@ logging.basicConfig(level=logging.INFO)
 
 register_page(__name__, path="/")
 
+TREEMAP_CONFIG = dcc.Graph.Config(
+    displayModeBar=False,
+    displaylogo=False,
+    responsive=True,
+)
+
+
+def fetch_treemap_data(
+    budget_id: int | None = None,
+    spending_type: SpendingTypeLiteral = "ALL",
+    spending_scope: SpendingScopeLiteral = "ABSOLUTE",
+    character_limit: int = 30,
+) -> tuple[list[str], list[str], list[float], list[str]]:
+    """
+    Fetch treemap data based on the provided filters.
+
+    Args:
+        budget_id (int | None): The budget dataset ID to filter by.
+        viewby (ViewByDimensionTypeLiteral): The dimension to view by.
+        spending_type (SpendingTypeLiteral): The type of spending to filter by.
+        spending_scope (SpendingScopeLiteral): The scope of spending to filter by.
+
+    Returns:
+        list[dict[str, Any]]: The fetched treemap data.
+    """
+    data_fetcher = TremapDataFetcher()
+    dimensions, programs, sum_mapping = data_fetcher.fetch_data(
+        budget_id=budget_id,
+        spending_type=spending_type,
+        spending_scope=spending_scope,
+    )
+    transformer = TreemapTransformer()
+    labels, parents, values, metadata = transformer.transform_data(
+        dimensions, programs, sum_mapping, translated_names=False
+    )
+    calculator = Calculator(spending_scope=spending_scope)
+    values = [calculator.calculate(value) if value is not None else 0.0 for value in values]
+    labels = [add_breaks(label, interval=character_limit) for label in labels]
+    parents = [add_breaks(parent, interval=character_limit) for parent in parents]
+    return labels, parents, values, metadata
+
 
 def generate_figure(
-    df: pd.DataFrame,
+    labels: list[str],
+    parents: list[str],
+    values: list[float],
+    metadata: list[str],
     viewby: ViewByDimensionTypeLiteral = "MINISTRY",
     language: LanguageTypeLiteral = "EN",
 ) -> go.Figure:
-    path = [df.columns[i] for i in range(df.shape[1] - 1)]
-    if viewby != "MINISTRY":
-        path.remove("MINISTRY")
-    if viewby == "PROGRAMM":
-        path.remove("CHAPTER")
-
     fig = px.treemap(
-        df,
-        path=path,
-        values="EXPENSE_VALUE",
+        names=labels,
+        parents=parents,
+        values=values,
+        hover_data={"level": metadata},
     )
-    fig.update_layout(margin=dict(t=50, l=25, r=25, b=25))
+    fig.update_layout(margin=dict(t=50, b=10, l=25, r=25))
     return fig
 
 
@@ -89,7 +130,6 @@ def layout(**other_kwargs) -> html.Div:
                 [
                     html.Div(
                         [
-                            html.H1("Filters: "),
                             dcc.Dropdown(
                                 id="budget-dataset-dropdown",
                                 options=budget_options,
@@ -106,7 +146,7 @@ def layout(**other_kwargs) -> html.Div:
                                 options=[
                                     {"label": "Ministry", "value": "MINISTRY"},
                                     {"label": "Chapter", "value": "CHAPTER"},
-                                    {"label": "Programm", "value": "PROGRAMM"},
+                                    {"label": "Program", "value": "PROGRAM"},
                                 ],
                                 clearable=False,
                                 value="MINISTRY",
@@ -127,7 +167,7 @@ def layout(**other_kwargs) -> html.Div:
                             dcc.Dropdown(
                                 id="spending-scope-dropdown",
                                 options=[
-                                    {"label": "Billion RUB", "value": "ABSOLUT"},
+                                    {"label": "Billion RUB", "value": "ABSOLUTE"},
                                     {"label": "% full-year GDP", "value": "PERCENT_GDP_FULL_YEAR"},
                                     {
                                         "label": "% year-to-year GDP",
@@ -147,7 +187,7 @@ def layout(**other_kwargs) -> html.Div:
                                     },
                                 ],
                                 clearable=False,
-                                value="ABSOLUT",
+                                value="ABSOLUTE",
                                 placeholder="Billion RUB",
                                 style={"width": "200px"},
                             ),
@@ -161,18 +201,56 @@ def layout(**other_kwargs) -> html.Div:
                     ),
                     html.Div(
                         [
+                            # html.Div(
+                            #     [
+                            #         html.Button("Share", id="btn-share-view"),
+                            #         dcc.Clipboard(id="clipboard-treemap-link"),
+                            #     ]
+                            # ),
                             html.Div(
                                 [
-                                    html.Button("Download CSV", id="btn-download-csv"),
+                                    html.Button(
+                                        html.Img(
+                                            src="/assets/icons/photo_camera.svg",
+                                            style={"width": "2em", "height": "2em"},
+                                        ),
+                                        id="btn-download-image",
+                                        title="Download Treemap Plot as PNG",
+                                    ),
+                                    dcc.Download(id="download-treemap-image"),
+                                ]
+                            ),
+                            html.Div(
+                                [
+                                    html.Button(
+                                        html.Img(
+                                            src="/assets/icons/download.svg",
+                                            style={"width": "2em", "height": "2em"},
+                                        ),
+                                        id="btn-download-csv",
+                                        title="Download Treemap Data as CSV",
+                                    ),
                                     dcc.Download(id="download-treemap-data"),
                                 ]
                             ),
                             dcc.Link(
-                                html.Button("Timeseries"),
+                                html.Button(
+                                    html.Img(
+                                        src="/assets/icons/stacked_bar_chart.svg",
+                                        style={"width": "2em", "height": "2em"},
+                                    ),
+                                    title="Switch to Time Series View",
+                                ),
                                 href="/timeseries",
                             ),
                             dcc.Link(
-                                html.Button("About"),
+                                html.Button(
+                                    html.Img(
+                                        src="/assets/icons/info.svg",
+                                        style={"width": "2em", "height": "2em"},
+                                    ),
+                                    title="About This Project",
+                                ),
                                 href="/about",
                             ),
                         ],
@@ -189,13 +267,20 @@ def layout(**other_kwargs) -> html.Div:
                     "flex-wrap": "wrap",
                     "justify-content": "space-between",
                     "gap": "10px",
-                    "margin-bottom": "20px",
+                    "margin-bottom": "10px",
                     "margin-top": "20px",
+                    "margin-left": "2.5vw",
+                    "margin-right": "2.5vw",
                 },
             ),
-            # Graph to display the treemap
-            dcc.Store(id="treemap-store"),
-            dcc.Graph(id="treemap-graph"),
+            html.Div(
+                # Graph to display the treemap
+                [
+                    dcc.Store(id="treemap-store"),
+                    dcc.Graph(id="treemap-graph", config=TREEMAP_CONFIG),
+                ],
+                style={"width": "100%", "height": "90vh"},
+            ),
         ]
     )
 
@@ -209,10 +294,10 @@ def layout(**other_kwargs) -> html.Div:
     Input("spending-scope-dropdown", "value"),
 )
 def update_figure_from_filters(
-    budget_dataset: int | None = None,
+    budget_id: int | None = None,
     viewby: ViewByDimensionTypeLiteral = "MINISTRY",
     spending_type: SpendingTypeLiteral = "ALL",
-    spending_scope: SpendingScopeLiteral = "ABSOLUT",
+    spending_scope: SpendingScopeLiteral = "ABSOLUTE",
 ) -> go.Figure:
     """
     This callback is triggered on page load and when the budget type dropdown changes.
@@ -225,19 +310,14 @@ def update_figure_from_filters(
         go.Figure: The generated treemap figure to display in the dcc.Graph.
     """
     # Load data based on the selected filter
-
-    data = fetch_treemap_data(
-        budget_dataset=budget_dataset,
-        viewby=viewby,
+    labels, parents, values, metadata = fetch_treemap_data(
+        budget_id=budget_id,
         spending_type=spending_type,
         spending_scope=spending_scope,
     )
 
-    transformer = TreemapTransformer(data, translated=False)
-    df = transformer.transform_data()
-
     # Generate and return the figure
-    return generate_figure(df=df, viewby=viewby, language="EN")
+    return generate_figure(labels, parents, values, metadata, viewby=viewby, language="EN")
 
 
 # Callback to handle store
@@ -249,10 +329,10 @@ def update_figure_from_filters(
     Input("spending-scope-dropdown", "value"),
 )
 def update_store_data(
-    budget_dataset: int | None = None,
+    budget_id: int | None = None,
     viewby: ViewByDimensionTypeLiteral = "MINISTRY",
     spending_type: SpendingTypeLiteral = "ALL",
-    spending_scope: SpendingScopeLiteral = "ABSOLUT",
+    spending_scope: SpendingScopeLiteral = "ABSOLUTE",
 ) -> dict[str, Any]:
     """
     This callback updates the store with the current data based on filters.
@@ -261,7 +341,7 @@ def update_store_data(
         dict[str, Any]: The data to store.
     """
     filter_data = {
-        "budget_dataset": budget_dataset,
+        "budget_id": budget_id,
         "viewby": viewby,
         "spending_type": spending_type,
         "spending_scope": spending_scope,
@@ -281,19 +361,40 @@ def download_data(n_clicks, data) -> dict[str, Any]:
     Returns:
         dict[str, Any]: The data for download.
     """
+    labels, parents, values, metadata = fetch_treemap_data(
+        budget_id=data["budget_id"],
+        spending_type=data["spending_type"],
+        spending_scope=data["spending_scope"],
+    )
     return dcc.send_data_frame(  # type: ignore
         pd.DataFrame(
-            fetch_treemap_data(
-                budget_dataset=data["budget_dataset"],
-                viewby=data["viewby"],
-                spending_type=data["spending_type"],
-                spending_scope=data["spending_scope"],
-            )
+            {
+                "Label": labels,
+                "Parent": parents,
+                "Value": values,
+                "Level": metadata,
+            }
         ).to_csv,
         "treemap_data.csv",
         sep=";",
         index=False,
+        encoding="utf-8",
     )
+
+
+@callback(
+    Output("download-treemap-image", "data"),
+    Input("btn-download-image", "n_clicks"),
+    prevent_initial_call=True,
+)
+def download_image(n_clicks, data, figure) -> dict[str, Any]:
+    """
+    Callback to download the current treemap data as a csv file.
+    Returns:
+        dict[str, Any]: The data for download.
+    """
+    figure_bytes = figure.to_image(format="png")
+    return dcc.send_bytes(figure_bytes, "treemap_figure.png")  # type: ignore
 
 
 # Clientside callback to handle URL focus parameter and click simulation
