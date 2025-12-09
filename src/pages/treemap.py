@@ -130,6 +130,14 @@ def layout(**other_kwargs) -> html.Div:
                 [
                     html.Div(
                         [
+                            html.Img(
+                                src="/assets/logo/logo.svg",
+                                style={"height": "2em", "margin-bottom": "10px"},
+                            )
+                        ]
+                    ),
+                    html.Div(
+                        [
                             dcc.Dropdown(
                                 id="budget-dataset-dropdown",
                                 options=budget_options,
