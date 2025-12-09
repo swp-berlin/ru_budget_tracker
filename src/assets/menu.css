@@ -1,0 +1,68 @@
+/* Uniform height for dropdown toggles and action buttons in the header bar */
+
+/* Bootstrap dropdown toggle buttons (dbc.DropdownMenu triggers) */
+#menu-budget .dropdown-toggle,
+#menu-viewby .dropdown-toggle,
+#menu-spending-type .dropdown-toggle,
+#menu-spending-scope .dropdown-toggle {
+    /* Force consistent height */
+    height: 40px;              /* adjust as desired */
+    line-height: 24px;         /* centers text vertically */
+    padding: 8px 12px;         /* balanced padding */
+    display: inline-flex;      /* flex for vertical centering */
+    align-items: center;       /* center content in the toggle */
+    color: #333333 !important; /* keep text readable (your existing color) */
+}
+
+/* Action buttons on the right (camera, download, etc.) */
+.btn,
+button,
+.btn > img,
+button > img {
+    /* Match dropdown toggle height */
+    height: 40px;
+}
+
+/* Make icon inside buttons/toggles centered and not stretch the height */
+#menu-budget .dropdown-toggle img,
+#menu-viewby .dropdown-toggle img,
+#menu-spending-type .dropdown-toggle img,
+#menu-spending-scope .dropdown-toggle img,
+.btn img,
+button img {
+    height: 1.25em;            /* icon scale relative to font size */
+    width: auto;
+    vertical-align: middle;
+}
+
+/* Optional: reduce default Bootstrap button padding so it matches exactly */
+.btn {
+    padding: 8px 12px;         /* same as toggles for symmetry */
+    display: inline-flex;
+    align-items: center;
+}
+
+/* Keep menus scrollable and text color consistent (existing rules) */
+#menu-budget .dropdown-menu,
+#menu-viewby .dropdown-menu,
+#menu-spending-type .dropdown-menu,
+#menu-spending-scope .dropdown-menu {
+    color: #333333 !important;
+    max-height: 300px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    white-space: normal;
+    word-break: break-word;
+    min-width: 260px;
+}
+
+#menu-budget .dropdown-item,
+#menu-viewby .dropdown-item,
+#menu-spending-type .dropdown-item,
+#menu-spending-scope .dropdown-item,
+#menu-budget .dropdown-item a,
+#menu-viewby .dropdown-item a,
+#menu-spending-type .dropdown-item a,
+#menu-spending-scope .dropdown-item a {
+    color: #333333 !important;
+}

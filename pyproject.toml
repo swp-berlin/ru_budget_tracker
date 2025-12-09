@@ -22,6 +22,7 @@ dependencies = [
     "kaleido>=1.2.0",
     "openai>=2.9.0",
     "requests>=2.32.5",
+    "dash-bootstrap-components>=2.0.4",
 ]
 
 [dependency-groups]

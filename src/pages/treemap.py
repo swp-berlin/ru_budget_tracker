@@ -1,8 +1,11 @@
 from typing import Any
+import dash
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from dash import (
+    ALL,
+    MATCH,
     ClientsideFunction,
     Input,
     Output,
@@ -13,6 +16,8 @@ from dash import (
     html,
     register_page,
 )
+from dash.exceptions import PreventUpdate
+import dash_bootstrap_components as dbc
 
 from models import ViewByDimensionTypeLiteral
 from utils import TreemapTransformer, TremapDataFetcher, fetch_budgets
@@ -87,7 +92,7 @@ def generate_figure(
         values=values,
         hover_data={"level": metadata},
     )
-    fig.update_layout(margin=dict(t=50, b=10, l=25, r=25))
+    fig.update_layout(margin=dict(t=30, b=5, l=5, r=5))
     return fig
 
 
@@ -103,184 +108,150 @@ def layout(**other_kwargs) -> html.Div:
     Returns:
         html.Div: The Dash component tree for the page layout.
     """
-    # Load budget data from database to populate dropdown options
-    budgets = fetch_budgets()
 
-    # Create dropdown options from budget data
-    # Using name_translated for display label and type for value
-    budget_options = []
-    for budget in budgets:
-        budget_options.append(
-            {
-                "label": budget["name_translated"]
-                or budget["name"],  # Use translated name if available, fallback to name
-                "value": budget["id"],  # Use budget type as the value
-            }
-        )
+    viewby_items = [
+        dbc.DropdownMenuItem(label, id={"type": "viewby-item", "value": value})
+        for label, value in [
+            ("Ministry", "MINISTRY"),
+            ("Chapter", "CHAPTER"),
+            ("Program", "PROGRAM"),
+        ]
+    ]
+
+    spending_type_items = [
+        dbc.DropdownMenuItem(label, id={"type": "spending-type-item", "value": value})
+        for label, value in [
+            ("All", "ALL"),
+            ("Military Only", "MILITARY"),
+        ]
+    ]
+
+    spending_scope_items = [
+        dbc.DropdownMenuItem(label, id={"type": "spending-scope-item", "value": value})
+        for label, value in [
+            ("Billion RUB", "ABSOLUTE"),
+            ("% full-year GDP", "PERCENT_GDP_FULL_YEAR"),
+            ("% year-to-year GDP", "PERCENT_GDP_YEAR_TO_YEAR"),
+            ("% full-year spending", "PERCENT_FULL_YEAR_SPENDING"),
+            ("% year-to-year spending", "PERCENT_YEAR_TO_YEAR_SPENDING"),
+            ("% year-to-year revenue", "PERCENT_YEAR_TO_YEAR_REVENUE"),
+        ]
+    ]
     return html.Div(
         [
-            # dcc.Location is used to read the URL from the browser's address bar.
-            # Its 'search' property (the query string) is used to get the 'focus' parameter.
+            # Store currently selected filter values (these replace dcc.Dropdown.value)
+            dcc.Store(id="store-budget-options"),
+            dcc.Store(id="store-budget-id"),
+            dcc.Store(id="store-viewby", data="MINISTRY"),
+            dcc.Store(id="store-spending-type", data="ALL"),
+            dcc.Store(id="store-spending-scope", data="ABSOLUTE"),
+            # Location component to access URL parameters
             dcc.Location(id="url"),
             # This dummy div is the target for our clientside callback. It's required for the
             # callback to have an Output, but it doesn't need to be visible.
             html.Div(id="dummy-treemap-output", style={"display": "none"}),
             # Add Buttons and dropdowns for filtering by budget type
-            html.Div(
+            dbc.Stack(
                 [
                     html.Div(
                         [
                             html.Img(
                                 src="/assets/logo/logo.svg",
-                                style={"height": "2em", "margin-bottom": "10px"},
-                            )
-                        ]
-                    ),
-                    html.Div(
-                        [
-                            dcc.Dropdown(
-                                id="budget-dataset-dropdown",
-                                options=budget_options,
-                                clearable=False,
-                                value=budget_options[0]["value"] if budget_options else None,
-                                placeholder=budget_options[0]["label"]
-                                if budget_options
-                                else "Select Budget",
-                                searchable=True,
-                                style={"width": "100px"},
-                            ),
-                            dcc.Dropdown(
-                                id="viewby-dropdown",
-                                options=[
-                                    {"label": "Ministry", "value": "MINISTRY"},
-                                    {"label": "Chapter", "value": "CHAPTER"},
-                                    {"label": "Program", "value": "PROGRAM"},
-                                ],
-                                clearable=False,
-                                value="MINISTRY",
-                                placeholder="Ministry",
-                                style={"width": "150px"},
-                            ),
-                            dcc.Dropdown(
-                                id="spending-type-dropdown",
-                                options=[
-                                    {"label": "All", "value": "ALL"},
-                                    {"label": "Military Only", "value": "MILITARY"},
-                                ],
-                                clearable=False,
-                                placeholder="All",
-                                value="ALL",
-                                style={"width": "150px"},
-                            ),
-                            dcc.Dropdown(
-                                id="spending-scope-dropdown",
-                                options=[
-                                    {"label": "Billion RUB", "value": "ABSOLUTE"},
-                                    {"label": "% full-year GDP", "value": "PERCENT_GDP_FULL_YEAR"},
-                                    {
-                                        "label": "% year-to-year GDP",
-                                        "value": "PERCENT_GDP_YEAR_TO_YEAR",
-                                    },
-                                    {
-                                        "label": "% full-year spending",
-                                        "value": "PERCENT_FULL_YEAR_SPENDING",
-                                    },
-                                    {
-                                        "label": "% year-to-year spending",
-                                        "value": "PERCENT_YEAR_TO_YEAR_SPENDING",
-                                    },
-                                    {
-                                        "label": "% year-to-year revenue",
-                                        "value": "PERCENT_YEAR_TO_YEAR_REVENUE",
-                                    },
-                                ],
-                                clearable=False,
-                                value="ABSOLUTE",
-                                placeholder="Billion RUB",
-                                style={"width": "200px"},
+                                style={"height": "2em"},
                             ),
                         ],
-                        style={
-                            "display": "flex",
-                            "flex-wrap": "wrap",
-                            "justify-content": "flex-start",
-                            "gap": "10px",
-                        },
+                        style={"margin-right": "20px", "align-self": "center"},
                     ),
-                    html.Div(
+                    dbc.Stack(
                         [
-                            # html.Div(
-                            #     [
-                            #         html.Button("Share", id="btn-share-view"),
-                            #         dcc.Clipboard(id="clipboard-treemap-link"),
-                            #     ]
-                            # ),
-                            html.Div(
-                                [
-                                    html.Button(
-                                        html.Img(
-                                            src="/assets/icons/photo_camera.svg",
-                                            style={"width": "2em", "height": "2em"},
-                                        ),
-                                        id="btn-download-image",
-                                        title="Download Treemap Plot as PNG",
-                                    ),
-                                    dcc.Download(id="download-treemap-image"),
-                                ]
+                            # Budget dataset menu
+                            dbc.DropdownMenu(
+                                label="Budget",
+                                children=[],  # will be set by callback
+                                id="menu-budget",
+                                direction="down",
+                                class_name="me-2 scroll-menu",
+                                # Make the dropdown list scrollable to handle many budgets
                             ),
-                            html.Div(
-                                [
-                                    html.Button(
-                                        html.Img(
-                                            src="/assets/icons/download.svg",
-                                            style={"width": "2em", "height": "2em"},
-                                        ),
-                                        id="btn-download-csv",
-                                        title="Download Treemap Data as CSV",
-                                    ),
-                                    dcc.Download(id="download-treemap-data"),
-                                ]
+                            # View-by menu
+                            dbc.DropdownMenu(
+                                label="View by",
+                                children=viewby_items,
+                                id="menu-viewby",
+                                direction="down",
+                                class_name="me-2",
                             ),
-                            dcc.Link(
-                                html.Button(
-                                    html.Img(
-                                        src="/assets/icons/stacked_bar_chart.svg",
-                                        style={"width": "2em", "height": "2em"},
-                                    ),
-                                    title="Switch to Time Series View",
+                            # Spending type menu
+                            dbc.DropdownMenu(
+                                label="Spending type",
+                                children=spending_type_items,
+                                id="menu-spending-type",
+                                direction="down",
+                                class_name="me-2",
+                            ),
+                            # Spending scope menu
+                            dbc.DropdownMenu(
+                                label="Spending scope",
+                                children=spending_scope_items,
+                                id="menu-spending-scope",
+                                direction="down",
+                                class_name="me-2",
+                            ),
+                        ],
+                        direction="horizontal",
+                        gap=2,
+                        class_name="me-auto",
+                    ),
+                    dbc.Stack(
+                        [
+                            dbc.Button(
+                                html.Img(
+                                    src="/assets/icons/photo_camera.svg",
+                                    style={"width": "2em", "height": "2em"},
                                 ),
-                                href="/timeseries",
+                                id="btn-download-image",
+                                title="Download Treemap Plot as PNG",
                             ),
-                            dcc.Link(
-                                html.Button(
-                                    html.Img(
-                                        src="/assets/icons/info.svg",
-                                        style={"width": "2em", "height": "2em"},
-                                    ),
-                                    title="About This Project",
+                            dcc.Download(id="download-treemap-image"),
+                            dbc.Button(
+                                html.Img(
+                                    src="/assets/icons/download.svg",
+                                    style={"width": "2em", "height": "2em"},
                                 ),
+                                id="btn-download-csv",
+                                title="Download Treemap Data as CSV",
+                            ),
+                            dcc.Download(id="download-treemap-data"),
+                            dbc.Button(
+                                html.Img(
+                                    src="/assets/icons/stacked_bar_chart.svg",
+                                    style={"width": "2em", "height": "2em"},
+                                ),
+                                title="Switch to Time Series View",
+                            ),
+                            dbc.Button(
+                                html.Img(
+                                    src="/assets/icons/info.svg",
+                                    style={"width": "2em", "height": "2em"},
+                                ),
+                                title="About This Project",
                                 href="/about",
                             ),
                         ],
-                        style={
-                            "display": "flex",
-                            "flex-wrap": "wrap",
-                            "justify-content": "flex-end",
-                            "gap": "10px",
-                        },
+                        direction="horizontal",
+                        gap=2,
                     ),
                 ],
+                direction="horizontal",
                 style={
-                    "display": "flex",
-                    "flex-wrap": "wrap",
-                    "justify-content": "space-between",
-                    "gap": "10px",
                     "margin-bottom": "10px",
-                    "margin-top": "20px",
-                    "margin-left": "2.5vw",
-                    "margin-right": "2.5vw",
+                    "margin-top": "10px",
+                    "margin-left": "15px",
+                    "margin-right": "15px",
                 },
             ),
+            # add divider line
+            dbc.Row(html.Hr()),
             html.Div(
                 # Graph to display the treemap
                 [
@@ -293,13 +264,13 @@ def layout(**other_kwargs) -> html.Div:
     )
 
 
-# Callback to populate the graph on load and when filters change
+# Update your existing callbacks to read from the stores instead of the dcc.Dropdowns.
 @callback(
     Output("treemap-graph", "figure"),
-    Input("budget-dataset-dropdown", "value"),
-    Input("viewby-dropdown", "value"),
-    Input("spending-type-dropdown", "value"),
-    Input("spending-scope-dropdown", "value"),
+    Input("store-budget-id", "data"),
+    Input("store-viewby", "data"),
+    Input("store-spending-type", "data"),
+    Input("store-spending-scope", "data"),
 )
 def update_figure_from_filters(
     budget_id: int | None = None,
@@ -307,34 +278,22 @@ def update_figure_from_filters(
     spending_type: SpendingTypeLiteral = "ALL",
     spending_scope: SpendingScopeLiteral = "ABSOLUTE",
 ) -> go.Figure:
-    """
-    This callback is triggered on page load and when the budget type dropdown changes.
-    It loads the appropriate data and generates the treemap figure.
-
-    Args:
-        budget_type (str | None): The selected value from the budget type dropdown.
-
-    Returns:
-        go.Figure: The generated treemap figure to display in the dcc.Graph.
-    """
-    # Load data based on the selected filter
+    # Fetch and render using the selected values from stores
     labels, parents, values, metadata = fetch_treemap_data(
         budget_id=budget_id,
         spending_type=spending_type,
         spending_scope=spending_scope,
     )
-
-    # Generate and return the figure
     return generate_figure(labels, parents, values, metadata, viewby=viewby, language="EN")
 
 
 # Callback to handle store
 @callback(
     Output("treemap-store", "data"),
-    Input("budget-dataset-dropdown", "value"),
-    Input("viewby-dropdown", "value"),
-    Input("spending-type-dropdown", "value"),
-    Input("spending-scope-dropdown", "value"),
+    Input("store-budget-id", "data"),
+    Input("store-viewby", "data"),
+    Input("store-spending-type", "data"),
+    Input("store-spending-scope", "data"),
 )
 def update_store_data(
     budget_id: int | None = None,
@@ -393,16 +352,154 @@ def download_data(n_clicks, data) -> dict[str, Any]:
 @callback(
     Output("download-treemap-image", "data"),
     Input("btn-download-image", "n_clicks"),
+    State("treemap-graph", "figure"),
     prevent_initial_call=True,
 )
-def download_image(n_clicks, data, figure) -> dict[str, Any]:
+def download_image(n_clicks: int | None, figure_json: dict) -> dict[str, Any] | None:
     """
-    Callback to download the current treemap data as a csv file.
-    Returns:
-        dict[str, Any]: The data for download.
+    Generate a PNG image from the current treemap figure and start a download.
+
+    Notes:
+    - Uses the already-rendered figure from the Graph (keeps current logic and avoids recomputation).
+    - Requires 'kaleido' installed for Plotly static image export.
     """
-    figure_bytes = figure.to_image(format="png")
-    return dcc.send_bytes(figure_bytes, "treemap_figure.png")  # type: ignore
+    # If there is no click or figure, do nothing
+    if not n_clicks or not figure_json:
+        return None
+
+    # Reconstruct a Plotly Figure from the JSON stored in the Graph
+    fig = go.Figure(figure_json)
+
+    # Convert the figure to PNG bytes (kaleido backend)
+    image_bytes = fig.to_image(format="png", scale=3.0)  # Ensure 'kaleido' is in your dependencies
+
+    # Send bytes to the browser as a downloadable file
+    return dcc.send_bytes(image_bytes, "treemap_figure.png")  # type: ignore
+
+
+# View-by selection
+@callback(
+    Output("store-viewby", "data"),
+    Input({"type": "viewby-item", "value": "MINISTRY"}, "n_clicks"),
+    Input({"type": "viewby-item", "value": "CHAPTER"}, "n_clicks"),
+    Input({"type": "viewby-item", "value": "PROGRAM"}, "n_clicks"),
+    prevent_initial_call=True,
+)
+def select_viewby(n_min, n_chap, n_prog):
+    """Update viewby store based on which menu item was clicked."""
+    if n_prog:
+        return "PROGRAM"
+    if n_chap:
+        return "CHAPTER"
+    if n_min:
+        return "MINISTRY"
+    raise PreventUpdate
+
+
+# Spending type selection
+@callback(
+    Output("store-spending-type", "data"),
+    Input({"type": "spending-type-item", "value": "ALL"}, "n_clicks"),
+    Input({"type": "spending-type-item", "value": "MILITARY"}, "n_clicks"),
+    prevent_initial_call=True,
+)
+def select_spending_type(n_all, n_mil):
+    """Update spending_type store."""
+    if n_mil:
+        return "MILITARY"
+    if n_all:
+        return "ALL"
+    raise PreventUpdate
+
+
+# Spending scope selection
+@callback(
+    Output("store-spending-scope", "data"),
+    Input({"type": "spending-scope-item", "value": "ABSOLUTE"}, "n_clicks"),
+    Input({"type": "spending-scope-item", "value": "PERCENT_GDP_FULL_YEAR"}, "n_clicks"),
+    Input({"type": "spending-scope-item", "value": "PERCENT_GDP_YEAR_TO_YEAR"}, "n_clicks"),
+    Input({"type": "spending-scope-item", "value": "PERCENT_FULL_YEAR_SPENDING"}, "n_clicks"),
+    Input({"type": "spending-scope-item", "value": "PERCENT_YEAR_TO_YEAR_SPENDING"}, "n_clicks"),
+    Input({"type": "spending-scope-item", "value": "PERCENT_YEAR_TO_YEAR_REVENUE"}, "n_clicks"),
+    prevent_initial_call=True,
+)
+def select_spending_scope(n_abs, n_gdp_full, n_gdp_yty, n_spend_full, n_spend_yty, n_rev_yty):
+    """Update spending_scope store."""
+    if n_rev_yty:
+        return "PERCENT_YEAR_TO_YEAR_REVENUE"
+    if n_spend_yty:
+        return "PERCENT_YEAR_TO_YEAR_SPENDING"
+    if n_spend_full:
+        return "PERCENT_FULL_YEAR_SPENDING"
+    if n_gdp_yty:
+        return "PERCENT_GDP_YEAR_TO_YEAR"
+    if n_gdp_full:
+        return "PERCENT_GDP_FULL_YEAR"
+    if n_abs:
+        return "ABSOLUTE"
+    raise PreventUpdate
+
+
+@callback(
+    Output("store-budget-options", "data"),
+    Output("store-budget-id", "data"),
+    Output("menu-budget", "children"),
+    Input("url", "pathname"),  # fire once on load
+    prevent_initial_call=False,
+)
+def init_budgets(_):
+    # Fetch once and share everywhere via Store
+    options = [
+        {"label": b["name_translated"] or b["name"], "value": b["id"]} for b in fetch_budgets()
+    ]
+    # Build menu items with pattern ids
+    items = [
+        dbc.DropdownMenuItem(opt["label"], id={"type": "budget-item", "value": opt["value"]})
+        for opt in options
+    ]
+    default_value = options[0]["value"] if options else None
+    return options, default_value, items
+
+
+@callback(
+    Output("store-budget-id", "data", allow_duplicate=True),
+    Input("store-budget-options", "data"),
+    Input({"type": "budget-item", "value": ALL}, "n_clicks"),
+    prevent_initial_call=True,
+)
+def select_budget_dynamic(options, clicks):
+    """
+    Update selected budget_id when any budget menu item is clicked.
+
+    Fix:
+    - Use dash.callback_context.triggered_id (parsed) instead of json.loads(prop_id).
+    - Only act when the triggered id is a dict with type == "budget-item".
+    """
+    ctx = dash.callback_context
+
+    # If nothing triggered, do nothing
+    if not ctx.triggered:
+        raise PreventUpdate
+
+    # triggered_id is either a dict (for pattern-matched components) or a string id
+    trig = getattr(ctx, "triggered_id", None)
+
+    # Guard: ignore triggers from non-budget inputs (e.g., store-budget-options)
+    if not isinstance(trig, dict):
+        # Not a pattern-matched id -> ignore
+        raise PreventUpdate
+
+    # Guard: ensure we only react to budget-item clicks
+    if trig.get("type") != "budget-item":
+        raise PreventUpdate
+
+    selected_value = trig.get("value")
+    if selected_value is None:
+        # No value in id -> ignore
+        raise PreventUpdate
+
+    # Return the selected budget id to the store
+    return selected_value
 
 
 # Clientside callback to handle URL focus parameter and click simulation
