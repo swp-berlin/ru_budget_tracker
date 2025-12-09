@@ -12,6 +12,7 @@ Usage:
     python translate_dimensions.py --dry-run          # Show what would be translated
     python translate_dimensions.py --force            # Re-translate all names
     python translate_dimensions.py --batch-size 50    # Custom batch size for API calls
+    python translate_dimensions.py --workers 5        # Parallel API calls (default: 5)
     python translate_dimensions.py --limit 20         # Test with first 20 names only
 
 Environment:
@@ -24,6 +25,7 @@ import csv
 import json
 import argparse
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Dict, List, Set
 
@@ -48,9 +50,9 @@ TRANSLATIONS_DIR = Path(__file__).parent.parent / "data" / "import_files" / "cle
 TRANSLATIONS_FILE = TRANSLATIONS_DIR / "dimension_translations.csv"
 
 # OpenAI settings
-# Using gpt-4o-mini which supports structured outputs with strict mode
 OPENAI_MODEL = "gpt-4o-mini"
 BATCH_SIZE = 25  # Number of names to translate per API call
+MAX_WORKERS = 8  # Parallel API calls
 
 
 # =============================================================================
@@ -285,6 +287,7 @@ def translate_missing_names(
     existing_translations: Dict[str, str],
     client: OpenAI,
     batch_size: int = BATCH_SIZE,
+    max_workers: int = MAX_WORKERS,
 ) -> Dict[str, str]:
     """
     Translate names that don't have existing translations.
@@ -294,6 +297,7 @@ def translate_missing_names(
         existing_translations: Already translated names.
         client: OpenAI client.
         batch_size: Number of names per API call.
+        max_workers: Number of parallel API calls.
 
     Returns:
         Dictionary with all translations (existing + new).
@@ -307,18 +311,27 @@ def translate_missing_names(
 
     logger.info(f"Found {len(missing_names)} names needing translation")
 
-    # Translate in batches
+    # Split into batches
+    batches = [missing_names[i : i + batch_size] for i in range(0, len(missing_names), batch_size)]
+    total_batches = len(batches)
+    logger.info(f"Processing {total_batches} batches with {max_workers} workers")
+
+    # Translate in parallel
     new_translations: Dict[str, str] = {}
-    total_batches = (len(missing_names) + batch_size - 1) // batch_size
+    completed = 0
 
-    for i in range(0, len(missing_names), batch_size):
-        batch = missing_names[i : i + batch_size]
-        batch_num = (i // batch_size) + 1
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(translate_names_batch, batch, client): i for i, batch in enumerate(batches)}
 
-        logger.info(f"Translating batch {batch_num}/{total_batches} ({len(batch)} names)...")
-
-        batch_translations = translate_names_batch(batch, client)
-        new_translations.update(batch_translations)
+        for future in as_completed(futures):
+            batch_num = futures[future] + 1
+            try:
+                batch_translations = future.result()
+                new_translations.update(batch_translations)
+                completed += 1
+                logger.info(f"Completed batch {batch_num}/{total_batches} ({completed}/{total_batches} done)")
+            except Exception as e:
+                logger.error(f"Batch {batch_num} failed: {e}")
 
     # Combine existing and new translations
     all_translations = {**existing_translations, **new_translations}
@@ -351,6 +364,12 @@ def main():
         help=f"Number of names per API call (default: {BATCH_SIZE})",
     )
     parser.add_argument(
+        "--workers",
+        type=int,
+        default=MAX_WORKERS,
+        help=f"Number of parallel API calls (default: {MAX_WORKERS})",
+    )
+    parser.add_argument(
         "--skip-db-update",
         action="store_true",
         help="Only update CSV, don't update database",
@@ -380,7 +399,7 @@ def main():
 
     # Apply limit for testing
     if args.limit:
-        db_names = set(list(db_names)[:args.limit])
+        db_names = set(list(db_names)[: args.limit])
         logger.info(f"Limited to first {args.limit} dimension names (for testing)")
 
     # Load existing translations
@@ -396,6 +415,8 @@ def main():
         logger.info(f"Total unique names in database: {len(db_names)}")
         logger.info(f"Existing translations in CSV: {len(existing_translations)}")
         logger.info(f"Names needing translation: {len(missing_names)}")
+        logger.info(f"Batch size: {args.batch_size}, Workers: {args.workers}")
+        logger.info(f"Estimated batches: {(len(missing_names) + args.batch_size - 1) // args.batch_size}")
 
         if missing_names:
             logger.info("\nSample of names to translate (first 10):")
@@ -415,7 +436,7 @@ def main():
 
     # Translate missing names
     all_translations = translate_missing_names(
-        db_names, existing_translations, client, args.batch_size
+        db_names, existing_translations, client, args.batch_size, args.workers
     )
 
     # Save to CSV
