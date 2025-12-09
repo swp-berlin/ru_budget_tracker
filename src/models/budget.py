@@ -19,7 +19,7 @@ from datetime import date, datetime
 
 BudgetTypeLiteral = Literal["DRAFT", "LAW", "REPORT", "TOTAL"]
 BudgetScopeLiteral = Literal["YEARLY", "QUARTERLY", "MONTHLY"]
-DimensionTypeLiteral = Literal["MINISTRY", "CHAPTER", "PROGRAMM", "EXPENSE_TYPE"]
+DimensionTypeLiteral = Literal["MINISTRY", "CHAPTER", "SUBCHAPTER", "PROGRAMM", "EXPENSE_TYPE"]
 ViewByDimensionTypeLiteral = Literal["MINISTRY", "CHAPTER", "PROGRAMM"]
 
 

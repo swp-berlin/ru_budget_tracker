@@ -7,96 +7,160 @@ from utils.definitions import HIERARCHY_OBJECTS
 
 
 class TreemapTransformer:
-    def __init__(self, rows: Sequence[RowMapping], translated: bool = False):
-        self.rows = rows
-        self.translated = translated
-
-    def _calculate_hierarchy_paths(self, df: pd.DataFrame) -> list[list[int]]:
+    def _calculate_program_hierarchy(self, programs: Sequence[RowMapping]) -> dict[int, list[int]]:
         """Calculate all paths from root to leaves in the hierarchy graph."""
+        program_edges = [(row["dimension_id"], row["dimension_parent_id"]) for row in programs]
+        deduped_edges = {edge for edge in program_edges if edge[1] is not None}
+        # Create a directed graph
         g = nx.DiGraph()
-        g.add_edges_from(df[["dimension_id", "dimension_parent_id"]].to_records(index=False))
+        # Add edges to the graph
+        g.add_edges_from(deduped_edges)  # pyright: ignore[reportArgumentType]
         roots = (v for v, d in g.in_degree() if d == 0)
         leaves = [v for v, d in g.out_degree() if d == 0]
-        all_paths = []
+        program_paths: list[list[int]] = []
         for root in roots:
-            paths = nx.all_simple_paths(g, root, leaves)
-            all_paths.extend(paths)
-        return all_paths
+            paths_raw = nx.all_simple_paths(g, root, leaves)
+            paths: list[list[int]] = [[int(elem) for elem in path] for path in paths_raw]
+            program_paths.extend(paths)
 
-    def _prep_dataframe(
+        # Create a mapping for leaves to their full paths
+        # Full path is used for root-to-leaf traversal, so we reverse the paths here
+        leave_mapping = {path[0]: path[::-1] for path in program_paths}
+
+        return leave_mapping
+
+    def _build_hierarchy_dict(
         self,
-        df: pd.DataFrame,
-    ) -> pd.DataFrame:
-        """Configure dataframe columns to represent hierarchy levels."""
-        # Rename columns
-        colnames = []
-        for i in range(df.shape[1]):
-            if i == 0:
-                colnames.append("ROOT")
-            if i == 1:
-                colnames.append("MINISTRY")
-            if i == 2:
-                colnames.append("CHAPTER")
-            if i > 2:
-                colnames.append(f"PROGRAM_LVL_{i - 2}")
-        df.columns = colnames
-        return df
+        expense_dimensions: Sequence[RowMapping],
+        program_paths: dict[int, list[int]],
+    ) -> dict[int, dict[str, int]]:
+        """Build a hierarchy dictionary mapping each row ID to its hierarchy levels."""
+
+        hierarchy_dict: dict[int, dict[str, int]] = {}
+        for row in expense_dimensions:
+            # Initialize dict structure and expense value if not already present
+            hierarchy_dict.setdefault(
+                row["id"],
+                {},
+            )
+            if row["dimension_type"] == "MINISTRY":
+                hierarchy_dict[row["id"]]["MINISTRY"] = row["dimension_id"]
+
+            if row["dimension_type"] == "CHAPTER":
+                hierarchy_dict[row["id"]]["CHAPTER"] = row["dimension_id"]
+
+            if row["dimension_type"] == "SUBCHAPTER":
+                hierarchy_dict[row["id"]]["SUBCHAPTER"] = row["dimension_id"]
+
+            program_path = []
+            if row["dimension_type"] == "PROGRAM":
+                program_path = program_paths.get(row["dimension_id"], [])
+            if program_path and len(program_path) > 0:
+                level = 0
+                for program in program_path:
+                    hierarchy_dict[row["id"]][f"PROGRAM_{level}"] = program
+                    level += 1
+
+        return hierarchy_dict
+
+    def _create_lists(
+        self,
+        hierarchy: dict[int, dict[str, int]],
+        name_mapping: dict[int, str],
+        value_mapping: dict[int, float],
+        root_name: str = "Federal Budget",
+    ) -> tuple[list[str], list[str], list[float], list[str]]:
+        ids = [0]
+        metadata: list[str] = ["root"]
+        labels = [root_name]
+        parents = [""]
+        values: list[float] = [0.0]
+        highlevel_value = 0.0
+        for expense_id, levels in hierarchy.items():
+            previous_level_name = root_name
+            sorted_level_names = sorted(
+                levels.keys(), key=lambda x: (x != "MINISTRY", x != "CHAPTER", x != "SUBCHAPTER", x)
+            )
+            for level_name in sorted_level_names:
+                id = hierarchy[expense_id][level_name]
+                label_name = name_mapping.get(id, "Unknown")
+                if id in ids:
+                    previous_level_name = label_name
+                    continue
+                ids.append(id)
+                metadata.append(level_name.title() + str(id))
+                labels.append(label_name)
+                parents.append(previous_level_name)
+                previous_level_name = label_name
+                value = value_mapping.get(id, 0)
+                values.append(value)
+                if level_name == "MINISTRY":
+                    highlevel_value += value
+
+        # Set Federal Budget value
+        values[0] = highlevel_value
+
+        return labels, parents, values, metadata
 
     def _create_id_name_mapping(
-        self, raw_data: pd.DataFrame, translated: bool = False
+        self,
+        dimension_rows: Sequence[RowMapping],
+        program_rows: Sequence[RowMapping],
+        translated: bool = False,
     ) -> dict[int, str]:
-        mapping = {}
-        for _, row in raw_data.iterrows():
+        name_mapping = {}
+        for row in dimension_rows:
             d_id = row["dimension_id"]
             d_name = row["dimension_name"] if not translated else row["dimension_name_translated"]
-            mapping[d_id] = d_name
-        return mapping
+            name_mapping[d_id] = d_name
+        for row in program_rows:
+            d_id = row["dimension_id"]
+            d_name = row["dimension_name"] if not translated else row["dimension_name_translated"]
+            name_mapping[d_id] = d_name
+        return name_mapping
 
-    def _replace_id_with_name(
+    def _extend_sum_mapping_with_hierarchy(
         self,
-        dataframe: pd.DataFrame,
-        id_name_mapping: dict[int, str],
-        root_name: str = "Federal Budget",
-    ) -> pd.DataFrame:
-        """Replace dimension IDs in the dataframe with their corresponding names."""
-        for col in dataframe.columns:
-            if col == "EXPENSE_VALUE":
-                continue
-            if col == "ROOT":
-                dataframe[col] = root_name
-                continue
-            dataframe[col] = dataframe[col].map(id_name_mapping)
-        return dataframe
+        sum_mapping: dict[int, float],
+        program_paths: dict[int, list[int]],
+    ) -> dict[int, float]:
+        """
+        Extend the sum mapping to include sums for all ancestor dimensions, specifically for
+        programs. This ensures that parent dimensions have the correct aggregated sums.
+        """
+        extended_mapping = sum_mapping.copy()
+        for leave_id, path in program_paths.items():
+            leave_sum = sum_mapping.get(leave_id, 0)
+            # Propagate the sum up the hierarchy
+            for ancestor_id in path[::-1][1:]:
+                if ancestor_id in extended_mapping:
+                    extended_mapping[ancestor_id] += leave_sum
+                else:
+                    extended_mapping[ancestor_id] = leave_sum
+        return extended_mapping
 
-    def transform_data(self) -> pd.DataFrame:
-        """Transform raw rows into a hierarchical dataframe suitable for treemap visualization."""
-        rows = self.rows
-        translated = self.translated
-        df = pd.DataFrame(rows)
-        if df.empty:
-            return pd.DataFrame()
-        df = df[df.dimension_type.isin(HIERARCHY_OBJECTS)]
+    def transform_data(
+        self,
+        dimensions: Sequence[RowMapping],
+        programs: Sequence[RowMapping],
+        sum_mapping: dict[int, float],
+        translated_names: bool = False,
+    ) -> tuple[list[str], list[str], list[float], list[str]]:
+        """Transform raw dimensions into a hierarchical dataframe suitable for treemap visualization."""
+        if not dimensions:
+            return [], [], [], []
+
+        # Extend sum mapping to include all hierarchy levels
+        program_paths = self._calculate_program_hierarchy(programs)
+        sum_mapping = self._extend_sum_mapping_with_hierarchy(sum_mapping, program_paths)
+
+        name_mapping = self._create_id_name_mapping(dimensions, programs, translated_names)
         # Calculate all paths between dimensions
-        paths = self._calculate_hierarchy_paths(df)
-        # For each path, get the expense value associated with the leaf node
-        expense_column = []
-        for path in paths:
-            expense = df.expense_value[df.dimension_id == path[0]]
-            expense_column.append(expense.values[0] if not expense.empty else 0)
-        # reverse path order to have root at first position
-        paths = [list(reversed(path)) for path in paths]
+        hierarchy_dict = self._build_hierarchy_dict(dimensions, program_paths)
         # Create dataframe from paths
-        hierarchy_df = pd.DataFrame(paths)
-        hierarchy_df = self._prep_dataframe(hierarchy_df)
-        hierarchy_df["EXPENSE_VALUE"] = expense_column
-        hierarchy_df["ROOT"] = 0
+        result_tuple = self._create_lists(hierarchy_dict, name_mapping, sum_mapping)
 
-        name_mapping = self._create_id_name_mapping(df, translated)
-        hierarchy_df = self._replace_id_with_name(
-            hierarchy_df, name_mapping, root_name="Federal Budget"
-        )
-
-        return hierarchy_df
+        return result_tuple
 
 
 class BarchartTransformer:

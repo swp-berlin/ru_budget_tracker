@@ -23,7 +23,13 @@ class Calculator:
         return 100_000_000_000.0  # Placeholder GDP value
 
     def _absolute(self, value: float) -> float:
-        return value
+        """Calculate absolute value in billions."""
+        value_in_billions = value / 1_000_000_000
+        if self.conversion_from_to:
+            value_in_billions = self.calculate_conversion(value_in_billions)
+        # round to 1 decimal places for better readability
+        value_in_billions = round(value_in_billions, 1)
+        return value_in_billions
 
     def _percentage_gdp_full_year(self, value: float, date: date) -> float:
         return value
@@ -40,19 +46,20 @@ class Calculator:
     def _percentage_year_to_year_revenue(self, value: float, date: date) -> float:
         return value
 
-    def calculate(self, value: float, date: date) -> float:
+    def calculate(self, value: float, date: date | None = None) -> float:
         """Calculate based on spending scope."""
         if self.spending_scope == "ABSOLUTE":
             return self._absolute(value)
-        elif self.spending_scope == "PERCENTAGE_GDP_FULL_YEAR":
+        if date is None:
+            raise ValueError("Date must be provided for non-absolute spending scopes.")
+        if self.spending_scope == "PERCENTAGE_GDP_FULL_YEAR":
             return self._percentage_gdp_full_year(value, date)
-        elif self.spending_scope == "PERCENTAGE_GDP_YEAR_TO_YEAR":
+        if self.spending_scope == "PERCENTAGE_GDP_YEAR_TO_YEAR":
             return self._percentage_gdp_year_to_year(value, date)
-        elif self.spending_scope == "PERCENTAGE_FULL_YEAR_SPENDING":
+        if self.spending_scope == "PERCENTAGE_FULL_YEAR_SPENDING":
             return self._percentage_full_year_spending(value, date)
-        elif self.spending_scope == "PERCENTAGE_YEAR_TO_YEAR_SPENDING":
+        if self.spending_scope == "PERCENTAGE_YEAR_TO_YEAR_SPENDING":
             return self._percentage_year_to_year_spending(value, date)
-        elif self.spending_scope == "PERCENTAGE_YEAR_TO_YEAR_REVENUE":
+        if self.spending_scope == "PERCENTAGE_YEAR_TO_YEAR_REVENUE":
             return self._percentage_year_to_year_revenue(value, date)
-        else:
-            raise ValueError(f"Unknown spending scope: {self.spending_scope}")
+        raise ValueError(f"Unknown spending scope: {self.spending_scope}")
