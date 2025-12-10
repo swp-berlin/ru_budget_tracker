@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Optional
 import dash
 import pandas as pd
 import plotly.express as px
@@ -86,13 +86,38 @@ def generate_figure(
     viewby: ViewByDimensionTypeLiteral = "MINISTRY",
     language: LanguageTypeLiteral = "EN",
 ) -> go.Figure:
+    """
+    Build treemap with explicit ids and parent ids for correct nesting.
+    Plotly requires:
+      - ids: unique identifiers per node
+      - parents: "" for root, otherwise the parent node's id (not index)
+    """
+
     fig = px.treemap(
         names=labels,
         parents=parents,
         values=values,
-        hover_data={"level": metadata},
+        hover_data=None,
     )
-    fig.update_layout(margin=dict(t=30, b=5, l=5, r=5))
+
+    # Tight tiling so children fill parents
+    fig.update_traces(
+        tiling=dict(pad=0),
+        marker=dict(pad=dict(t=0, r=0, b=0, l=0)),
+        selector=dict(type="treemap"),
+    )
+
+    fig.update_layout(margin=dict(t=0, r=0, b=0, l=0))
+
+    # Hover with RUB formatting
+    fig.data[0].customdata = [[v, m] for v, m in zip(values, metadata)]
+    fig.data[0].hovertemplate = (
+        "<b>%{label}</b><br>"
+        "Value: %{customdata[0]:,.1f} Billion RUB<br>"
+        "Level: %{customdata[1]}<br>"
+        "<extra></extra>"
+    )
+
     return fig
 
 
@@ -153,14 +178,18 @@ def layout(**other_kwargs) -> html.Div:
             # Add Buttons and dropdowns for filtering by budget type
             dbc.Stack(
                 [
-                    html.Div(
+                    # Logo image without button styling - only the image is visible
+                    html.A(
                         [
                             html.Img(
                                 src="/assets/logo/logo.svg",
                                 style={"height": "2em"},
+                                alt="Logo of Stiftung Wissenschaft und Politik",
                             ),
                         ],
                         style={"margin-right": "20px", "align-self": "center"},
+                        href="/",
+                        title="Go to Home Page",
                     ),
                     dbc.Stack(
                         [
@@ -264,7 +293,6 @@ def layout(**other_kwargs) -> html.Div:
     )
 
 
-# Update your existing callbacks to read from the stores instead of the dcc.Dropdowns.
 @callback(
     Output("treemap-graph", "figure"),
     Input("store-budget-id", "data"),
@@ -500,6 +528,77 @@ def select_budget_dynamic(options, clicks):
 
     # Return the selected budget id to the store
     return selected_value
+
+
+@callback(
+    Output("menu-budget", "label"),
+    Input("store-budget-id", "data"),
+    State("store-budget-options", "data"),
+)
+def show_selected_budget_label(
+    budget_id: Optional[int], options: list[dict[str, Any]] | None
+) -> str:
+    """
+    Set the Budget menu's label to the selected budget's display name.
+    Falls back to 'Budget' if nothing is selected or options missing.
+    """
+    if not options or budget_id is None:
+        return "Budget"
+    # Find the option whose value matches the selected id
+    for opt in options:
+        if opt.get("value") == budget_id:
+            return opt.get("label", "Budget")
+    return "Budget"  # default if not found
+
+
+@callback(
+    Output("menu-viewby", "label"),
+    Input("store-viewby", "data"),
+)
+def show_selected_viewby_label(viewby: str | None) -> str:
+    """
+    Reflect the selected View-by value on the menu toggle.
+    """
+    mapping = {
+        "MINISTRY": "View by: Ministry",
+        "CHAPTER": "View by: Chapter",
+        "PROGRAM": "View by: Program",
+    }
+    return mapping.get(viewby or "", "View by")
+
+
+@callback(
+    Output("menu-spending-type", "label"),
+    Input("store-spending-type", "data"),
+)
+def show_selected_spending_type_label(spending_type: str | None) -> str:
+    """
+    Reflect the selected Spending type on the menu toggle.
+    """
+    mapping = {
+        "ALL": "Spending type: All",
+        "MILITARY": "Spending type: Military Only",
+    }
+    return mapping.get(spending_type or "", "Spending type")
+
+
+@callback(
+    Output("menu-spending-scope", "label"),
+    Input("store-spending-scope", "data"),
+)
+def show_selected_spending_scope_label(spending_scope: str | None) -> str:
+    """
+    Reflect the selected Spending scope on the menu toggle.
+    """
+    mapping = {
+        "ABSOLUTE": "Scope: Billion RUB",
+        "PERCENT_GDP_FULL_YEAR": "Scope: % full-year GDP",
+        "PERCENT_GDP_YEAR_TO_YEAR": "Scope: % year-to-year GDP",
+        "PERCENT_FULL_YEAR_SPENDING": "Scope: % full-year spending",
+        "PERCENT_YEAR_TO_YEAR_SPENDING": "Scope: % year-to-year spending",
+        "PERCENT_YEAR_TO_YEAR_REVENUE": "Scope: % year-to-year revenue",
+    }
+    return mapping.get(spending_scope or "", "Spending scope")
 
 
 # Clientside callback to handle URL focus parameter and click simulation
