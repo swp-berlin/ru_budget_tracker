@@ -1,68 +1,67 @@
-/* Uniform height for dropdown toggles and action buttons in the header bar */
-
-/* Bootstrap dropdown toggle buttons (dbc.DropdownMenu triggers) */
+/* Truncate toggle labels with ellipses to avoid wide menus */
 #menu-budget .dropdown-toggle,
 #menu-viewby .dropdown-toggle,
 #menu-spending-type .dropdown-toggle,
 #menu-spending-scope .dropdown-toggle {
-    /* Force consistent height */
-    height: 40px;              /* adjust as desired */
-    line-height: 24px;         /* centers text vertically */
-    padding: 8px 12px;         /* balanced padding */
-    display: inline-flex;      /* flex for vertical centering */
-    align-items: center;       /* center content in the toggle */
-    color: #333333 !important; /* keep text readable (your existing color) */
+  /* Existing height/padding from your file ... */
+  height: 40px;
+  line-height: 24px;
+  padding: 8px 12px;
+  display: inline-flex;
+  align-items: center;
+  color: #333333 !important;
+
+  /* Truncation: keep text on one line and clip overflow */
+  max-width: 220px;           /* adjust to taste; keeps trigger compact */
+  white-space: nowrap;        /* prevent wrapping */
+  overflow: hidden;           /* hide overflow */
+  text-overflow: ellipsis;    /* show "..." when clipped */
+
+  /* Ensure inner text can actually truncate */
+  /* Bootstrap puts the label text inside the toggle; this helps truncation work consistently */
 }
 
-/* Action buttons on the right (camera, download, etc.) */
-.btn,
-button,
-.btn > img,
-button > img {
-    /* Match dropdown toggle height */
-    height: 40px;
+#menu-budget .dropdown-toggle > *,
+#menu-viewby .dropdown-toggle > *,
+#menu-spending-type .dropdown-toggle > *,
+#menu-spending-scope .dropdown-toggle > * {
+  min-width: 0;               /* allow flex children to shrink for ellipsis */
 }
 
-/* Make icon inside buttons/toggles centered and not stretch the height */
-#menu-budget .dropdown-toggle img,
-#menu-viewby .dropdown-toggle img,
-#menu-spending-type .dropdown-toggle img,
-#menu-spending-scope .dropdown-toggle img,
-.btn img,
-button img {
-    height: 1.25em;            /* icon scale relative to font size */
-    width: auto;
-    vertical-align: middle;
-}
-
-/* Optional: reduce default Bootstrap button padding so it matches exactly */
-.btn {
-    padding: 8px 12px;         /* same as toggles for symmetry */
-    display: inline-flex;
-    align-items: center;
-}
-
-/* Keep menus scrollable and text color consistent (existing rules) */
+/* Keep the dropdown list scrollable and compact; truncate long item labels */
 #menu-budget .dropdown-menu,
 #menu-viewby .dropdown-menu,
 #menu-spending-type .dropdown-menu,
 #menu-spending-scope .dropdown-menu {
-    color: #333333 !important;
-    max-height: 300px;
-    overflow-y: auto;
-    overflow-x: hidden;
-    white-space: normal;
-    word-break: break-word;
-    min-width: 260px;
+  max-height: 300px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-width: 220px;           /* match toggle width for a compact feel */
+  color: #333333 !important;
 }
 
 #menu-budget .dropdown-item,
 #menu-viewby .dropdown-item,
 #menu-spending-type .dropdown-item,
-#menu-spending-scope .dropdown-item,
-#menu-budget .dropdown-item a,
-#menu-viewby .dropdown-item a,
-#menu-spending-type .dropdown-item a,
-#menu-spending-scope .dropdown-item a {
-    color: #333333 !important;
+#menu-spending-scope .dropdown-item {
+  /* Truncate long item text on one line */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #333333 !important;
+}
+
+/* Optional: narrower items on small screens */
+@media (max-width: 480px) {
+  #menu-budget .dropdown-toggle,
+  #menu-viewby .dropdown-toggle,
+  #menu-spending-type .dropdown-toggle,
+  #menu-spending-scope .dropdown-toggle,
+  #menu-budget .dropdown-menu,
+  #menu-viewby .dropdown-menu,
+  #menu-spending-type .dropdown-menu,
+  #menu-spending-scope .dropdown-menu {
+    max-width: 180px;
+    min-width: 180px;
+  }
 }

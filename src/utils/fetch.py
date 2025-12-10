@@ -63,7 +63,7 @@ class TremapDataFetcher:
                 func.sum(Expense.value).label("total_expense_value"),
             )
             .where(
-                Expense.budget_id == 1,
+                Expense.budget_id == budget_id,
                 Dimension.type.in_(["MINISTRY", "CHAPTER", "SUBCHAPTER", "PROGRAM"]),
             )
             .join(Expense.dimensions)

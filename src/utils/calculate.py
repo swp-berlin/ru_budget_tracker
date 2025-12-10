@@ -27,8 +27,6 @@ class Calculator:
         value_in_billions = value / 1_000_000_000
         if self.conversion_from_to:
             value_in_billions = self.calculate_conversion(value_in_billions)
-        # round to 1 decimal places for better readability
-        value_in_billions = round(value_in_billions, 1)
         return value_in_billions
 
     def _percentage_gdp_full_year(self, value: float, date: date) -> float:

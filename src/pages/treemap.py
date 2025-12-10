@@ -89,32 +89,88 @@ def generate_figure(
     """
     Build treemap with explicit ids and parent ids for correct nesting.
     Plotly requires:
-      - ids: unique identifiers per node
-      - parents: "" for root, otherwise the parent node's id (not index)
+    - ids: unique identifiers per node
+    - parents: "" for root, otherwise the parent node's id (not index)
     """
 
+    # Calculate the total value of all root nodes (nodes with no parent).
+    # This serves as the denominator for calculating the share of the total.
+    total_root_value = sum(values[i] for i, p in enumerate(parents) if not p)
+
+    # Calculate the percentage of each node's value relative to the total root value.
+    root_percentages = []
+    for value in values:
+        # Check if the total root value is greater than zero to avoid division by zero.
+        if total_root_value > 0:
+            # Calculate the percentage share of the total.
+            root_percentage = (value / total_root_value) * 100
+            root_percentages.append(root_percentage)
+        else:
+            # If the total root value is zero, the share is also zero.
+            root_percentages.append(0.0)
+
+    # Create a mapping from parent label to the sum of its direct children's values.
+    # This is used to calculate the "Share of Parent" correctly.
+    parent_totals: dict[str, float] = {}
+    for i, parent_label in enumerate(parents):
+        if parent_label:  # Only consider nodes that have a parent.
+            # Add the current node's value to its parent's aggregated total.
+            parent_totals[parent_label] = parent_totals.get(parent_label, 0) + values[i]
+
+    # Calculate the percentage of each node's value relative to its parent's calculated total.
+    parent_percentages = []
+    for i, parent_label in enumerate(parents):
+        # Check if the node is a root node (has no parent).
+        if not parent_label:
+            # Root nodes are considered 100% of themselves relative to their "parent".
+            parent_percentages.append(100.0)
+            continue
+
+        # Get the calculated total value of the parent node.
+        parent_total_value = parent_totals.get(parent_label)
+        # Get the value of the current node.
+        current_value = values[i]
+
+        # Calculate percentage if the parent's total is valid and not zero.
+        if parent_total_value and parent_total_value > 0:
+            percentage = (current_value / parent_total_value) * 100
+            parent_percentages.append(percentage)
+        else:
+            # If parent has no value or is zero, the percentage is undefined.
+            parent_percentages.append(0.0)
+
+    # Create a set of all parent nodes for efficient lookup.
+    parent_set = set(parents)
+
+    # Create a new list of values for sizing the treemap tiles.
+    # Set the value to 0 for parent nodes (branches) and keep the original value for leaf nodes.
+    # This makes the treemap areas proportional to the leaf values only.
+    new_values = [0 if label in parent_set else value for label, value in zip(labels, values)]
+
+    # Create the treemap figure using the modified values for area calculation.
     fig = px.treemap(
         names=labels,
         parents=parents,
-        values=values,
+        values=new_values,  # Use new_values for sizing the treemap areas.
         hover_data=None,
     )
 
-    # Tight tiling so children fill parents
-    fig.update_traces(
-        tiling=dict(pad=0),
-        marker=dict(pad=dict(t=0, r=0, b=0, l=0)),
-        selector=dict(type="treemap"),
-    )
-
+    # Configure the layout to remove margins.
     fig.update_layout(margin=dict(t=0, r=0, b=0, l=0))
 
-    # Hover with RUB formatting
-    fig.data[0].customdata = [[v, m] for v, m in zip(values, metadata)]
+    # Set up custom hover data to display original values, metadata, and calculated percentages.
+    # The original `values` list contains the correct totals for all nodes.
+    fig.data[0].customdata = [
+        [v, m, pp, rp]
+        for v, m, pp, rp in zip(values, metadata, parent_percentages, root_percentages)
+    ]
+    # Define the hover template to show the custom data.
     fig.data[0].hovertemplate = (
         "<b>%{label}</b><br>"
+        "%{customdata[1]}<br>"
         "Value: %{customdata[0]:,.1f} Billion RUB<br>"
-        "Level: %{customdata[1]}<br>"
+        "% Parent: %{customdata[2]:.2f}%<br>"
+        "% Federal Budget: %{customdata[3]:.2f}%<br>"
         "<extra></extra>"
     )
 
