@@ -245,4 +245,47 @@ window.dash_clientside.clientside = {
     console.debug('[Treemap Focus] Returning status', msg);
     return msg;
   }
+  ,
+  /**
+   * Build a shareable URL from current filters and selected id and copy it.
+   * Params included: budget_id, viewby, spending_type, spending_scope, focus
+   *
+   * @param {number} n_clicks - Button clicks (ignored aside from triggering)
+   * @param {string} pathname - Current page path, e.g., '/'
+   * @param {number|null} budgetId
+   * @param {string} viewby
+   * @param {string} spendingType
+   * @param {string} spendingScope
+   * @param {string|null} selectedId
+   * @returns {string} Status message in dummy output title.
+   */
+  copyShareLink: function (n_clicks, pathname, budgetId, viewby, spendingType, spendingScope, selectedId) {
+    try {
+      if (!n_clicks) return 'Share not triggered';
+      const params = new URLSearchParams();
+      if (budgetId != null) params.set('budget_id', String(budgetId));
+      if (viewby) params.set('viewby', viewby);
+      if (spendingType) params.set('spending_type', spendingType);
+      if (spendingScope) params.set('spending_scope', spendingScope);
+      if (selectedId) params.set('focus', selectedId);
+
+      const base = window.location.origin + (pathname || '/');
+      const url = `${base}?${params.toString()}`;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url);
+        return 'Link copied to clipboard';
+      }
+      // Fallback for older browsers
+      const el = document.createElement('textarea');
+      el.value = url;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+      return 'Link copied to clipboard';
+    } catch (e) {
+      console.debug('[Share] Failed to copy link', e);
+      return 'Failed to copy link';
+    }
+  }
 };

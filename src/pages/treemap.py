@@ -270,6 +270,29 @@ def layout(**other_kwargs) -> html.Div:
                         [
                             dbc.Button(
                                 html.Img(
+                                    src="/assets/icons/share.svg",
+                                    style={"width": "2em", "height": "2em"},
+                                ),
+                                id="btn-share-link",
+                                title="Copy shareable link to clipboard",
+                            ),
+                            dbc.Toast(
+                                id="share-toast",
+                                header="Link copied",
+                                children="The shareable link was copied to your clipboard.",
+                                is_open=False,
+                                duration=2000,
+                                dismissable=False,
+                                style={
+                                    "position": "fixed",
+                                    "bottom": 20,
+                                    "left": "50%",
+                                    "transform": "translateX(-50%)",
+                                    "zIndex": 1060,
+                                },
+                            ),
+                            dbc.Button(
+                                html.Img(
                                     src="/assets/icons/photo_camera.svg",
                                     style={"width": "2em", "height": "2em"},
                                 ),
@@ -320,6 +343,7 @@ def layout(**other_kwargs) -> html.Div:
                 # Graph to display the treemap
                 [
                     dcc.Store(id="treemap-store"),
+                    dcc.Store(id="store-selected-id"),
                     dcc.Graph(id="treemap-graph", config=TREEMAP_CONFIG),
                 ],
                 style={"width": "100%", "height": "90vh"},
@@ -334,14 +358,12 @@ def layout(**other_kwargs) -> html.Div:
     Input("store-viewby", "data"),
     Input("store-spending-type", "data"),
     Input("store-spending-scope", "data"),
-    Input("url", "search"),
 )
 def update_figure_from_filters(
     budget_id: int | None = None,
     viewby: ViewByDimensionTypeLiteral = "MINISTRY",
     spending_type: SpendingTypeLiteral = "ALL",
     spending_scope: SpendingScopeLiteral = "ABSOLUTE",
-    url_search: str | None = None,
 ) -> go.Figure:
     # Fetch and render using the selected values from stores
     labels, parents, values, metadata = fetch_treemap_data(
@@ -379,6 +401,28 @@ def update_store_data(
         "spending_scope": spending_scope,
     }
     return filter_data
+
+
+@callback(
+    Output("store-selected-id", "data"),
+    Input("treemap-graph", "clickData"),
+)
+def update_selected_id(click_data: dict | None) -> Optional[str]:
+    """Store the currently selected treemap node id from clickData.customdata[4]."""
+    if not click_data:
+        raise PreventUpdate
+    try:
+        pts = click_data.get("points", [])
+        if not pts:
+            raise PreventUpdate
+        # customdata structure: [value, metadata, parent_pct, root_pct, node_id]
+        custom = pts[0].get("customdata", [])
+        node_id = custom[4] if len(custom) >= 5 else None
+        if not node_id:
+            raise PreventUpdate
+        return node_id
+    except Exception:
+        raise PreventUpdate
 
 
 @callback(
@@ -610,7 +654,32 @@ def update_menu_labels(viewby: str | None, spending_type: str | None, spending_s
 clientside_callback(
     ClientsideFunction(namespace="clientside", function_name="findAndClickSlice"),
     Output("dummy-treemap-output", "children"),
-    Input("url", "search"),  # Listen directly to URL changes
-    Input("treemap-graph", "figure"),  # Also listen to figure updates to re-trigger focus
-    prevent_initial_call=True,  # Only run when inputs change
+    Input("url", "search"),
+    Input("treemap-graph", "figure"),
+    prevent_initial_call=True,
 )
+
+# Clientside share: build URL with current filters and selected id, copy to clipboard
+clientside_callback(
+    ClientsideFunction(namespace="clientside", function_name="copyShareLink"),
+    Output("dummy-treemap-output", "title"),
+    Input("btn-share-link", "n_clicks"),
+    State("url", "pathname"),
+    State("store-budget-id", "data"),
+    State("store-viewby", "data"),
+    State("store-spending-type", "data"),
+    State("store-spending-scope", "data"),
+    State("store-selected-id", "data"),
+    prevent_initial_call=True,
+)
+
+
+@callback(
+    Output("share-toast", "is_open"),
+    Input("btn-share-link", "n_clicks"),
+    prevent_initial_call=True,
+)
+def show_share_toast(n_clicks: int | None) -> bool:
+    if not n_clicks:
+        raise PreventUpdate
+    return True

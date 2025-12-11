@@ -116,7 +116,10 @@ class TremapDataFetcher:
         return programs
 
     def fetch_data(
-        self, budget_id: int | None = None, **kwargs
+        self,
+        budget_id: int | None = None,
+        spending_type: str = "ALL",
+        spending_scope: str = "ABSOLUTE",
     ) -> tuple[Sequence[RowMapping], Sequence[RowMapping], dict[int, float]]:
         """
         Load data from the database based on provided filters.
