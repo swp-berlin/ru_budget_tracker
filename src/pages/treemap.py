@@ -1,11 +1,13 @@
+import logging
 from typing import Any, Optional
+
 import dash
+import dash_bootstrap_components as dbc
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from dash import (
     ALL,
-    MATCH,
     ClientsideFunction,
     Input,
     Output,
@@ -17,30 +19,78 @@ from dash import (
     register_page,
 )
 from dash.exceptions import PreventUpdate
-import dash_bootstrap_components as dbc
 
 from models import ViewByDimensionTypeLiteral
 from utils import TreemapTransformer, TremapDataFetcher, fetch_budgets
-from utils.definitions import (
-    LanguageTypeLiteral,
-    SpendingScopeLiteral,
-    SpendingTypeLiteral,
-)
 from utils.calculate import Calculator
+from utils.definitions import LanguageTypeLiteral, SpendingScopeLiteral, SpendingTypeLiteral
 from utils.helper import add_breaks
-
-import logging
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 register_page(__name__, path="/")
 
+# Graph config kept simple and explicit for production clarity
 TREEMAP_CONFIG = dcc.Graph.Config(
     displayModeBar=False,
     displaylogo=False,
     responsive=True,
 )
+
+# Menu option definitions to avoid duplication and keep layout concise
+VIEWBY_OPTIONS: list[tuple[str, str]] = [
+    ("Ministry", "MINISTRY"),
+    ("Chapter", "CHAPTER"),
+    ("Program", "PROGRAM"),
+]
+
+SPENDING_TYPE_OPTIONS: list[tuple[str, str]] = [
+    ("All", "ALL"),
+    ("Military Only", "MILITARY"),
+]
+
+SPENDING_SCOPE_OPTIONS: list[tuple[str, str]] = [
+    ("Billion RUB", "ABSOLUTE"),
+    ("% full-year GDP", "PERCENT_GDP_FULL_YEAR"),
+    ("% year-to-year GDP", "PERCENT_GDP_YEAR_TO_YEAR"),
+    ("% full-year spending", "PERCENT_FULL_YEAR_SPENDING"),
+    ("% year-to-year spending", "PERCENT_YEAR_TO_YEAR_SPENDING"),
+    ("% year-to-year revenue", "PERCENT_YEAR_TO_YEAR_REVENUE"),
+]
+
+
+def _compute_percentages(
+    parents: list[str], values: list[float]
+) -> tuple[list[float], list[float]]:
+    """
+    Compute (parent_percentages, root_percentages) for treemap hover info.
+    - parent_percentages: share of a node within its parent's direct children.
+    - root_percentages: share of a node relative to all roots combined.
+    """
+    # Sum over root nodes
+    total_root_value = sum(v for v, p in zip(values, parents) if not p)
+    # Root share per node
+    root_percentages = [
+        ((v / total_root_value) * 100) if total_root_value > 0 else 0.0 for v in values
+    ]
+
+    # Aggregate direct children per parent label
+    parent_totals: dict[str, float] = {}
+    for p, v in zip(parents, values):
+        if p:
+            parent_totals[p] = parent_totals.get(p, 0.0) + (v or 0.0)
+
+    # Each node's share inside its parent
+    parent_percentages: list[float] = []
+    for p, v in zip(parents, values):
+        if not p:
+            parent_percentages.append(100.0)
+            continue
+        total = parent_totals.get(p, 0.0)
+        parent_percentages.append(((v / total) * 100) if total > 0 else 0.0)
+
+    return parent_percentages, root_percentages
 
 
 def fetch_treemap_data(
@@ -49,18 +99,7 @@ def fetch_treemap_data(
     spending_scope: SpendingScopeLiteral = "ABSOLUTE",
     character_limit: int = 30,
 ) -> tuple[list[str], list[str], list[float], list[str]]:
-    """
-    Fetch treemap data based on the provided filters.
-
-    Args:
-        budget_id (int | None): The budget dataset ID to filter by.
-        viewby (ViewByDimensionTypeLiteral): The dimension to view by.
-        spending_type (SpendingTypeLiteral): The type of spending to filter by.
-        spending_scope (SpendingScopeLiteral): The scope of spending to filter by.
-
-    Returns:
-        list[dict[str, Any]]: The fetched treemap data.
-    """
+    """Fetch and transform treemap data for the current filters."""
     data_fetcher = TremapDataFetcher()
     dimensions, programs, sum_mapping = data_fetcher.fetch_data(
         budget_id=budget_id,
@@ -72,9 +111,10 @@ def fetch_treemap_data(
         dimensions, programs, sum_mapping, translated_names=False
     )
     calculator = Calculator(spending_scope=spending_scope)
-    values = [calculator.calculate(value) if value is not None else 0.0 for value in values]
-    labels = [add_breaks(label, interval=character_limit) for label in labels]
-    parents = [add_breaks(parent, interval=character_limit) for parent in parents]
+    values = [calculator.calculate(v) if v is not None else 0.0 for v in values]
+    # Add line breaks for better label rendering
+    labels = [add_breaks(lbl, interval=character_limit) for lbl in labels]
+    parents = [add_breaks(par, interval=character_limit) for par in parents]
     return labels, parents, values, metadata
 
 
@@ -86,87 +126,40 @@ def generate_figure(
     viewby: ViewByDimensionTypeLiteral = "MINISTRY",
     language: LanguageTypeLiteral = "EN",
 ) -> go.Figure:
-    """
-    Build treemap with explicit ids and parent ids for correct nesting.
-    Plotly requires:
-    - ids: unique identifiers per node
-    - parents: "" for root, otherwise the parent node's id (not index)
-    """
+    """Build a treemap with stable ids and clean hover info."""
+    # Compute percentage metrics for hover
+    parent_percentages, root_percentages = _compute_percentages(parents, values)
 
-    # Calculate the total value of all root nodes (nodes with no parent).
-    # This serves as the denominator for calculating the share of the total.
-    total_root_value = sum(values[i] for i, p in enumerate(parents) if not p)
+    # Use leaf-only sizing by setting branch values to 0
+    parent_labels = set(parents)
+    area_values = [0 if lbl in parent_labels else v for lbl, v in zip(labels, values)]
 
-    # Calculate the percentage of each node's value relative to the total root value.
-    root_percentages = []
-    for value in values:
-        # Check if the total root value is greater than zero to avoid division by zero.
-        if total_root_value > 0:
-            # Calculate the percentage share of the total.
-            root_percentage = (value / total_root_value) * 100
-            root_percentages.append(root_percentage)
-        else:
-            # If the total root value is zero, the share is also zero.
-            root_percentages.append(0.0)
+    # Prepare stable ids and map parent labels -> ids
+    node_ids = metadata
+    label_to_id: dict[str, str] = {label: node_id for label, node_id in zip(labels, node_ids)}
+    parent_ids: list[str] = ["" if p == "" else label_to_id.get(p, "") for p in parents]
 
-    # Create a mapping from parent label to the sum of its direct children's values.
-    # This is used to calculate the "Share of Parent" correctly.
-    parent_totals: dict[str, float] = {}
-    for i, parent_label in enumerate(parents):
-        if parent_label:  # Only consider nodes that have a parent.
-            # Add the current node's value to its parent's aggregated total.
-            parent_totals[parent_label] = parent_totals.get(parent_label, 0) + values[i]
-
-    # Calculate the percentage of each node's value relative to its parent's calculated total.
-    parent_percentages = []
-    for i, parent_label in enumerate(parents):
-        # Check if the node is a root node (has no parent).
-        if not parent_label:
-            # Root nodes are considered 100% of themselves relative to their "parent".
-            parent_percentages.append(100.0)
-            continue
-
-        # Get the calculated total value of the parent node.
-        parent_total_value = parent_totals.get(parent_label)
-        # Get the value of the current node.
-        current_value = values[i]
-
-        # Calculate percentage if the parent's total is valid and not zero.
-        if parent_total_value and parent_total_value > 0:
-            percentage = (current_value / parent_total_value) * 100
-            parent_percentages.append(percentage)
-        else:
-            # If parent has no value or is zero, the percentage is undefined.
-            parent_percentages.append(0.0)
-
-    # Create a set of all parent nodes for efficient lookup.
-    parent_set = set(parents)
-
-    # Create a new list of values for sizing the treemap tiles.
-    # Set the value to 0 for parent nodes (branches) and keep the original value for leaf nodes.
-    # This makes the treemap areas proportional to the leaf values only.
-    new_values = [0 if label in parent_set else value for label, value in zip(labels, values)]
-
-    # Create the treemap figure using the modified values for area calculation.
+    # Build figure
     fig = px.treemap(
         names=labels,
-        parents=parents,
-        values=new_values,  # Use new_values for sizing the treemap areas.
+        parents=parent_ids,
+        ids=node_ids,
+        values=area_values,
         hover_data=None,
     )
 
-    # Configure the layout to remove margins.
-    fig.update_layout(margin=dict(t=0, r=0, b=0, l=0))
+    fig.update_layout(margin=dict(t=25, r=0, b=0, l=0))
 
-    # Set up custom hover data to display original values, metadata, and calculated percentages.
-    # The original `values` list contains the correct totals for all nodes.
+    # Populate hover with original values and percentages; include explicit node id
     fig.data[0].customdata = [
-        [v, m, pp, rp]
-        for v, m, pp, rp in zip(values, metadata, parent_percentages, root_percentages)
+        [v, m, pp, rp, nid]
+        for v, m, pp, rp, nid in zip(
+            values, metadata, parent_percentages, root_percentages, node_ids
+        )
     ]
-    # Define the hover template to show the custom data.
     fig.data[0].hovertemplate = (
         "<b>%{label}</b><br>"
+        "ID: %{customdata[4]}<br>"
         "%{customdata[1]}<br>"
         "Value: %{customdata[0]:,.1f} Billion RUB<br>"
         "% Parent: %{customdata[2]:.2f}%<br>"
@@ -192,31 +185,17 @@ def layout(**other_kwargs) -> html.Div:
 
     viewby_items = [
         dbc.DropdownMenuItem(label, id={"type": "viewby-item", "value": value})
-        for label, value in [
-            ("Ministry", "MINISTRY"),
-            ("Chapter", "CHAPTER"),
-            ("Program", "PROGRAM"),
-        ]
+        for label, value in VIEWBY_OPTIONS
     ]
 
     spending_type_items = [
         dbc.DropdownMenuItem(label, id={"type": "spending-type-item", "value": value})
-        for label, value in [
-            ("All", "ALL"),
-            ("Military Only", "MILITARY"),
-        ]
+        for label, value in SPENDING_TYPE_OPTIONS
     ]
 
     spending_scope_items = [
         dbc.DropdownMenuItem(label, id={"type": "spending-scope-item", "value": value})
-        for label, value in [
-            ("Billion RUB", "ABSOLUTE"),
-            ("% full-year GDP", "PERCENT_GDP_FULL_YEAR"),
-            ("% year-to-year GDP", "PERCENT_GDP_YEAR_TO_YEAR"),
-            ("% full-year spending", "PERCENT_FULL_YEAR_SPENDING"),
-            ("% year-to-year spending", "PERCENT_YEAR_TO_YEAR_SPENDING"),
-            ("% year-to-year revenue", "PERCENT_YEAR_TO_YEAR_REVENUE"),
-        ]
+        for label, value in SPENDING_SCOPE_OPTIONS
     ]
     return html.Div(
         [
@@ -355,12 +334,14 @@ def layout(**other_kwargs) -> html.Div:
     Input("store-viewby", "data"),
     Input("store-spending-type", "data"),
     Input("store-spending-scope", "data"),
+    Input("url", "search"),
 )
 def update_figure_from_filters(
     budget_id: int | None = None,
     viewby: ViewByDimensionTypeLiteral = "MINISTRY",
     spending_type: SpendingTypeLiteral = "ALL",
     spending_scope: SpendingScopeLiteral = "ABSOLUTE",
+    url_search: str | None = None,
 ) -> go.Figure:
     # Fetch and render using the selected values from stores
     labels, parents, values, metadata = fetch_treemap_data(
@@ -461,66 +442,51 @@ def download_image(n_clicks: int | None, figure_json: dict) -> dict[str, Any] | 
     return dcc.send_bytes(image_bytes, "treemap_figure.png")  # type: ignore
 
 
-# View-by selection
+# View-by selection (pattern-matched, single callback)
 @callback(
     Output("store-viewby", "data"),
-    Input({"type": "viewby-item", "value": "MINISTRY"}, "n_clicks"),
-    Input({"type": "viewby-item", "value": "CHAPTER"}, "n_clicks"),
-    Input({"type": "viewby-item", "value": "PROGRAM"}, "n_clicks"),
+    Input({"type": "viewby-item", "value": ALL}, "n_clicks"),
     prevent_initial_call=True,
 )
-def select_viewby(n_min, n_chap, n_prog):
-    """Update viewby store based on which menu item was clicked."""
-    if n_prog:
-        return "PROGRAM"
-    if n_chap:
-        return "CHAPTER"
-    if n_min:
-        return "MINISTRY"
+def select_viewby(_clicks):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+    trig = getattr(ctx, "triggered_id", None)
+    if isinstance(trig, dict) and trig.get("type") == "viewby-item":
+        return trig.get("value")
     raise PreventUpdate
 
 
-# Spending type selection
+# Spending type selection (pattern-matched)
 @callback(
     Output("store-spending-type", "data"),
-    Input({"type": "spending-type-item", "value": "ALL"}, "n_clicks"),
-    Input({"type": "spending-type-item", "value": "MILITARY"}, "n_clicks"),
+    Input({"type": "spending-type-item", "value": ALL}, "n_clicks"),
     prevent_initial_call=True,
 )
-def select_spending_type(n_all, n_mil):
-    """Update spending_type store."""
-    if n_mil:
-        return "MILITARY"
-    if n_all:
-        return "ALL"
+def select_spending_type(_clicks):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+    trig = getattr(ctx, "triggered_id", None)
+    if isinstance(trig, dict) and trig.get("type") == "spending-type-item":
+        return trig.get("value")
     raise PreventUpdate
 
 
-# Spending scope selection
+# Spending scope selection (pattern-matched)
 @callback(
     Output("store-spending-scope", "data"),
-    Input({"type": "spending-scope-item", "value": "ABSOLUTE"}, "n_clicks"),
-    Input({"type": "spending-scope-item", "value": "PERCENT_GDP_FULL_YEAR"}, "n_clicks"),
-    Input({"type": "spending-scope-item", "value": "PERCENT_GDP_YEAR_TO_YEAR"}, "n_clicks"),
-    Input({"type": "spending-scope-item", "value": "PERCENT_FULL_YEAR_SPENDING"}, "n_clicks"),
-    Input({"type": "spending-scope-item", "value": "PERCENT_YEAR_TO_YEAR_SPENDING"}, "n_clicks"),
-    Input({"type": "spending-scope-item", "value": "PERCENT_YEAR_TO_YEAR_REVENUE"}, "n_clicks"),
+    Input({"type": "spending-scope-item", "value": ALL}, "n_clicks"),
     prevent_initial_call=True,
 )
-def select_spending_scope(n_abs, n_gdp_full, n_gdp_yty, n_spend_full, n_spend_yty, n_rev_yty):
-    """Update spending_scope store."""
-    if n_rev_yty:
-        return "PERCENT_YEAR_TO_YEAR_REVENUE"
-    if n_spend_yty:
-        return "PERCENT_YEAR_TO_YEAR_SPENDING"
-    if n_spend_full:
-        return "PERCENT_FULL_YEAR_SPENDING"
-    if n_gdp_yty:
-        return "PERCENT_GDP_YEAR_TO_YEAR"
-    if n_gdp_full:
-        return "PERCENT_GDP_FULL_YEAR"
-    if n_abs:
-        return "ABSOLUTE"
+def select_spending_scope(_clicks):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+    trig = getattr(ctx, "triggered_id", None)
+    if isinstance(trig, dict) and trig.get("type") == "spending-scope-item":
+        return trig.get("value")
     raise PreventUpdate
 
 
@@ -609,44 +575,23 @@ def show_selected_budget_label(
 
 @callback(
     Output("menu-viewby", "label"),
+    Output("menu-spending-type", "label"),
+    Output("menu-spending-scope", "label"),
     Input("store-viewby", "data"),
+    Input("store-spending-type", "data"),
+    Input("store-spending-scope", "data"),
 )
-def show_selected_viewby_label(viewby: str | None) -> str:
-    """
-    Reflect the selected View-by value on the menu toggle.
-    """
-    mapping = {
+def update_menu_labels(viewby: str | None, spending_type: str | None, spending_scope: str | None):
+    viewby_map = {
         "MINISTRY": "View by: Ministry",
         "CHAPTER": "View by: Chapter",
         "PROGRAM": "View by: Program",
     }
-    return mapping.get(viewby or "", "View by")
-
-
-@callback(
-    Output("menu-spending-type", "label"),
-    Input("store-spending-type", "data"),
-)
-def show_selected_spending_type_label(spending_type: str | None) -> str:
-    """
-    Reflect the selected Spending type on the menu toggle.
-    """
-    mapping = {
+    spending_type_map = {
         "ALL": "Spending type: All",
         "MILITARY": "Spending type: Military Only",
     }
-    return mapping.get(spending_type or "", "Spending type")
-
-
-@callback(
-    Output("menu-spending-scope", "label"),
-    Input("store-spending-scope", "data"),
-)
-def show_selected_spending_scope_label(spending_scope: str | None) -> str:
-    """
-    Reflect the selected Spending scope on the menu toggle.
-    """
-    mapping = {
+    spending_scope_map = {
         "ABSOLUTE": "Scope: Billion RUB",
         "PERCENT_GDP_FULL_YEAR": "Scope: % full-year GDP",
         "PERCENT_GDP_YEAR_TO_YEAR": "Scope: % year-to-year GDP",
@@ -654,7 +599,11 @@ def show_selected_spending_scope_label(spending_scope: str | None) -> str:
         "PERCENT_YEAR_TO_YEAR_SPENDING": "Scope: % year-to-year spending",
         "PERCENT_YEAR_TO_YEAR_REVENUE": "Scope: % year-to-year revenue",
     }
-    return mapping.get(spending_scope or "", "Spending scope")
+    return (
+        viewby_map.get(viewby or "", "View by"),
+        spending_type_map.get(spending_type or "", "Spending type"),
+        spending_scope_map.get(spending_scope or "", "Spending scope"),
+    )
 
 
 # Clientside callback to handle URL focus parameter and click simulation

@@ -3,12 +3,13 @@ import networkx as nx
 import pandas as pd
 from sqlalchemy import RowMapping
 
-from utils.definitions import HIERARCHY_OBJECTS
-
 
 class TreemapTransformer:
     def _calculate_program_hierarchy(self, programs: Sequence[RowMapping]) -> dict[int, list[int]]:
-        """Calculate all paths from root to leaves in the hierarchy graph."""
+        """Calculate all paths from root to leaves in the hierarchy graph.
+
+        Returns a mapping of leaf program id -> full path from root to leaf.
+        """
         program_edges = [(row["dimension_id"], row["dimension_parent_id"]) for row in programs]
         deduped_edges = {edge for edge in program_edges if edge[1] is not None}
         # Create a directed graph
@@ -70,6 +71,7 @@ class TreemapTransformer:
         value_mapping: dict[int, float],
         root_name: str = "Federal Budget",
     ) -> tuple[list[str], list[str], list[float], list[str]]:
+        """Build the treemap lists (labels, parents, values, metadata) from hierarchy."""
         ids = [0]
         metadata: list[str] = ["root"]
         labels = [root_name]
@@ -78,8 +80,10 @@ class TreemapTransformer:
         highlevel_value = 0.0
         for expense_id, levels in hierarchy.items():
             previous_level_name = root_name
+            # Ensure an intuitive ordering: MINISTRY -> CHAPTER -> SUBCHAPTER -> others
+            LEVEL_ORDER_INDEX = {"MINISTRY": 0, "CHAPTER": 1, "SUBCHAPTER": 2}
             sorted_level_names = sorted(
-                levels.keys(), key=lambda x: (x != "MINISTRY", x != "CHAPTER", x != "SUBCHAPTER", x)
+                levels.keys(), key=lambda key: (LEVEL_ORDER_INDEX.get(key, 999), key)
             )
             for level_name in sorted_level_names:
                 id = hierarchy[expense_id][level_name]
@@ -128,16 +132,13 @@ class TreemapTransformer:
         Extend the sum mapping to include sums for all ancestor dimensions, specifically for
         programs. This ensures that parent dimensions have the correct aggregated sums.
         """
-        extended_mapping = sum_mapping.copy()
-        for leave_id, path in program_paths.items():
-            leave_sum = sum_mapping.get(leave_id, 0)
-            # Propagate the sum up the hierarchy
+        extended = sum_mapping.copy()
+        for leaf_id, path in program_paths.items():
+            leaf_sum = sum_mapping.get(leaf_id, 0.0)
+            # Propagate from leaf up to (but excluding) the leaf itself
             for ancestor_id in path[::-1][1:]:
-                if ancestor_id in extended_mapping:
-                    extended_mapping[ancestor_id] += leave_sum
-                else:
-                    extended_mapping[ancestor_id] = leave_sum
-        return extended_mapping
+                extended[ancestor_id] = extended.get(ancestor_id, 0.0) + leaf_sum
+        return extended
 
     def transform_data(
         self,
@@ -146,7 +147,7 @@ class TreemapTransformer:
         sum_mapping: dict[int, float],
         translated_names: bool = False,
     ) -> tuple[list[str], list[str], list[float], list[str]]:
-        """Transform raw dimensions into a hierarchical dataframe suitable for treemap visualization."""
+        """Transform DB rows into treemap lists expected by the figure creator."""
         if not dimensions:
             return [], [], [], []
 

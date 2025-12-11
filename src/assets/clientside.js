@@ -150,8 +150,8 @@ window.dash_clientside.clientside = {
       const bbox = clickable.getBoundingClientRect();
       // Use small fixed padding from the top-left to avoid nested children,
       // and prevent drifting too far to the right due to width percentages.
-      const cx = Math.floor(bbox.left + 4);
-      const cy = Math.floor(bbox.top + 8);
+      const cx = Math.floor(bbox.left + 1);
+      const cy = Math.floor(bbox.top);
       // Ensure the target area is in view
       try { clickable.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch (_) { }
       const hitElem = document.elementFromPoint(cx, cy);
