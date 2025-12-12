@@ -385,10 +385,7 @@ def main():
     # Check for API key (environment variable takes precedence over settings)
     api_key = os.environ.get("OPENAI_API_KEY") or settings.openai_api_key
     if not api_key and not args.dry_run:
-        logger.error("OPENAI_API_KEY not found")
-        logger.error("Set it with: export OPENAI_API_KEY='your-key-here'")
-        logger.error("Or add to .env file: OPENAI_API_KEY=your-key-here")
-        sys.exit(1)
+        logger.info("OPENAI_API_KEY not found")
 
     # Get dimension names from database
     db_names = get_unique_dimension_names()
