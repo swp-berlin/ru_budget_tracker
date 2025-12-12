@@ -1,28 +1,14 @@
-/* Truncate toggle labels with ellipses to avoid wide menus */
+/* Dropdown toggle base layout (text-specific rules moved to typography.css) */
 #menu-budget .dropdown-toggle,
 #menu-viewby .dropdown-toggle,
 #menu-spending-type .dropdown-toggle,
 #menu-spending-scope .dropdown-toggle {
-  /* Existing height/padding from your file ... */
   height: 40px;
   line-height: 24px;
   padding: 8px 12px;
   display: inline-flex;
   align-items: center;
-  color: #333333 !important;
-
-  /* Truncation: keep text on one line and clip overflow */
-  max-width: 300px;
-  /* adjust to taste; keeps trigger compact */
-  white-space: nowrap;
-  /* prevent wrapping */
-  overflow: hidden;
-  /* hide overflow */
-  text-overflow: ellipsis;
-  /* show "..." when clipped */
-
-  /* Ensure inner text can actually truncate */
-  /* Bootstrap puts the label text inside the toggle; this helps truncation work consistently */
+  max-width: 300px; /* keeps trigger compact */
 }
 
 #menu-budget .dropdown-toggle>*,
@@ -33,7 +19,7 @@
   /* allow flex children to shrink for ellipsis */
 }
 
-/* Keep the dropdown list scrollable and compact; truncate long item labels */
+/* Keep the dropdown list scrollable and compact */
 #menu-budget .dropdown-menu,
 #menu-viewby .dropdown-menu,
 #menu-spending-type .dropdown-menu,
@@ -42,20 +28,9 @@
   overflow-y: auto;
   overflow-x: hidden;
   min-width: 220px;
-  /* match toggle width for a compact feel */
-  color: #333333 !important;
 }
 
-#menu-budget .dropdown-item,
-#menu-viewby .dropdown-item,
-#menu-spending-type .dropdown-item,
-#menu-spending-scope .dropdown-item {
-  /* Truncate long item text on one line */
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: #333333 !important;
-}
+/* Item row base layout hook (intentionally minimal) */
 
 /* Optional: narrower items on small screens */
 @media (max-width: 480px) {
@@ -72,3 +47,5 @@
     min-width: 180px;
   }
 }
+
+/* Button layout rules only; text color moved to typography.css */

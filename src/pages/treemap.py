@@ -156,7 +156,7 @@ def generate_figure(
         values=area_values,
         hover_data=None,
     )
-    fig.update_layout(margin=dict(t=15, l=10, r=10, b=10))
+    fig.update_layout(margin=dict(t=15, l=10, r=10, b=10), font=dict(family="Source Sans Pro"))
     # If spending type is military, adjust the color of the root tiles to #7e8f5f
     # and then get lighter shades of #7e8f5f for the children the deeper they are in the hierarchy
     if spending_type == "MILITARY":
@@ -287,11 +287,30 @@ def layout(**other_kwargs) -> html.Div:
                             ),
                         ],
                         direction="horizontal",
-                        gap=2,
                         class_name="me-auto",
                     ),
+                    # Stack for action buttons on the right
                     dbc.Stack(
                         [
+                            # Button to switch to the time series view
+                            dbc.Button(
+                                [
+                                    # Icon for the button
+                                    html.Img(
+                                        src="/assets/icons/stacked_bar_chart.svg",
+                                        style={
+                                            "width": "2em",
+                                            "height": "2em",
+                                            "marginRight": "4px",
+                                        },
+                                    ),
+                                    # Text for the button
+                                    "To Timeseries",
+                                ],
+                                id="btn-switch-to-timeseries",
+                                title="Switch to Time Series View",
+                            ),
+                            # Share button
                             dbc.Button(
                                 html.Img(
                                     src="/assets/icons/share.svg",
@@ -300,6 +319,7 @@ def layout(**other_kwargs) -> html.Div:
                                 id="btn-share-link",
                                 title="Copy shareable link to clipboard",
                             ),
+                            # Toast notification for sharing
                             dbc.Toast(
                                 id="share-toast",
                                 header="Link copied",
@@ -315,6 +335,7 @@ def layout(**other_kwargs) -> html.Div:
                                     "zIndex": 1060,
                                 },
                             ),
+                            # Download image button
                             dbc.Button(
                                 html.Img(
                                     src="/assets/icons/photo_camera.svg",
@@ -324,6 +345,7 @@ def layout(**other_kwargs) -> html.Div:
                                 title="Download Treemap Plot as PNG",
                             ),
                             dcc.Download(id="download-treemap-image"),
+                            # Download data button
                             dbc.Button(
                                 html.Img(
                                     src="/assets/icons/download.svg",
@@ -333,13 +355,7 @@ def layout(**other_kwargs) -> html.Div:
                                 title="Download Treemap Data as CSV",
                             ),
                             dcc.Download(id="download-treemap-data"),
-                            dbc.Button(
-                                html.Img(
-                                    src="/assets/icons/stacked_bar_chart.svg",
-                                    style={"width": "2em", "height": "2em"},
-                                ),
-                                title="Switch to Time Series View",
-                            ),
+                            # Info/About button
                             dbc.Button(
                                 html.Img(
                                     src="/assets/icons/info.svg",
@@ -705,21 +721,21 @@ def show_selected_budget_label(
 )
 def update_menu_labels(viewby: str | None, spending_type: str | None, spending_scope: str | None):
     viewby_map = {
-        "MINISTRY": "View by: Ministry",
-        "CHAPTER": "View by: Chapter",
-        "PROGRAM": "View by: Program",
+        "MINISTRY": "Ministry",
+        "CHAPTER": "Chapter",
+        "PROGRAM": "Program",
     }
     spending_type_map = {
-        "ALL": "Spending type: All",
-        "MILITARY": "Spending type: Military Only",
+        "ALL": "All Spending",
+        "MILITARY": "Military Only",
     }
     spending_scope_map = {
-        "ABSOLUTE": "Scope: Billion RUB",
-        "PERCENT_GDP_FULL_YEAR": "Scope: % full-year GDP",
-        "PERCENT_GDP_YEAR_TO_YEAR": "Scope: % year-to-year GDP",
-        "PERCENT_FULL_YEAR_SPENDING": "Scope: % full-year spending",
-        "PERCENT_YEAR_TO_YEAR_SPENDING": "Scope: % year-to-year spending",
-        "PERCENT_YEAR_TO_YEAR_REVENUE": "Scope: % year-to-year revenue",
+        "ABSOLUTE": "Billion RUB",
+        "PERCENT_GDP_FULL_YEAR": "% full-year GDP",
+        "PERCENT_GDP_YEAR_TO_YEAR": "% year-to-year GDP",
+        "PERCENT_FULL_YEAR_SPENDING": "% full-year spending",
+        "PERCENT_YEAR_TO_YEAR_SPENDING": "% year-to-year spending",
+        "PERCENT_YEAR_TO_YEAR_REVENUE": "% year-to-year revenue",
     }
     return (
         viewby_map.get(viewby or "", "View by"),

@@ -1,0 +1,92 @@
+/* Typography: text color and truncation for dropdowns and buttons */
+@font-face {
+    font-family: 'Source Sans Pro';
+    font-style: normal;
+    font-display: swap;
+    font-weight: 400;
+    src: url(https://cdn.jsdelivr.net/fontsource/fonts/source-sans-pro@latest/latin-400-normal.woff2) format('woff2'), url(https://cdn.jsdelivr.net/fontsource/fonts/source-sans-pro@latest/latin-400-normal.woff) format('woff');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+
+
+/* Dark text color for dropdown toggles and items */
+#menu-budget .dropdown-toggle,
+#menu-viewby .dropdown-toggle,
+#menu-spending-type .dropdown-toggle,
+#menu-spending-scope .dropdown-toggle,
+#menu-budget .dropdown-menu,
+#menu-viewby .dropdown-menu,
+#menu-spending-type .dropdown-menu,
+#menu-spending-scope .dropdown-menu,
+#menu-budget .dropdown-item,
+#menu-viewby .dropdown-item,
+#menu-spending-type .dropdown-item,
+#menu-spending-scope .dropdown-item {
+    color: #333333 !important;
+    font-family: 'Source Sans Pro', sans-serif;
+}
+
+/* Truncation for toggle labels and dropdown items */
+#menu-budget .dropdown-toggle,
+#menu-viewby .dropdown-toggle,
+#menu-spending-type .dropdown-toggle,
+#menu-spending-scope .dropdown-toggle {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#menu-budget .dropdown-item,
+#menu-viewby .dropdown-item,
+#menu-spending-type .dropdown-item,
+#menu-spending-scope .dropdown-item {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Ensure inner spans (used for tooltips) inherit the dark text color */
+#menu-budget .dropdown-item span,
+#menu-viewby .dropdown-item span,
+#menu-spending-type .dropdown-item span,
+#menu-spending-scope .dropdown-item span,
+#menu-budget .dropdown-toggle span,
+#menu-viewby .dropdown-toggle span,
+#menu-spending-type .dropdown-toggle span,
+#menu-spending-scope .dropdown-toggle span {
+    color: #333333 !important;
+    font-family: 'Source Sans Pro', sans-serif;
+}
+
+/* Buttons: apply text color */
+#btn-switch-to-timeseries,
+#btn-share-link,
+#btn-download-image,
+#btn-download-csv {
+    color: #333333 !important;
+    font-family: 'Source Sans Pro', sans-serif;
+}
+
+/* Buttons: enforce color on inner content (text and inline SVGs) */
+#btn-switch-to-timeseries *,
+#btn-share-link *,
+#btn-download-image *,
+#btn-download-csv * {
+    color: #333333 !important;
+    fill: #333333 !important;
+    font-family: 'Source Sans Pro', sans-serif;
+    /* inline SVG icons */
+}
+
+/* Ensure inner spans (used for tooltips) inherit the dark text color */
+#menu-budget .dropdown-item span,
+#menu-viewby .dropdown-item span,
+#menu-spending-type .dropdown-item span,
+#menu-spending-scope .dropdown-item span,
+#menu-budget .dropdown-toggle span,
+#menu-viewby .dropdown-toggle span,
+#menu-spending-type .dropdown-toggle span,
+#menu-spending-scope .dropdown-toggle span {
+    color: #333333 !important;
+}
