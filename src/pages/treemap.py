@@ -20,10 +20,14 @@ from dash import (
 )
 from dash.exceptions import PreventUpdate
 
-from models import ViewByDimensionTypeLiteral
 from utils import TreemapTransformer, TremapDataFetcher, fetch_budgets
 from utils.calculate import Calculator
-from utils.definitions import LanguageTypeLiteral, SpendingScopeLiteral, SpendingTypeLiteral
+from utils.definitions import (
+    LanguageTypeLiteral,
+    SpendingScopeLiteral,
+    SpendingTypeLiteral,
+    ViewByDimensionTypeLiteral,
+)
 from utils.helper import add_breaks
 
 logger = logging.getLogger(__name__)
@@ -97,18 +101,23 @@ def fetch_treemap_data(
     budget_id: int | None = None,
     spending_type: SpendingTypeLiteral = "ALL",
     spending_scope: SpendingScopeLiteral = "ABSOLUTE",
+    viewby: ViewByDimensionTypeLiteral = "MINISTRY",
     character_limit: int = 30,
 ) -> tuple[list[str], list[str], list[float], list[str]]:
     """Fetch and transform treemap data for the current filters."""
     data_fetcher = TremapDataFetcher()
     dimensions, programs, sum_mapping = data_fetcher.fetch_data(
         budget_id=budget_id,
-        spending_type=spending_type,
         spending_scope=spending_scope,
     )
     transformer = TreemapTransformer()
     labels, parents, values, metadata = transformer.transform_data(
-        dimensions, programs, sum_mapping, translated_names=False
+        dimensions,
+        programs,
+        sum_mapping,
+        translated_names=False,
+        viewby=viewby,
+        spending_type=spending_type,
     )
     calculator = Calculator(spending_scope=spending_scope)
     values = [calculator.calculate(v) if v is not None else 0.0 for v in values]
@@ -123,7 +132,6 @@ def generate_figure(
     parents: list[str],
     values: list[float],
     metadata: list[str],
-    viewby: ViewByDimensionTypeLiteral = "MINISTRY",
     language: LanguageTypeLiteral = "EN",
 ) -> go.Figure:
     """Build a treemap with stable ids and clean hover info."""
@@ -370,8 +378,9 @@ def update_figure_from_filters(
         budget_id=budget_id,
         spending_type=spending_type,
         spending_scope=spending_scope,
+        viewby=viewby,
     )
-    return generate_figure(labels, parents, values, metadata, viewby=viewby, language="EN")
+    return generate_figure(labels, parents, values, metadata, language="EN")
 
 
 # Callback to handle store
@@ -441,6 +450,7 @@ def download_data(n_clicks, data) -> dict[str, Any]:
         budget_id=data["budget_id"],
         spending_type=data["spending_type"],
         spending_scope=data["spending_scope"],
+        viewby=data["viewby"],
     )
     return dcc.send_data_frame(  # type: ignore
         pd.DataFrame(

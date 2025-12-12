@@ -14,13 +14,10 @@ from sqlalchemy import (
     func,
     UniqueConstraint,
 )
+
+from utils.definitions import BudgetTypeLiteral, DimensionTypeLiteral
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import date, datetime
-
-BudgetTypeLiteral = Literal["DRAFT", "LAW", "REPORT", "TOTAL"]
-BudgetScopeLiteral = Literal["YEARLY", "QUARTERLY", "MONTHLY"]
-DimensionTypeLiteral = Literal["MINISTRY", "CHAPTER", "SUBCHAPTER", "PROGRAMM", "EXPENSE_TYPE"]
-ViewByDimensionTypeLiteral = Literal["MINISTRY", "CHAPTER", "PROGRAMM"]
 
 
 class Budget(Base):  # type: ignore[misc]

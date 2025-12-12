@@ -19,7 +19,10 @@ def fetch_budgets() -> list[dict[str, Any]]:
 
 
 class TremapDataFetcher:
-    def _fetch_treemap_dimensions(self, budget_id: int | None = None) -> Sequence[RowMapping]:
+    def _fetch_treemap_dimensions(
+        self,
+        budget_id: int | None = None,
+    ) -> Sequence[RowMapping]:
         """
         Load data from the database based on provided filters.
         Loads budgets, expenses, and dimensions, applies filters, and returns the result set.
@@ -33,6 +36,7 @@ class TremapDataFetcher:
             select(
                 Expense.id,
                 Dimension.id.label("dimension_id"),
+                Dimension.original_identifier.label("dimension_original_identifier"),
                 Dimension.parent_id.label("dimension_parent_id"),
                 Dimension.type.label("dimension_type"),
                 func.CONCAT(Dimension.original_identifier, " - ", Dimension.name).label(
@@ -79,26 +83,21 @@ class TremapDataFetcher:
         self, leave_program_ids: list[int]
     ) -> Sequence[RowMapping]:
         # Build the base select statement for the CTE
-        child_programs_cte = (
-            select(
-                Dimension.id.label("dimension_id"),
-                Dimension.parent_id.label("dimension_parent_id"),
-                func.CONCAT(Dimension.original_identifier, " - ", Dimension.name).label(
-                    "dimension_name"
-                ),
-            ).where(Dimension.id.in_(leave_program_ids))
-        ).cte("program_hierarchy", recursive=True)
+        basic_select_stmt = select(
+            Dimension.id.label("dimension_id"),
+            Dimension.parent_id.label("dimension_parent_id"),
+            Dimension.original_identifier.label("dimension_original_identifier"),
+            func.CONCAT(Dimension.original_identifier, " - ", Dimension.name).label(
+                "dimension_name"
+            ),
+        )
+        child_programs_cte = (basic_select_stmt.where(Dimension.id.in_(leave_program_ids))).cte(
+            "program_hierarchy", recursive=True
+        )
 
         # Recursive part to get parent dimensions
         parent_select_stmt = (
-            select(
-                Dimension.id.label("dimension_id"),
-                Dimension.parent_id.label("dimension_parent_id"),
-                func.CONCAT(Dimension.original_identifier, " - ", Dimension.name).label(
-                    "dimension_name"
-                ),
-            )
-            .select_from(Dimension)
+            basic_select_stmt.select_from(Dimension)
             .join(child_programs_cte, Dimension.id == child_programs_cte.c.dimension_parent_id)
             .where(Dimension.type == "PROGRAM")
         )
@@ -107,6 +106,7 @@ class TremapDataFetcher:
         select_stmt = select(
             union.c.dimension_id,
             union.c.dimension_parent_id,
+            union.c.dimension_original_identifier,
             union.c.dimension_name,
         )
 
@@ -118,7 +118,6 @@ class TremapDataFetcher:
     def fetch_data(
         self,
         budget_id: int | None = None,
-        spending_type: str = "ALL",
         spending_scope: str = "ABSOLUTE",
     ) -> tuple[Sequence[RowMapping], Sequence[RowMapping], dict[int, float]]:
         """
