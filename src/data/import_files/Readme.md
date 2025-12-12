@@ -141,8 +141,10 @@ Source: [https://budget.gov.ru/%D0%91%D1%8E%D0%B4%D0%B6%D0%B5%D1%82/%D0%97%D0%B0
 
 ### `raw/totals/`
 
-Budget totals (total budget execution).
+Totals for reports: Budget totals (total budget execution). This table allows for the calculation of classified spending for budget reports in the past. Until 2021 on the level of chapters, from then on forward we need to extrapolate. 
 Source: [https://minfin.gov.ru/ru/document?id_4=80042-kratkaya_ezhemesyachnaya_informatsiya_ob_ispolnenii_federalnogo_byudzheta_mlrd._rub._nakopleno_s_nachala_goda](https://minfin.gov.ru/ru/document?id_4=80042-kratkaya_ezhemesyachnaya_informatsiya_ob_ispolnenii_federalnogo_byudzheta_mlrd._rub._nakopleno_s_nachala_goda)
+
+
 
 ### `raw/conversion_tables/`
 
