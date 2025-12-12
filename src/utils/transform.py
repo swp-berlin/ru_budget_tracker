@@ -115,7 +115,7 @@ class TreemapTransformer:
                 previous_level_name = label_name
                 value = value_mapping.get(id, 0)
                 values.append(value)
-                if level_name == "MINISTRY":
+                if level_name == sorted_level_names[0]:
                     highlevel_value += value
 
         # Set Federal Budget value

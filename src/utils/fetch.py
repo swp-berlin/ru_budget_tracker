@@ -10,7 +10,18 @@ def fetch_budgets() -> list[dict[str, Any]]:
     """Load all budgets from the database."""
     with get_sync_session() as session:
         budgets = (
-            session.execute(select(Budget.id, Budget.name, Budget.name_translated, Budget.type))
+            session.execute(
+                select(
+                    Budget.id,
+                    Budget.description.label("name"),
+                    Budget.description_translated.label("name_translated"),
+                    Budget.type,
+                )
+                .where(
+                    Budget.type != "TOTAL",
+                )
+                .order_by(Budget.description.desc())
+            )
             .unique()
             .mappings()
             .all()

@@ -132,6 +132,7 @@ def generate_figure(
     parents: list[str],
     values: list[float],
     metadata: list[str],
+    spending_type: SpendingTypeLiteral = "ALL",
     language: LanguageTypeLiteral = "EN",
 ) -> go.Figure:
     """Build a treemap with stable ids and clean hover info."""
@@ -155,8 +156,11 @@ def generate_figure(
         values=area_values,
         hover_data=None,
     )
-
-    fig.update_layout(margin=dict(t=25, r=0, b=0, l=0))
+    # If spending type is military, adjust the color of the root tiles to #7e8f5f
+    # and then get lighter shades of #7e8f5f for the children the deeper they are in the hierarchy
+    if spending_type == "MILITARY":
+        colorscale = [[1, "#7e8f5f"], [0.5, "#a3b18a"], [0, "#c7d0b8"]]
+        fig.update_layout(treemapcolorway=["#7e8f5f"], coloraxis_colorscale=colorscale)
 
     # Populate hover with original values and percentages; include explicit node id
     fig.data[0].customdata = [
@@ -168,7 +172,6 @@ def generate_figure(
     fig.data[0].hovertemplate = (
         "<b>%{label}</b><br>"
         "ID: %{customdata[4]}<br>"
-        "%{customdata[1]}<br>"
         "Value: %{customdata[0]:,.1f} Billion RUB<br>"
         "% Parent: %{customdata[2]:.2f}%<br>"
         "% Federal Budget: %{customdata[3]:.2f}%<br>"
@@ -192,17 +195,26 @@ def layout(**other_kwargs) -> html.Div:
     """
 
     viewby_items = [
-        dbc.DropdownMenuItem(label, id={"type": "viewby-item", "value": value})
+        dbc.DropdownMenuItem(
+            html.Span(label, title=label),
+            id={"type": "viewby-item", "value": value},
+        )
         for label, value in VIEWBY_OPTIONS
     ]
 
     spending_type_items = [
-        dbc.DropdownMenuItem(label, id={"type": "spending-type-item", "value": value})
+        dbc.DropdownMenuItem(
+            html.Span(label, title=label),
+            id={"type": "spending-type-item", "value": value},
+        )
         for label, value in SPENDING_TYPE_OPTIONS
     ]
 
     spending_scope_items = [
-        dbc.DropdownMenuItem(label, id={"type": "spending-scope-item", "value": value})
+        dbc.DropdownMenuItem(
+            html.Span(label, title=label),
+            id={"type": "spending-scope-item", "value": value},
+        )
         for label, value in SPENDING_SCOPE_OPTIONS
     ]
     return html.Div(
@@ -352,7 +364,9 @@ def layout(**other_kwargs) -> html.Div:
                 [
                     dcc.Store(id="treemap-store"),
                     dcc.Store(id="store-selected-id"),
-                    dcc.Graph(id="treemap-graph", config=TREEMAP_CONFIG),
+                    dcc.Graph(
+                        id="treemap-graph", config=TREEMAP_CONFIG, style={"visibility": "hidden"}
+                    ),
                 ],
                 style={"width": "100%", "height": "90vh"},
             ),
@@ -362,6 +376,7 @@ def layout(**other_kwargs) -> html.Div:
 
 @callback(
     Output("treemap-graph", "figure"),
+    Output("treemap-graph", "style"),
     Input("store-budget-id", "data"),
     Input("store-viewby", "data"),
     Input("store-spending-type", "data"),
@@ -372,7 +387,7 @@ def update_figure_from_filters(
     viewby: ViewByDimensionTypeLiteral = "MINISTRY",
     spending_type: SpendingTypeLiteral = "ALL",
     spending_scope: SpendingScopeLiteral = "ABSOLUTE",
-) -> go.Figure:
+) -> tuple[go.Figure, dict[str, str]]:
     # Fetch and render using the selected values from stores
     labels, parents, values, metadata = fetch_treemap_data(
         budget_id=budget_id,
@@ -380,7 +395,9 @@ def update_figure_from_filters(
         spending_scope=spending_scope,
         viewby=viewby,
     )
-    return generate_figure(labels, parents, values, metadata, language="EN")
+    return generate_figure(labels, parents, values, metadata, spending_type, language="EN"), {
+        "visibility": "visible"
+    }
 
 
 # Callback to handle store
@@ -558,11 +575,58 @@ def init_budgets(_):
     ]
     # Build menu items with pattern ids
     items = [
-        dbc.DropdownMenuItem(opt["label"], id={"type": "budget-item", "value": opt["value"]})
+        dbc.DropdownMenuItem(
+            html.Span(opt["label"], title=opt["label"]),
+            id={"type": "budget-item", "value": opt["value"]},
+        )
         for opt in options
     ]
     default_value = options[0]["value"] if options else None
     return options, default_value, items
+
+
+@callback(
+    Output("store-budget-id", "data", allow_duplicate=True),
+    Output("store-viewby", "data", allow_duplicate=True),
+    Output("store-spending-type", "data", allow_duplicate=True),
+    Output("store-spending-scope", "data", allow_duplicate=True),
+    Input("url", "search"),
+    prevent_initial_call="initial_duplicate",
+)
+def apply_filters_from_url(url_search: str | None):
+    """Apply filters from URL query params on load and when the URL changes.
+
+    Recognized params: budget_id, viewby, spending_type, spending_scope.
+    Missing params leave the current store values unchanged by returning PreventUpdate markers.
+    """
+    if not url_search:
+        raise PreventUpdate
+    try:
+        from urllib.parse import parse_qs, unquote_plus
+
+        params = parse_qs(url_search.replace("?", ""))
+
+        # Extract values safely
+        def first(key: str):
+            vals = params.get(key)
+            return unquote_plus(vals[0]).strip() if vals and len(vals) > 0 else None
+
+        budget_id_raw = first("budget_id")
+        viewby = first("viewby")
+        spending_type = first("spending_type")
+        spending_scope = first("spending_scope")
+
+        budget_id = int(budget_id_raw) if budget_id_raw and budget_id_raw.isdigit() else None
+
+        # If none provided, avoid overwriting by returning PreventUpdate
+        outputs: list[Any] = []
+        outputs.append(budget_id if budget_id is not None else dash.no_update)
+        outputs.append(viewby if viewby else dash.no_update)
+        outputs.append(spending_type if spending_type else dash.no_update)
+        outputs.append(spending_scope if spending_scope else dash.no_update)
+        return tuple(outputs)
+    except Exception:
+        raise PreventUpdate
 
 
 @callback(

@@ -12,20 +12,25 @@
   color: #333333 !important;
 
   /* Truncation: keep text on one line and clip overflow */
-  max-width: 220px;           /* adjust to taste; keeps trigger compact */
-  white-space: nowrap;        /* prevent wrapping */
-  overflow: hidden;           /* hide overflow */
-  text-overflow: ellipsis;    /* show "..." when clipped */
+  max-width: 300px;
+  /* adjust to taste; keeps trigger compact */
+  white-space: nowrap;
+  /* prevent wrapping */
+  overflow: hidden;
+  /* hide overflow */
+  text-overflow: ellipsis;
+  /* show "..." when clipped */
 
   /* Ensure inner text can actually truncate */
   /* Bootstrap puts the label text inside the toggle; this helps truncation work consistently */
 }
 
-#menu-budget .dropdown-toggle > *,
-#menu-viewby .dropdown-toggle > *,
-#menu-spending-type .dropdown-toggle > *,
-#menu-spending-scope .dropdown-toggle > * {
-  min-width: 0;               /* allow flex children to shrink for ellipsis */
+#menu-budget .dropdown-toggle>*,
+#menu-viewby .dropdown-toggle>*,
+#menu-spending-type .dropdown-toggle>*,
+#menu-spending-scope .dropdown-toggle>* {
+  min-width: 0;
+  /* allow flex children to shrink for ellipsis */
 }
 
 /* Keep the dropdown list scrollable and compact; truncate long item labels */
@@ -36,7 +41,8 @@
   max-height: 300px;
   overflow-y: auto;
   overflow-x: hidden;
-  min-width: 220px;           /* match toggle width for a compact feel */
+  min-width: 220px;
+  /* match toggle width for a compact feel */
   color: #333333 !important;
 }
 
@@ -53,6 +59,7 @@
 
 /* Optional: narrower items on small screens */
 @media (max-width: 480px) {
+
   #menu-budget .dropdown-toggle,
   #menu-viewby .dropdown-toggle,
   #menu-spending-type .dropdown-toggle,
