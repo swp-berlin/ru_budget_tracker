@@ -156,11 +156,15 @@ def generate_figure(
         values=area_values,
         hover_data=None,
     )
+    fig.update_layout(margin=dict(t=15, l=10, r=10, b=10))
     # If spending type is military, adjust the color of the root tiles to #7e8f5f
     # and then get lighter shades of #7e8f5f for the children the deeper they are in the hierarchy
     if spending_type == "MILITARY":
         colorscale = [[1, "#7e8f5f"], [0.5, "#a3b18a"], [0, "#c7d0b8"]]
-        fig.update_layout(treemapcolorway=["#7e8f5f"], coloraxis_colorscale=colorscale)
+        fig.update_layout(
+            treemapcolorway=["#7e8f5f"],
+            coloraxis_colorscale=colorscale,
+        )
 
     # Populate hover with original values and percentages; include explicit node id
     fig.data[0].customdata = [
