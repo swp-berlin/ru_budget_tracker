@@ -2,19 +2,20 @@
 #menu-budget .dropdown-toggle,
 #menu-viewby .dropdown-toggle,
 #menu-spending-type .dropdown-toggle,
-#menu-spending-scope .dropdown-toggle {
+#menu-unit .dropdown-toggle {
   height: 40px;
   line-height: 24px;
   padding: 8px 12px;
   display: inline-flex;
   align-items: center;
-  max-width: 300px; /* keeps trigger compact */
+  max-width: 300px;
+  /* keeps trigger compact */
 }
 
 #menu-budget .dropdown-toggle>*,
 #menu-viewby .dropdown-toggle>*,
 #menu-spending-type .dropdown-toggle>*,
-#menu-spending-scope .dropdown-toggle>* {
+#menu-unit .dropdown-toggle>* {
   min-width: 0;
   /* allow flex children to shrink for ellipsis */
 }
@@ -23,11 +24,33 @@
 #menu-budget .dropdown-menu,
 #menu-viewby .dropdown-menu,
 #menu-spending-type .dropdown-menu,
-#menu-spending-scope .dropdown-menu {
+#menu-unit .dropdown-menu {
   max-height: 300px;
   overflow-y: auto;
   overflow-x: hidden;
   min-width: 220px;
+}
+
+/* Timeseries button: keep content on one line and hide label if space is tight */
+#btn-switch-to-timeseries {
+  display: inline-flex;
+  /* align icon + label horizontally */
+  align-items: center;
+  gap: 4px;
+  /* consistent spacing */
+  white-space: nowrap;
+  /* never wrap inside the button */
+  max-width: 100%;
+  /* allow container to constrain button */
+}
+
+#btn-switch-to-timeseries .btn-label {
+  white-space: nowrap;
+  /* ensure label itself won’t wrap */
+  overflow: hidden;
+  /* prevent spillover */
+  text-overflow: ellipsis;
+  /* ellipsis if container forces smaller width */
 }
 
 /* Item row base layout hook (intentionally minimal) */
@@ -38,11 +61,11 @@
   #menu-budget .dropdown-toggle,
   #menu-viewby .dropdown-toggle,
   #menu-spending-type .dropdown-toggle,
-  #menu-spending-scope .dropdown-toggle,
+  #menu-unit .dropdown-toggle,
   #menu-budget .dropdown-menu,
   #menu-viewby .dropdown-menu,
   #menu-spending-type .dropdown-menu,
-  #menu-spending-scope .dropdown-menu {
+  #menu-unit .dropdown-menu {
     max-width: 180px;
     min-width: 180px;
   }

@@ -2,6 +2,7 @@
 
 from dash import Dash, html, page_container
 import dash_bootstrap_components as dbc
+import plotly.express as px
 
 external_stylesheets = [
     dbc.themes.BOOTSTRAP,
@@ -12,6 +13,7 @@ app = Dash(
     use_pages=True,
     external_stylesheets=external_stylesheets,
 )
+
 
 server = app.server
 

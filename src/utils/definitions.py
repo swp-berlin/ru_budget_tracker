@@ -11,7 +11,7 @@ ViewByDimensionTypeLiteral = Literal["MINISTRY", "CHAPTER", "PROGRAMM"]
 
 LanguageTypeLiteral = Literal["EN", "ORIGINAL"]
 SpendingTypeLiteral = Literal["ALL", "MILITARY"]
-SpendingScopeLiteral = Literal[
+UnitLiteral = Literal[
     "ABSOLUTE",
     "PERCENT_GDP_FULL_YEAR",
     "PERCENT_GDP_YEAR_TO_YEAR",

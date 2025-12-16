@@ -39,7 +39,7 @@ class TremapDataFetcher:
         Loads budgets, expenses, and dimensions, applies filters, and returns the result set.
         Query is built dynamically and uses a recursive CTE to fetch the full dimension hierarchy.
         Args:
-            **kwargs: Filter parameters such as budget_dataset, viewby, spending_type, spending_scope.
+            **kwargs: Filter parameters such as budget_dataset, viewby, spending_type, unit.
         Returns:
             pd.DataFrame: The loaded and transformed data.
         """
@@ -129,14 +129,14 @@ class TremapDataFetcher:
     def fetch_data(
         self,
         budget_id: int | None = None,
-        spending_scope: str = "ABSOLUTE",
+        unit: str = "ABSOLUTE",
     ) -> tuple[Sequence[RowMapping], Sequence[RowMapping], dict[int, float]]:
         """
         Load data from the database based on provided filters.
         Loads budgets, expenses, and dimensions, applies filters, and returns the result set.
         Query is built dynamically and uses a recursive CTE to fetch the full dimension hierarchy.
         Args:
-            **kwargs: Filter parameters such as budget_dataset, viewby, spending_type, spending_scope.
+            **kwargs: Filter parameters such as budget_dataset, viewby, spending_type, unit.
         Returns:
             Sequence[RowMapping]: The loaded dimensions data.
             Sequence[RowMapping]: The loaded programs data. Includes all programs in the hierarchy.

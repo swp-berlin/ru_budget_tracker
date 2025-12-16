@@ -24,7 +24,7 @@ from utils import TreemapTransformer, TremapDataFetcher, fetch_budgets
 from utils.calculate import Calculator
 from utils.definitions import (
     LanguageTypeLiteral,
-    SpendingScopeLiteral,
+    UnitLiteral,
     SpendingTypeLiteral,
     ViewByDimensionTypeLiteral,
 )
@@ -54,7 +54,7 @@ SPENDING_TYPE_OPTIONS: list[tuple[str, str]] = [
     ("Military Only", "MILITARY"),
 ]
 
-SPENDING_SCOPE_OPTIONS: list[tuple[str, str]] = [
+UNIT_OPTIONS: list[tuple[str, str]] = [
     ("Billion RUB", "ABSOLUTE"),
     ("% full-year GDP", "PERCENT_GDP_FULL_YEAR"),
     ("% year-to-year GDP", "PERCENT_GDP_YEAR_TO_YEAR"),
@@ -100,15 +100,15 @@ def _compute_percentages(
 def fetch_treemap_data(
     budget_id: int | None = None,
     spending_type: SpendingTypeLiteral = "ALL",
-    spending_scope: SpendingScopeLiteral = "ABSOLUTE",
+    unit: UnitLiteral = "ABSOLUTE",
     viewby: ViewByDimensionTypeLiteral = "MINISTRY",
-    character_limit: int = 30,
+    character_limit: int = 25,
 ) -> tuple[list[str], list[str], list[float], list[str]]:
     """Fetch and transform treemap data for the current filters."""
     data_fetcher = TremapDataFetcher()
     dimensions, programs, sum_mapping = data_fetcher.fetch_data(
         budget_id=budget_id,
-        spending_scope=spending_scope,
+        unit=unit,
     )
     transformer = TreemapTransformer()
     labels, parents, values, metadata = transformer.transform_data(
@@ -119,7 +119,7 @@ def fetch_treemap_data(
         viewby=viewby,
         spending_type=spending_type,
     )
-    calculator = Calculator(spending_scope=spending_scope)
+    calculator = Calculator(unit=unit)
     values = [calculator.calculate(v) if v is not None else 0.0 for v in values]
     # Add line breaks for better label rendering
     labels = [add_breaks(lbl, interval=character_limit) for lbl in labels]
@@ -156,7 +156,12 @@ def generate_figure(
         values=area_values,
         hover_data=None,
     )
-    fig.update_layout(margin=dict(t=15, l=10, r=10, b=10), font=dict(family="Source Sans Pro"))
+    # Layout adjustments
+    # Change font to Source Sans 3 and make it wrapped
+    fig.update_layout(
+        margin=dict(t=15, l=10, r=10, b=10),
+        font=dict(family="Source Sans 3"),
+    )
     # If spending type is military, adjust the color of the root tiles to #7e8f5f
     # and then get lighter shades of #7e8f5f for the children the deeper they are in the hierarchy
     if spending_type == "MILITARY":
@@ -214,12 +219,12 @@ def layout(**other_kwargs) -> html.Div:
         for label, value in SPENDING_TYPE_OPTIONS
     ]
 
-    spending_scope_items = [
+    unit_items = [
         dbc.DropdownMenuItem(
             html.Span(label, title=label),
             id={"type": "spending-scope-item", "value": value},
         )
-        for label, value in SPENDING_SCOPE_OPTIONS
+        for label, value in UNIT_OPTIONS
     ]
     return html.Div(
         [
@@ -277,11 +282,11 @@ def layout(**other_kwargs) -> html.Div:
                                 direction="down",
                                 class_name="me-2",
                             ),
-                            # Spending scope menu
+                            # Unit menu
                             dbc.DropdownMenu(
-                                label="Spending scope",
-                                children=spending_scope_items,
-                                id="menu-spending-scope",
+                                label="Unit",
+                                children=unit_items,
+                                id="menu-unit",
                                 direction="down",
                                 class_name="me-2",
                             ),
@@ -305,7 +310,7 @@ def layout(**other_kwargs) -> html.Div:
                                         },
                                     ),
                                     # Text for the button
-                                    "To Timeseries",
+                                    html.Span("To Timeseries", className="btn-label"),
                                 ],
                                 id="btn-switch-to-timeseries",
                                 title="Switch to Time Series View",
@@ -385,7 +390,9 @@ def layout(**other_kwargs) -> html.Div:
                     dcc.Store(id="treemap-store"),
                     dcc.Store(id="store-selected-id"),
                     dcc.Graph(
-                        id="treemap-graph", config=TREEMAP_CONFIG, style={"visibility": "hidden"}
+                        id="treemap-graph",
+                        config=TREEMAP_CONFIG,
+                        style={"visibility": "hidden"},
                     ),
                 ],
                 style={"width": "100%", "height": "90vh"},
@@ -406,13 +413,13 @@ def update_figure_from_filters(
     budget_id: int | None = None,
     viewby: ViewByDimensionTypeLiteral = "MINISTRY",
     spending_type: SpendingTypeLiteral = "ALL",
-    spending_scope: SpendingScopeLiteral = "ABSOLUTE",
+    unit: UnitLiteral = "ABSOLUTE",
 ) -> tuple[go.Figure, dict[str, str]]:
     # Fetch and render using the selected values from stores
     labels, parents, values, metadata = fetch_treemap_data(
         budget_id=budget_id,
         spending_type=spending_type,
-        spending_scope=spending_scope,
+        unit=unit,
         viewby=viewby,
     )
     return generate_figure(labels, parents, values, metadata, spending_type, language="EN"), {
@@ -432,7 +439,7 @@ def update_store_data(
     budget_id: int | None = None,
     viewby: ViewByDimensionTypeLiteral = "MINISTRY",
     spending_type: SpendingTypeLiteral = "ALL",
-    spending_scope: SpendingScopeLiteral = "ABSOLUTE",
+    unit: UnitLiteral = "ABSOLUTE",
 ) -> dict[str, Any]:
     """
     This callback updates the store with the current data based on filters.
@@ -444,7 +451,7 @@ def update_store_data(
         "budget_id": budget_id,
         "viewby": viewby,
         "spending_type": spending_type,
-        "spending_scope": spending_scope,
+        "unit": unit,
     }
     return filter_data
 
@@ -486,7 +493,7 @@ def download_data(n_clicks, data) -> dict[str, Any]:
     labels, parents, values, metadata = fetch_treemap_data(
         budget_id=data["budget_id"],
         spending_type=data["spending_type"],
-        spending_scope=data["spending_scope"],
+        unit=data["unit"],
         viewby=data["viewby"],
     )
     return dcc.send_data_frame(  # type: ignore
@@ -565,13 +572,13 @@ def select_spending_type(_clicks):
     raise PreventUpdate
 
 
-# Spending scope selection (pattern-matched)
+# Unit selection (pattern-matched)
 @callback(
     Output("store-spending-scope", "data"),
     Input({"type": "spending-scope-item", "value": ALL}, "n_clicks"),
     prevent_initial_call=True,
 )
-def select_spending_scope(_clicks):
+def select_unit(_clicks):
     ctx = dash.callback_context
     if not ctx.triggered:
         raise PreventUpdate
@@ -616,7 +623,7 @@ def init_budgets(_):
 def apply_filters_from_url(url_search: str | None):
     """Apply filters from URL query params on load and when the URL changes.
 
-    Recognized params: budget_id, viewby, spending_type, spending_scope.
+    Recognized params: budget_id, viewby, spending_type, unit.
     Missing params leave the current store values unchanged by returning PreventUpdate markers.
     """
     if not url_search:
@@ -634,7 +641,7 @@ def apply_filters_from_url(url_search: str | None):
         budget_id_raw = first("budget_id")
         viewby = first("viewby")
         spending_type = first("spending_type")
-        spending_scope = first("spending_scope")
+        unit = first("unit")
 
         budget_id = int(budget_id_raw) if budget_id_raw and budget_id_raw.isdigit() else None
 
@@ -643,7 +650,7 @@ def apply_filters_from_url(url_search: str | None):
         outputs.append(budget_id if budget_id is not None else dash.no_update)
         outputs.append(viewby if viewby else dash.no_update)
         outputs.append(spending_type if spending_type else dash.no_update)
-        outputs.append(spending_scope if spending_scope else dash.no_update)
+        outputs.append(unit if unit else dash.no_update)
         return tuple(outputs)
     except Exception:
         raise PreventUpdate
@@ -714,12 +721,12 @@ def show_selected_budget_label(
 @callback(
     Output("menu-viewby", "label"),
     Output("menu-spending-type", "label"),
-    Output("menu-spending-scope", "label"),
+    Output("menu-unit", "label"),
     Input("store-viewby", "data"),
     Input("store-spending-type", "data"),
     Input("store-spending-scope", "data"),
 )
-def update_menu_labels(viewby: str | None, spending_type: str | None, spending_scope: str | None):
+def update_menu_labels(viewby: str | None, spending_type: str | None, unit: str | None):
     viewby_map = {
         "MINISTRY": "Ministry",
         "CHAPTER": "Chapter",
@@ -729,7 +736,7 @@ def update_menu_labels(viewby: str | None, spending_type: str | None, spending_s
         "ALL": "All Spending",
         "MILITARY": "Military Only",
     }
-    spending_scope_map = {
+    unit_map = {
         "ABSOLUTE": "Billion RUB",
         "PERCENT_GDP_FULL_YEAR": "% full-year GDP",
         "PERCENT_GDP_YEAR_TO_YEAR": "% year-to-year GDP",
@@ -740,7 +747,7 @@ def update_menu_labels(viewby: str | None, spending_type: str | None, spending_s
     return (
         viewby_map.get(viewby or "", "View by"),
         spending_type_map.get(spending_type or "", "Spending type"),
-        spending_scope_map.get(spending_scope or "", "Spending scope"),
+        unit_map.get(unit or "", "Unit"),
     )
 
 

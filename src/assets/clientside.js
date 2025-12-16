@@ -248,25 +248,25 @@ window.dash_clientside.clientside = {
   ,
   /**
    * Build a shareable URL from current filters and selected id and copy it.
-   * Params included: budget_id, viewby, spending_type, spending_scope, focus
+   * Params included: budget_id, viewby, spending_type, unit, focus
    *
    * @param {number} n_clicks - Button clicks (ignored aside from triggering)
    * @param {string} pathname - Current page path, e.g., '/'
    * @param {number|null} budgetId
    * @param {string} viewby
    * @param {string} spendingType
-   * @param {string} spendingScope
+   * @param {string} unit
    * @param {string|null} selectedId
    * @returns {string} Status message in dummy output title.
    */
-  copyShareLink: function (n_clicks, pathname, budgetId, viewby, spendingType, spendingScope, selectedId) {
+  copyShareLink: function (n_clicks, pathname, budgetId, viewby, spendingType, unit, selectedId) {
     try {
       if (!n_clicks) return 'Share not triggered';
       const params = new URLSearchParams();
       if (budgetId != null) params.set('budget_id', String(budgetId));
       if (viewby) params.set('viewby', viewby);
       if (spendingType) params.set('spending_type', spendingType);
-      if (spendingScope) params.set('spending_scope', spendingScope);
+      if (unit) params.set('unit', unit);
       if (selectedId) params.set('focus', selectedId);
 
       const base = window.location.origin + (pathname || '/');

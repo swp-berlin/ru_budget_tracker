@@ -15,7 +15,7 @@
 # from models import ViewByDimensionTypeLiteral
 # from utils.transform import BarchartTransformer
 # from utils.definitions import (
-#     SpendingScopeLiteral,
+#     UnitLiteral,
 #     SpendingTypeLiteral,
 # )
 # from utils.fetch import fetch_barchart_data, fetch_budgets
@@ -185,7 +185,7 @@
 #     budget_dataset: int | None = None,
 #     viewby: ViewByDimensionTypeLiteral = "MINISTRY",
 #     spending_type: SpendingTypeLiteral = "ALL",
-#     spending_scope: SpendingScopeLiteral = "ABSOLUT",
+#     unit: UnitLiteral = "ABSOLUT",
 # ) -> go.Figure:
 #     """
 #     This callback is triggered on page load and when the budget type dropdown changes.
@@ -202,7 +202,7 @@
 #         budget_dataset=budget_dataset,
 #         viewby=viewby,
 #         spending_type=spending_type,
-#         spending_scope=spending_scope,
+#         unit=unit,
 #     )
 #     transformer = BarchartTransformer(data, translated=False)
 #     df = transformer.transform_data()
@@ -228,7 +228,7 @@
 #                 budget_dataset=data["budget_dataset"],
 #                 viewby=data["viewby"],
 #                 spending_type=data["spending_type"],
-#                 spending_scope=data["spending_scope"],
+#                 unit=data["unit"],
 #             )
 #         ).to_csv,
 #         "treemap_data.csv",
