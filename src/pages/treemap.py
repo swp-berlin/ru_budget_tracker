@@ -292,7 +292,7 @@ def layout(**other_kwargs) -> html.Div:
                             ),
                         ],
                         direction="horizontal",
-                        class_name="me-auto",
+                        class_name="me-auto toolbar-group",
                     ),
                     # Stack for action buttons on the right
                     dbc.Stack(
@@ -372,6 +372,7 @@ def layout(**other_kwargs) -> html.Div:
                         ],
                         direction="horizontal",
                         gap=2,
+                        class_name="toolbar-group",
                     ),
                 ],
                 direction="horizontal",
@@ -381,6 +382,7 @@ def layout(**other_kwargs) -> html.Div:
                     "margin-left": "15px",
                     "margin-right": "15px",
                 },
+                class_name="toolbar",
             ),
             # add divider line
             dbc.Row(html.Hr()),
