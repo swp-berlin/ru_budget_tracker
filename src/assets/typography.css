@@ -23,7 +23,8 @@
 #menu-unit .dropdown-item {
     color: #333333 !important;
     font-family: 'Source Sans 3';
-    font-weight: 500;
+    font-size: 14px;
+    font-weight: 600;
 }
 
 /* Truncation for toggle labels and dropdown items */
@@ -63,17 +64,22 @@
 #btn-switch-to-timeseries,
 #btn-share-link,
 #btn-download-image,
-#btn-download-csv {
+#btn-download-csv,
+#btn-about,
+#btn-switch-data-language {
     color: #333333 !important;
     font-family: 'Source Sans 3', sans-serif;
-    font-weight: 500;
+    font-size: 14px;
+    font-weight: 600;
 }
 
 /* Buttons: enforce color on inner content (text and inline SVGs) */
 #btn-switch-to-timeseries *,
 #btn-share-link *,
 #btn-download-image *,
-#btn-download-csv * {
+#btn-download-csv *,
+#btn-about *,
+#btn-switch-data-language * {
     color: #333333 !important;
     fill: #333333 !important;
     font-family: 'Source Sans 3';

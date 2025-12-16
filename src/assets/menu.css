@@ -8,7 +8,7 @@
   padding: 8px 12px;
   display: inline-flex;
   align-items: center;
-  max-width: 300px;
+  max-width: 150px;
   /* keeps trigger compact */
 }
 
@@ -28,7 +28,91 @@
   max-height: 300px;
   overflow-y: auto;
   overflow-x: hidden;
-  min-width: 220px;
+  min-width: 180px;
+}
+
+/* Budget toggle: ellipsize label text but always show caret */
+#menu-budget .dropdown-toggle {
+  display: inline-block;
+  /* allow text-overflow to apply reliably */
+  position: relative;
+  /* anchor caret positioning */
+  overflow: hidden;
+  /* hide overflowed label text */
+  white-space: nowrap;
+  /* prevent wrapping */
+  text-overflow: ellipsis;
+  /* show ellipsis for long labels */
+  padding-right: 28px;
+  /* reserve space for caret */
+}
+
+/* Keep caret visible by absolutely positioning it inside the toggle */
+#menu-budget .dropdown-toggle::after {
+  position: absolute;
+  right: 10px;
+  /* align to the right padding */
+  top: 50%;
+  transform: translateY(-50%);
+  margin-left: 0;
+  /* neutralize bootstrap spacing */
+}
+
+/* View-by toggle: ellipsize + fixed caret */
+#menu-viewby .dropdown-toggle {
+  display: inline-block;
+  /* ensure ellipsis works */
+  position: relative;
+  /* anchor caret */
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding-right: 28px;
+  /* space for caret */
+}
+
+#menu-viewby .dropdown-toggle::after {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-left: 0;
+}
+
+/* Spending-type toggle: ellipsize + fixed caret */
+#menu-spending-type .dropdown-toggle {
+  display: inline-block;
+  position: relative;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding-right: 28px;
+}
+
+#menu-spending-type .dropdown-toggle::after {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-left: 0;
+}
+
+/* Unit toggle: ellipsize + fixed caret */
+#menu-unit .dropdown-toggle {
+  display: inline-block;
+  position: relative;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding-right: 28px;
+}
+
+#menu-unit .dropdown-toggle::after {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-left: 0;
 }
 
 /* Timeseries button: keep content on one line and hide label if space is tight */
@@ -54,6 +138,30 @@
 }
 
 /* Item row base layout hook (intentionally minimal) */
+
+/* Toolbar button sizing: make all action buttons same height */
+.toolbar .btn {
+  height: 40px;
+  /* uniform height */
+  padding: 8px 12px;
+  /* match dropdown padding */
+  line-height: 24px;
+  /* consistent line-height with toggles */
+  display: inline-flex;
+  /* center icon/text */
+  align-items: center;
+}
+
+/* Default toolbar icon size and spacing */
+.toolbar .btn img {
+  width: 24px;
+  height: 24px;
+}
+
+/* Provide default gap between icon and text for timeseries */
+#btn-switch-to-timeseries img {
+  margin-right: 4px;
+}
 
 /* Optional: narrower items on small screens */
 @media (max-width: 480px) {
@@ -93,6 +201,19 @@
     gap: 6px;
   }
 
+  /* Keep action buttons in a horizontal row that can wrap */
+  .toolbar .toolbar-actions {
+    display: flex;
+    flex-direction: row;
+    /* horizontal buttons on narrow screens */
+    flex-wrap: wrap;
+    /* allow wrapping to next line */
+    align-items: center;
+    gap: 6px;
+    /* tight spacing for compactness */
+    width: 100%;
+  }
+
   /*
     Make each control take a full row.
     We target the component wrappers by id and the action buttons.
@@ -100,11 +221,7 @@
   #menu-budget,
   #menu-viewby,
   #menu-spending-type,
-  #menu-unit,
-  #btn-switch-to-timeseries,
-  #btn-share-link,
-  #btn-download-image,
-  #btn-download-csv {
+  #menu-unit {
     display: block;
     /* force block to stack */
     width: 100%;
@@ -134,13 +251,39 @@
     max-width: 100%;
   }
 
-  /* Center button content when full-width */
-  #btn-switch-to-timeseries,
-  #btn-share-link,
-  #btn-download-image,
-  #btn-download-csv {
-    width: 100%;
+  /* Compact button sizing and layout on mobile */
+  .toolbar .toolbar-actions .btn {
+    padding: 4px 8px;
+    /* smaller buttons */
+    line-height: 1.2;
+  }
+
+  /* Ensure action buttons don't stretch full width */
+  .toolbar .toolbar-actions #btn-switch-to-timeseries,
+  .toolbar .toolbar-actions #btn-share-link,
+  .toolbar .toolbar-actions #btn-download-image,
+  .toolbar .toolbar-actions #btn-download-csv,
+  .toolbar .toolbar-actions #btn-about,
+  .toolbar .toolbar-actions #btn-switch-data-language {
+    display: inline-flex;
+    width: auto;
     justify-content: center;
+  }
+
+  /* Slightly smaller icons on mobile */
+  .toolbar .toolbar-actions img {
+    width: 1.5em;
+    height: 1.5em;
+  }
+
+  /* Hide timeseries label to save space on narrow screens */
+  #btn-switch-to-timeseries .btn-label {
+    display: none;
+  }
+
+  #btn-switch-to-timeseries img {
+    margin-right: 0 !important;
+    /* remove gap when label hidden */
   }
 }
 

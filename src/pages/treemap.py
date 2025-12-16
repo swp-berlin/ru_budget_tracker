@@ -56,6 +56,7 @@ SPENDING_TYPE_OPTIONS: list[tuple[str, str]] = [
 
 UNIT_OPTIONS: list[tuple[str, str]] = [
     ("Billion RUB", "ABSOLUTE"),
+    ("Dollars", "DOLLARS"),
     ("% full-year GDP", "PERCENT_GDP_FULL_YEAR"),
     ("% year-to-year GDP", "PERCENT_GDP_YEAR_TO_YEAR"),
     ("% full-year spending", "PERCENT_FULL_YEAR_SPENDING"),
@@ -234,6 +235,7 @@ def layout(**other_kwargs) -> html.Div:
             dcc.Store(id="store-viewby", data="MINISTRY"),
             dcc.Store(id="store-spending-type", data="ALL"),
             dcc.Store(id="store-spending-scope", data="ABSOLUTE"),
+            dcc.Store(id="store-language", data="RU"),
             # Location component to access URL parameters
             dcc.Location(id="url"),
             # This dummy div is the target for our clientside callback. It's required for the
@@ -303,14 +305,9 @@ def layout(**other_kwargs) -> html.Div:
                                     # Icon for the button
                                     html.Img(
                                         src="/assets/icons/stacked_bar_chart.svg",
-                                        style={
-                                            "width": "2em",
-                                            "height": "2em",
-                                            "marginRight": "4px",
-                                        },
                                     ),
                                     # Text for the button
-                                    html.Span("To Timeseries", className="btn-label"),
+                                    html.Span("Timeseries", className="btn-label"),
                                 ],
                                 id="btn-switch-to-timeseries",
                                 title="Switch to Time Series View",
@@ -319,7 +316,6 @@ def layout(**other_kwargs) -> html.Div:
                             dbc.Button(
                                 html.Img(
                                     src="/assets/icons/share.svg",
-                                    style={"width": "2em", "height": "2em"},
                                 ),
                                 id="btn-share-link",
                                 title="Copy shareable link to clipboard",
@@ -344,7 +340,6 @@ def layout(**other_kwargs) -> html.Div:
                             dbc.Button(
                                 html.Img(
                                     src="/assets/icons/photo_camera.svg",
-                                    style={"width": "2em", "height": "2em"},
                                 ),
                                 id="btn-download-image",
                                 title="Download Treemap Plot as PNG",
@@ -354,25 +349,33 @@ def layout(**other_kwargs) -> html.Div:
                             dbc.Button(
                                 html.Img(
                                     src="/assets/icons/download.svg",
-                                    style={"width": "2em", "height": "2em"},
                                 ),
                                 id="btn-download-csv",
                                 title="Download Treemap Data as CSV",
+                            ),
+                            # Language toggle button: default text shows next language (ENG), default param RU
+                            dbc.Button(
+                                [
+                                    # Text for the button
+                                    html.Span("ENG", className="btn-label"),
+                                ],
+                                id="btn-switch-data-language",
+                                title="Toggle data language",
                             ),
                             dcc.Download(id="download-treemap-data"),
                             # Info/About button
                             dbc.Button(
                                 html.Img(
                                     src="/assets/icons/info.svg",
-                                    style={"width": "2em", "height": "2em"},
                                 ),
+                                id="btn-about",
                                 title="About This Project",
                                 href="/about",
                             ),
                         ],
                         direction="horizontal",
                         gap=2,
-                        class_name="toolbar-group",
+                        class_name="toolbar-group toolbar-actions",
                     ),
                 ],
                 direction="horizontal",
@@ -619,6 +622,7 @@ def init_budgets(_):
     Output("store-viewby", "data", allow_duplicate=True),
     Output("store-spending-type", "data", allow_duplicate=True),
     Output("store-spending-scope", "data", allow_duplicate=True),
+    Output("store-language", "data", allow_duplicate=True),
     Input("url", "search"),
     prevent_initial_call="initial_duplicate",
 )
@@ -644,6 +648,7 @@ def apply_filters_from_url(url_search: str | None):
         viewby = first("viewby")
         spending_type = first("spending_type")
         unit = first("unit")
+        language = first("language")
 
         budget_id = int(budget_id_raw) if budget_id_raw and budget_id_raw.isdigit() else None
 
@@ -653,6 +658,7 @@ def apply_filters_from_url(url_search: str | None):
         outputs.append(viewby if viewby else dash.no_update)
         outputs.append(spending_type if spending_type else dash.no_update)
         outputs.append(unit if unit else dash.no_update)
+        outputs.append(language if language else dash.no_update)
         return tuple(outputs)
     except Exception:
         raise PreventUpdate
@@ -740,6 +746,7 @@ def update_menu_labels(viewby: str | None, spending_type: str | None, unit: str 
     }
     unit_map = {
         "ABSOLUTE": "Billion RUB",
+        "DOLLARS": "Dollars",
         "PERCENT_GDP_FULL_YEAR": "% full-year GDP",
         "PERCENT_GDP_YEAR_TO_YEAR": "% year-to-year GDP",
         "PERCENT_FULL_YEAR_SPENDING": "% full-year spending",
@@ -786,3 +793,47 @@ def show_share_toast(n_clicks: int | None) -> bool:
     if not n_clicks:
         raise PreventUpdate
     return True
+
+
+@callback(
+    Output("store-language", "data", allow_duplicate=True),
+    Output("url", "search"),
+    Input("btn-switch-data-language", "n_clicks"),
+    State("store-language", "data"),
+    State("url", "search"),
+    prevent_initial_call=True,
+)
+def toggle_language(n_clicks: int | None, current_lang: str | None, search: str | None):
+    """Toggle the language between RU and ENG.
+
+    - Button text shows the next language (handled by a separate callback).
+    - URL query param 'language' reflects the current language after toggle.
+    """
+    if not n_clicks:
+        raise PreventUpdate
+
+    new_lang = "ENG" if (current_lang or "RU") == "RU" else "RU"
+
+    # Update the URL search string
+    try:
+        from urllib.parse import parse_qsl, urlencode
+
+        query = dict(parse_qsl((search or "").lstrip("?")))
+        query["language"] = new_lang
+        new_search = "?" + urlencode(query)
+    except Exception:
+        # Fallback if parsing fails
+        new_search = f"?language={new_lang}"
+
+    return new_lang, new_search
+
+
+@callback(
+    Output("btn-switch-data-language", "children"),
+    Input("store-language", "data"),
+)
+def update_language_button_label(current_lang: str | None):
+    """Set button label to the next language: if current is RU, show ENG; if ENG, show RU."""
+    lang = (current_lang or "RU").upper()
+    next_label = "ENG" if lang == "RU" else "RU"
+    return [html.Span(next_label, className="btn-label")]
