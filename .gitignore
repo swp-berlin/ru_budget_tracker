@@ -23,3 +23,5 @@ wheels/
 *.xlsx
 *.xls
 *.pdf
+
+sanity_check*.json
