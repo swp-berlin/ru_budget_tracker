@@ -20,7 +20,7 @@ from dash import (
 )
 from dash.exceptions import PreventUpdate
 
-from utils import TreemapTransformer, TremapDataFetcher, fetch_budgets
+from utils import TreemapTransformer, TremapDataFetcher
 from utils.calculate import Calculator
 from utils.definitions import (
     LanguageTypeLiteral,
@@ -33,7 +33,7 @@ from utils.helper import add_breaks
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-register_page(__name__, path="/")
+register_page(__name__, path="/", title="Treemap View")
 
 # Graph config kept simple and explicit for production clarity
 TREEMAP_CONFIG = dcc.Graph.Config(
@@ -41,28 +41,6 @@ TREEMAP_CONFIG = dcc.Graph.Config(
     displaylogo=False,
     responsive=True,
 )
-
-# Menu option definitions to avoid duplication and keep layout concise
-VIEWBY_OPTIONS: list[tuple[str, str]] = [
-    ("Ministry", "MINISTRY"),
-    ("Chapter", "CHAPTER"),
-    ("Program", "PROGRAM"),
-]
-
-SPENDING_TYPE_OPTIONS: list[tuple[str, str]] = [
-    ("All", "ALL"),
-    ("Military Only", "MILITARY"),
-]
-
-UNIT_OPTIONS: list[tuple[str, str]] = [
-    ("Billion RUB", "ABSOLUTE"),
-    ("Dollars", "DOLLARS"),
-    ("% full-year GDP", "PERCENT_GDP_FULL_YEAR"),
-    ("% year-to-year GDP", "PERCENT_GDP_YEAR_TO_YEAR"),
-    ("% full-year spending", "PERCENT_FULL_YEAR_SPENDING"),
-    ("% year-to-year spending", "PERCENT_YEAR_TO_YEAR_SPENDING"),
-    ("% year-to-year revenue", "PERCENT_YEAR_TO_YEAR_REVENUE"),
-]
 
 
 def _compute_percentages(
@@ -204,205 +182,17 @@ def layout(**other_kwargs) -> html.Div:
         html.Div: The Dash component tree for the page layout.
     """
 
-    viewby_items = [
-        dbc.DropdownMenuItem(
-            html.Span(label, title=label),
-            id={"type": "viewby-item", "value": value},
-        )
-        for label, value in VIEWBY_OPTIONS
-    ]
-
-    spending_type_items = [
-        dbc.DropdownMenuItem(
-            html.Span(label, title=label),
-            id={"type": "spending-type-item", "value": value},
-        )
-        for label, value in SPENDING_TYPE_OPTIONS
-    ]
-
-    unit_items = [
-        dbc.DropdownMenuItem(
-            html.Span(label, title=label),
-            id={"type": "spending-scope-item", "value": value},
-        )
-        for label, value in UNIT_OPTIONS
-    ]
     return html.Div(
+        # Graph to display the treemap
         [
-            # Store currently selected filter values (these replace dcc.Dropdown.value)
-            dcc.Store(id="store-budget-options"),
-            dcc.Store(id="store-budget-id"),
-            dcc.Store(id="store-viewby", data="MINISTRY"),
-            dcc.Store(id="store-spending-type", data="ALL"),
-            dcc.Store(id="store-spending-scope", data="ABSOLUTE"),
-            dcc.Store(id="store-language", data="RU"),
-            # Location component to access URL parameters
-            dcc.Location(id="url"),
-            # This dummy div is the target for our clientside callback. It's required for the
-            # callback to have an Output, but it doesn't need to be visible.
-            html.Div(id="dummy-treemap-output", style={"display": "none"}),
-            # Add Buttons and dropdowns for filtering by budget type
-            dbc.Stack(
-                [
-                    # Logo image without button styling - only the image is visible
-                    html.A(
-                        [
-                            html.Img(
-                                src="/assets/logo/logo.svg",
-                                style={"height": "2em"},
-                                alt="Logo of Stiftung Wissenschaft und Politik",
-                            ),
-                        ],
-                        style={"margin-right": "20px", "align-self": "center"},
-                        href="/",
-                        title="Go to Home Page",
-                    ),
-                    dbc.Stack(
-                        [
-                            # Budget dataset menu
-                            dbc.DropdownMenu(
-                                label="Budget",
-                                children=[],  # will be set by callback
-                                id="menu-budget",
-                                direction="down",
-                                class_name="me-2 scroll-menu",
-                                # Make the dropdown list scrollable to handle many budgets
-                            ),
-                            # View-by menu
-                            dbc.DropdownMenu(
-                                label="View by",
-                                children=viewby_items,
-                                id="menu-viewby",
-                                direction="down",
-                                class_name="me-2",
-                            ),
-                            # Spending type menu
-                            dbc.DropdownMenu(
-                                label="Spending type",
-                                children=spending_type_items,
-                                id="menu-spending-type",
-                                direction="down",
-                                class_name="me-2",
-                            ),
-                            # Unit menu
-                            dbc.DropdownMenu(
-                                label="Unit",
-                                children=unit_items,
-                                id="menu-unit",
-                                direction="down",
-                                class_name="me-2",
-                            ),
-                        ],
-                        direction="horizontal",
-                        class_name="me-auto toolbar-group",
-                    ),
-                    # Stack for action buttons on the right
-                    dbc.Stack(
-                        [
-                            # Button to switch to the time series view
-                            dbc.Button(
-                                [
-                                    # Icon for the button
-                                    html.Img(
-                                        src="/assets/icons/stacked_bar_chart.svg",
-                                    ),
-                                    # Text for the button
-                                    html.Span("Timeseries", className="btn-label"),
-                                ],
-                                id="btn-switch-to-timeseries",
-                                title="Switch to Time Series View",
-                            ),
-                            # Share button
-                            dbc.Button(
-                                html.Img(
-                                    src="/assets/icons/share.svg",
-                                ),
-                                id="btn-share-link",
-                                title="Copy shareable link to clipboard",
-                            ),
-                            # Toast notification for sharing
-                            dbc.Toast(
-                                id="share-toast",
-                                header="Link copied",
-                                children="The shareable link was copied to your clipboard.",
-                                is_open=False,
-                                duration=2000,
-                                dismissable=False,
-                                style={
-                                    "position": "fixed",
-                                    "bottom": 20,
-                                    "left": "50%",
-                                    "transform": "translateX(-50%)",
-                                    "zIndex": 1060,
-                                },
-                            ),
-                            # Download image button
-                            dbc.Button(
-                                html.Img(
-                                    src="/assets/icons/photo_camera.svg",
-                                ),
-                                id="btn-download-image",
-                                title="Download Treemap Plot as PNG",
-                            ),
-                            dcc.Download(id="download-treemap-image"),
-                            # Download data button
-                            dbc.Button(
-                                html.Img(
-                                    src="/assets/icons/download.svg",
-                                ),
-                                id="btn-download-csv",
-                                title="Download Treemap Data as CSV",
-                            ),
-                            # Language toggle button: default text shows next language (ENG), default param RU
-                            dbc.Button(
-                                [
-                                    # Text for the button
-                                    html.Span("ENG", className="btn-label"),
-                                ],
-                                id="btn-switch-data-language",
-                                title="Toggle data language",
-                            ),
-                            dcc.Download(id="download-treemap-data"),
-                            # Info/About button
-                            dbc.Button(
-                                html.Img(
-                                    src="/assets/icons/info.svg",
-                                ),
-                                id="btn-about",
-                                title="About This Project",
-                                href="/about",
-                            ),
-                        ],
-                        direction="horizontal",
-                        gap=2,
-                        class_name="toolbar-group toolbar-actions",
-                    ),
-                ],
-                direction="horizontal",
-                style={
-                    "margin-bottom": "10px",
-                    "margin-top": "10px",
-                    "margin-left": "15px",
-                    "margin-right": "15px",
-                },
-                class_name="toolbar",
+            dcc.Store(id="store-selected-id"),
+            dcc.Graph(
+                id="treemap-graph",
+                config=TREEMAP_CONFIG,
+                style={"visibility": "hidden"},
             ),
-            # add divider line
-            dbc.Row(html.Hr()),
-            html.Div(
-                # Graph to display the treemap
-                [
-                    dcc.Store(id="treemap-store"),
-                    dcc.Store(id="store-selected-id"),
-                    dcc.Graph(
-                        id="treemap-graph",
-                        config=TREEMAP_CONFIG,
-                        style={"visibility": "hidden"},
-                    ),
-                ],
-                style={"width": "100%", "height": "90vh"},
-            ),
-        ]
+        ],
+        style={"width": "100%", "height": "90vh"},
     )
 
 
@@ -412,7 +202,7 @@ def layout(**other_kwargs) -> html.Div:
     Input("store-budget-id", "data"),
     Input("store-viewby", "data"),
     Input("store-spending-type", "data"),
-    Input("store-spending-scope", "data"),
+    Input("store-unit", "data", allow_optional=True),
 )
 def update_figure_from_filters(
     budget_id: int | None = None,
@@ -430,35 +220,6 @@ def update_figure_from_filters(
     return generate_figure(labels, parents, values, metadata, spending_type, language="EN"), {
         "visibility": "visible"
     }
-
-
-# Callback to handle store
-@callback(
-    Output("treemap-store", "data"),
-    Input("store-budget-id", "data"),
-    Input("store-viewby", "data"),
-    Input("store-spending-type", "data"),
-    Input("store-spending-scope", "data"),
-)
-def update_store_data(
-    budget_id: int | None = None,
-    viewby: ViewByDimensionTypeLiteral = "MINISTRY",
-    spending_type: SpendingTypeLiteral = "ALL",
-    unit: UnitLiteral = "ABSOLUTE",
-) -> dict[str, Any]:
-    """
-    This callback updates the store with the current data based on filters.
-
-    Returns:
-        dict[str, Any]: The data to store.
-    """
-    filter_data = {
-        "budget_id": budget_id,
-        "viewby": viewby,
-        "spending_type": spending_type,
-        "unit": unit,
-    }
-    return filter_data
 
 
 @callback(
@@ -486,20 +247,30 @@ def update_selected_id(click_data: dict | None) -> Optional[str]:
 @callback(
     Output("download-treemap-data", "data"),
     Input("btn-download-csv", "n_clicks"),
-    State("treemap-store", "data"),
+    State("store-budget-id", "data"),
+    State("store-viewby", "data"),
+    State("store-spending-type", "data"),
+    State("store-unit", "data"),
     prevent_initial_call=True,
+    optional=True,
 )
-def download_data(n_clicks, data) -> dict[str, Any]:
+def download_treemap_data(
+    n_clicks,
+    budget_id: int | None,
+    viewby: ViewByDimensionTypeLiteral,
+    spending_type: SpendingTypeLiteral,
+    unit: UnitLiteral,
+) -> dict[str, Any]:
     """
     Callback to download the current treemap data as a csv file.
     Returns:
         dict[str, Any]: The data for download.
     """
     labels, parents, values, metadata = fetch_treemap_data(
-        budget_id=data["budget_id"],
-        spending_type=data["spending_type"],
-        unit=data["unit"],
-        viewby=data["viewby"],
+        budget_id=budget_id,
+        spending_type=spending_type,
+        unit=unit,
+        viewby=viewby,
     )
     return dcc.send_data_frame(  # type: ignore
         pd.DataFrame(
@@ -522,8 +293,9 @@ def download_data(n_clicks, data) -> dict[str, Any]:
     Input("btn-download-image", "n_clicks"),
     State("treemap-graph", "figure"),
     prevent_initial_call=True,
+    optional=True,
 )
-def download_image(n_clicks: int | None, figure_json: dict) -> dict[str, Any] | None:
+def download_treemap_image(n_clicks: int | None, figure_json: dict) -> dict[str, Any] | None:
     """
     Generate a PNG image from the current treemap figure and start a download.
 
@@ -543,297 +315,3 @@ def download_image(n_clicks: int | None, figure_json: dict) -> dict[str, Any] | 
 
     # Send bytes to the browser as a downloadable file
     return dcc.send_bytes(image_bytes, "treemap_figure.png")  # type: ignore
-
-
-# View-by selection (pattern-matched, single callback)
-@callback(
-    Output("store-viewby", "data"),
-    Input({"type": "viewby-item", "value": ALL}, "n_clicks"),
-    prevent_initial_call=True,
-)
-def select_viewby(_clicks):
-    ctx = dash.callback_context
-    if not ctx.triggered:
-        raise PreventUpdate
-    trig = getattr(ctx, "triggered_id", None)
-    if isinstance(trig, dict) and trig.get("type") == "viewby-item":
-        return trig.get("value")
-    raise PreventUpdate
-
-
-# Spending type selection (pattern-matched)
-@callback(
-    Output("store-spending-type", "data"),
-    Input({"type": "spending-type-item", "value": ALL}, "n_clicks"),
-    prevent_initial_call=True,
-)
-def select_spending_type(_clicks):
-    ctx = dash.callback_context
-    if not ctx.triggered:
-        raise PreventUpdate
-    trig = getattr(ctx, "triggered_id", None)
-    if isinstance(trig, dict) and trig.get("type") == "spending-type-item":
-        return trig.get("value")
-    raise PreventUpdate
-
-
-# Unit selection (pattern-matched)
-@callback(
-    Output("store-spending-scope", "data"),
-    Input({"type": "spending-scope-item", "value": ALL}, "n_clicks"),
-    prevent_initial_call=True,
-)
-def select_unit(_clicks):
-    ctx = dash.callback_context
-    if not ctx.triggered:
-        raise PreventUpdate
-    trig = getattr(ctx, "triggered_id", None)
-    if isinstance(trig, dict) and trig.get("type") == "spending-scope-item":
-        return trig.get("value")
-    raise PreventUpdate
-
-
-@callback(
-    Output("store-budget-options", "data"),
-    Output("store-budget-id", "data"),
-    Output("menu-budget", "children"),
-    Input("url", "pathname"),  # fire once on load
-    prevent_initial_call=False,
-)
-def init_budgets(_):
-    # Fetch once and share everywhere via Store
-    options = [
-        {"label": b["name_translated"] or b["name"], "value": b["id"]} for b in fetch_budgets()
-    ]
-    # Build menu items with pattern ids
-    items = [
-        dbc.DropdownMenuItem(
-            html.Span(opt["label"], title=opt["label"]),
-            id={"type": "budget-item", "value": opt["value"]},
-        )
-        for opt in options
-    ]
-    default_value = options[0]["value"] if options else None
-    return options, default_value, items
-
-
-@callback(
-    Output("store-budget-id", "data", allow_duplicate=True),
-    Output("store-viewby", "data", allow_duplicate=True),
-    Output("store-spending-type", "data", allow_duplicate=True),
-    Output("store-spending-scope", "data", allow_duplicate=True),
-    Output("store-language", "data", allow_duplicate=True),
-    Input("url", "search"),
-    prevent_initial_call="initial_duplicate",
-)
-def apply_filters_from_url(url_search: str | None):
-    """Apply filters from URL query params on load and when the URL changes.
-
-    Recognized params: budget_id, viewby, spending_type, unit.
-    Missing params leave the current store values unchanged by returning PreventUpdate markers.
-    """
-    if not url_search:
-        raise PreventUpdate
-    try:
-        from urllib.parse import parse_qs, unquote_plus
-
-        params = parse_qs(url_search.replace("?", ""))
-
-        # Extract values safely
-        def first(key: str):
-            vals = params.get(key)
-            return unquote_plus(vals[0]).strip() if vals and len(vals) > 0 else None
-
-        budget_id_raw = first("budget_id")
-        viewby = first("viewby")
-        spending_type = first("spending_type")
-        unit = first("unit")
-        language = first("language")
-
-        budget_id = int(budget_id_raw) if budget_id_raw and budget_id_raw.isdigit() else None
-
-        # If none provided, avoid overwriting by returning PreventUpdate
-        outputs: list[Any] = []
-        outputs.append(budget_id if budget_id is not None else dash.no_update)
-        outputs.append(viewby if viewby else dash.no_update)
-        outputs.append(spending_type if spending_type else dash.no_update)
-        outputs.append(unit if unit else dash.no_update)
-        outputs.append(language if language else dash.no_update)
-        return tuple(outputs)
-    except Exception:
-        raise PreventUpdate
-
-
-@callback(
-    Output("store-budget-id", "data", allow_duplicate=True),
-    Input("store-budget-options", "data"),
-    Input({"type": "budget-item", "value": ALL}, "n_clicks"),
-    prevent_initial_call=True,
-)
-def select_budget_dynamic(options, clicks):
-    """
-    Update selected budget_id when any budget menu item is clicked.
-
-    Fix:
-    - Use dash.callback_context.triggered_id (parsed) instead of json.loads(prop_id).
-    - Only act when the triggered id is a dict with type == "budget-item".
-    """
-    ctx = dash.callback_context
-
-    # If nothing triggered, do nothing
-    if not ctx.triggered:
-        raise PreventUpdate
-
-    # triggered_id is either a dict (for pattern-matched components) or a string id
-    trig = getattr(ctx, "triggered_id", None)
-
-    # Guard: ignore triggers from non-budget inputs (e.g., store-budget-options)
-    if not isinstance(trig, dict):
-        # Not a pattern-matched id -> ignore
-        raise PreventUpdate
-
-    # Guard: ensure we only react to budget-item clicks
-    if trig.get("type") != "budget-item":
-        raise PreventUpdate
-
-    selected_value = trig.get("value")
-    if selected_value is None:
-        # No value in id -> ignore
-        raise PreventUpdate
-
-    # Return the selected budget id to the store
-    return selected_value
-
-
-@callback(
-    Output("menu-budget", "label"),
-    Input("store-budget-id", "data"),
-    State("store-budget-options", "data"),
-)
-def show_selected_budget_label(
-    budget_id: Optional[int], options: list[dict[str, Any]] | None
-) -> str:
-    """
-    Set the Budget menu's label to the selected budget's display name.
-    Falls back to 'Budget' if nothing is selected or options missing.
-    """
-    if not options or budget_id is None:
-        return "Budget"
-    # Find the option whose value matches the selected id
-    for opt in options:
-        if opt.get("value") == budget_id:
-            return opt.get("label", "Budget")
-    return "Budget"  # default if not found
-
-
-@callback(
-    Output("menu-viewby", "label"),
-    Output("menu-spending-type", "label"),
-    Output("menu-unit", "label"),
-    Input("store-viewby", "data"),
-    Input("store-spending-type", "data"),
-    Input("store-spending-scope", "data"),
-)
-def update_menu_labels(viewby: str | None, spending_type: str | None, unit: str | None):
-    viewby_map = {
-        "MINISTRY": "Ministry",
-        "CHAPTER": "Chapter",
-        "PROGRAM": "Program",
-    }
-    spending_type_map = {
-        "ALL": "All Spending",
-        "MILITARY": "Military Only",
-    }
-    unit_map = {
-        "ABSOLUTE": "Billion RUB",
-        "DOLLARS": "Dollars",
-        "PERCENT_GDP_FULL_YEAR": "% full-year GDP",
-        "PERCENT_GDP_YEAR_TO_YEAR": "% year-to-year GDP",
-        "PERCENT_FULL_YEAR_SPENDING": "% full-year spending",
-        "PERCENT_YEAR_TO_YEAR_SPENDING": "% year-to-year spending",
-        "PERCENT_YEAR_TO_YEAR_REVENUE": "% year-to-year revenue",
-    }
-    return (
-        viewby_map.get(viewby or "", "View by"),
-        spending_type_map.get(spending_type or "", "Spending type"),
-        unit_map.get(unit or "", "Unit"),
-    )
-
-
-# Clientside callback to handle URL focus parameter and click simulation
-clientside_callback(
-    ClientsideFunction(namespace="clientside", function_name="findAndClickSlice"),
-    Output("dummy-treemap-output", "children"),
-    Input("url", "search"),
-    Input("treemap-graph", "figure"),
-    prevent_initial_call=True,
-)
-
-# Clientside share: build URL with current filters and selected id, copy to clipboard
-clientside_callback(
-    ClientsideFunction(namespace="clientside", function_name="copyShareLink"),
-    Output("dummy-treemap-output", "title"),
-    Input("btn-share-link", "n_clicks"),
-    State("url", "pathname"),
-    State("store-budget-id", "data"),
-    State("store-viewby", "data"),
-    State("store-spending-type", "data"),
-    State("store-spending-scope", "data"),
-    State("store-selected-id", "data"),
-    prevent_initial_call=True,
-)
-
-
-@callback(
-    Output("share-toast", "is_open"),
-    Input("btn-share-link", "n_clicks"),
-    prevent_initial_call=True,
-)
-def show_share_toast(n_clicks: int | None) -> bool:
-    if not n_clicks:
-        raise PreventUpdate
-    return True
-
-
-@callback(
-    Output("store-language", "data", allow_duplicate=True),
-    Output("url", "search"),
-    Input("btn-switch-data-language", "n_clicks"),
-    State("store-language", "data"),
-    State("url", "search"),
-    prevent_initial_call=True,
-)
-def toggle_language(n_clicks: int | None, current_lang: str | None, search: str | None):
-    """Toggle the language between RU and ENG.
-
-    - Button text shows the next language (handled by a separate callback).
-    - URL query param 'language' reflects the current language after toggle.
-    """
-    if not n_clicks:
-        raise PreventUpdate
-
-    new_lang = "ENG" if (current_lang or "RU") == "RU" else "RU"
-
-    # Update the URL search string
-    try:
-        from urllib.parse import parse_qsl, urlencode
-
-        query = dict(parse_qsl((search or "").lstrip("?")))
-        query["language"] = new_lang
-        new_search = "?" + urlencode(query)
-    except Exception:
-        # Fallback if parsing fails
-        new_search = f"?language={new_lang}"
-
-    return new_lang, new_search
-
-
-@callback(
-    Output("btn-switch-data-language", "children"),
-    Input("store-language", "data"),
-)
-def update_language_button_label(current_lang: str | None):
-    """Set button label to the next language: if current is RU, show ENG; if ENG, show RU."""
-    lang = (current_lang or "RU").upper()
-    next_label = "ENG" if lang == "RU" else "RU"
-    return [html.Span(next_label, className="btn-label")]

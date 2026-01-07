@@ -18,7 +18,7 @@ def fetch_budgets() -> list[dict[str, Any]]:
                     Budget.type,
                 )
                 .where(
-                    Budget.type != "TOTAL",
+                    Budget.type.not_like("TOTAL%"),
                 )
                 .order_by(Budget.description.desc())
             )

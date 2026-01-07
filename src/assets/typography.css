@@ -61,7 +61,7 @@
 }
 
 /* Buttons: apply text color */
-#btn-switch-to-timeseries,
+#btn-switch-graphs,
 #btn-share-link,
 #btn-download-image,
 #btn-download-csv,
@@ -74,7 +74,7 @@
 }
 
 /* Buttons: enforce color on inner content (text and inline SVGs) */
-#btn-switch-to-timeseries *,
+#btn-switch-graphs *,
 #btn-share-link *,
 #btn-download-image *,
 #btn-download-csv *,

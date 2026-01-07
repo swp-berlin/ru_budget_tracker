@@ -116,7 +116,7 @@
 }
 
 /* Timeseries button: keep content on one line and hide label if space is tight */
-#btn-switch-to-timeseries {
+#btn-switch-graphs {
   display: inline-flex;
   /* align icon + label horizontally */
   align-items: center;
@@ -128,7 +128,7 @@
   /* allow container to constrain button */
 }
 
-#btn-switch-to-timeseries .btn-label {
+#btn-switch-graphs .btn-label {
   white-space: nowrap;
   /* ensure label itself won’t wrap */
   overflow: hidden;
@@ -159,8 +159,22 @@
 }
 
 /* Provide default gap between icon and text for timeseries */
-#btn-switch-to-timeseries img {
+#btn-switch-graphs img {
   margin-right: 4px;
+}
+
+/* Fix action button widths so labels don't resize buttons */
+#btn-switch-graphs {
+  width: 130px;
+  /* enough space for both 'Timeseries' and 'Treemap' */
+  justify-content: center;
+  /* center icon and text within fixed width */
+}
+
+#btn-switch-data-language {
+  width: 50px;
+  /* consistent width for RU/ENG */
+  justify-content: center;
 }
 
 /* Optional: narrower items on small screens */
@@ -259,7 +273,7 @@
   }
 
   /* Ensure action buttons don't stretch full width */
-  .toolbar .toolbar-actions #btn-switch-to-timeseries,
+  .toolbar .toolbar-actions #btn-switch-graphs,
   .toolbar .toolbar-actions #btn-share-link,
   .toolbar .toolbar-actions #btn-download-image,
   .toolbar .toolbar-actions #btn-download-csv,
@@ -277,11 +291,11 @@
   }
 
   /* Hide timeseries label to save space on narrow screens */
-  #btn-switch-to-timeseries .btn-label {
+  #btn-switch-graphs .btn-label {
     display: none;
   }
 
-  #btn-switch-to-timeseries img {
+  #btn-switch-graphs img {
     margin-right: 0 !important;
     /* remove gap when label hidden */
   }
