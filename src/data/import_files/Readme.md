@@ -57,9 +57,29 @@ data/import_files/
 
 ### Totals
 
-* `totals_YYYY.xlsx` (recommended)
+Two separate files are used for totals:
 
-  * Example: `totals_2026.xlsx`
+#### Report totals (monthly budget execution)
+
+* `total_report_YYYY.xlsx`
+  * Example: `total_report_2026.xlsx`
+* Source: MinFin monthly budget execution summary
+* Contains: Monthly revenue and expense totals with chapter breakdown
+* Values: In billions of rubles (converted to rubles on import)
+* Creates budgets: `TOTAL-REPORT-REVENUE-YYYY-MM`, `TOTAL-REPORT-EXPENSE-YYYY-MM`
+
+#### Law totals (annual budget law allocations)
+
+* `total_law_YYYY.csv`
+  * Example: `total_law_2026.csv`
+* Format: Semicolon-separated CSV with columns `year;RZ;Budget`
+  * `RZ=0`: Total expenses (may be missing for recent years, computed from chapter sum)
+  * `RZ=1-14`: Chapter-level expenses
+* Values: Already in rubles
+* Creates budgets: `TOTAL-LAW-EXPENSE-YYYY`
+
+**Note:** The importer auto-detects the file type based on extension (`.xlsx` vs `.csv`).
+
 * These are imported explicitly by path (so the name is less strict), but consistency helps.
 
 ### GDP conversion tables
@@ -141,10 +161,12 @@ Source: [https://budget.gov.ru/%D0%91%D1%8E%D0%B4%D0%B6%D0%B5%D1%82/%D0%97%D0%B0
 
 ### `raw/totals/`
 
-Totals for reports: Budget totals (total budget execution). This table allows for the calculation of classified spending for budget reports in the past. Until 2021 on the level of chapters, from then on forward we need to extrapolate. 
+Two types of totals files:
+
+**Report totals** (`total_report_YYYY.xlsx`): Monthly budget execution totals from MinFin. Allows calculation of classified spending for budget reports. Until 2021 on the level of chapters, from then on forward we need to extrapolate.
 Source: [https://minfin.gov.ru/ru/document?id_4=80042-kratkaya_ezhemesyachnaya_informatsiya_ob_ispolnenii_federalnogo_byudzheta_mlrd._rub._nakopleno_s_nachala_goda](https://minfin.gov.ru/ru/document?id_4=80042-kratkaya_ezhemesyachnaya_informatsiya_ob_ispolnenii_federalnogo_byudzheta_mlrd._rub._nakopleno_s_nachala_goda)
 
-
+**Law totals** (`total_law_YYYY.csv`): Annual budget law allocations by chapter. Used for comparing planned vs actual spending. These originate from russian bgd PDF reports.
 
 ### `raw/conversion_tables/`
 
