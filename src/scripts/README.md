@@ -33,8 +33,12 @@ uv run python scripts/fix_corrupt_excel_files.py
 # 2) Import budgets (laws + reports)
 uv run python scripts/import.py budget --type all
 
-# 3) Import totals (requires CHAPTER dims from law imports)
-uv run python scripts/import.py totals data/import_files/raw/totals/totals_2026.xlsx
+# this will read in the totals for the respective budgets from the Finance Ministry 
+# Report totals (monthly budget execution, xlsx):
+uv run python scripts/import.py totals data/import_files/raw/totals/total_report_2026.xlsx
+
+# Law totals (annual budget law, csv):
+uv run python scripts/import.py totals data/import_files/raw/totals/total_law_2026.csv
 
 # 4) Import GDP (auto-discover from raw/conversion_tables/gdp/...)
 uv run python scripts/import.py gdp
