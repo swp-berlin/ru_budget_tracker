@@ -464,7 +464,7 @@ def create_expenses_from_report_rows(
         # Link SUBCHAPTER
         subchapter_code = row_data["subchapter_code"]
         if subchapter_code and chapter_code:
-            subchapter_id = f"{chapter_code}{subchapter_code}"
+            subchapter_id = f"{subchapter_code}"
             dim = dim_lookup.get(("SUBCHAPTER", subchapter_id))
             if dim:
                 expense.dimensions.append(dim)
