@@ -12,7 +12,7 @@ from typing import Dict, List, Optional
 from pydantic import BaseModel
 import logging
 
-from models import Budget, Dimension, DimensionTypeLiteral
+from models import Budget, Dimension
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +21,10 @@ logger = logging.getLogger(__name__)
 # DATA STRUCTURES
 # =============================================================================
 
+
 class MergedRow(BaseModel):
     """A row from the Excel file after multi-line merging."""
+
     row_idx: int
     name: str
     ministry_code: Optional[str] = None
@@ -37,10 +39,11 @@ class MergedRow(BaseModel):
 # BUDGET METADATA (from filename)
 # =============================================================================
 
+
 def extract_budget_metadata_from_filename(excel_file_path: Path) -> dict:
     """
     Extract metadata from filename.
-    
+
     Patterns:
         law_2024.xlsx → type=LAW, year=2024
         report_2024_03.xlsx → type=REPORT, year=2024, month=3
@@ -112,6 +115,7 @@ def create_budget_from_metadata(metadata: dict) -> Budget:
 # EXCEL PARSING
 # =============================================================================
 
+
 def find_header_row(df: pd.DataFrame) -> int:
     """Find the row containing column headers (Наименование, Мін, etc.)."""
     for idx, *row in df.itertuples():
@@ -160,10 +164,12 @@ def clean_code_value(value) -> Optional[str]:
     return cleaned
 
 
-def merge_rows(df: pd.DataFrame, header_row_idx: int, col_mapping: Dict[str, int], multiplier: float = 1.0) -> List[MergedRow]:
+def merge_rows(
+    df: pd.DataFrame, header_row_idx: int, col_mapping: Dict[str, int], multiplier: float = 1.0
+) -> List[MergedRow]:
     """
     Merge multi-row entries where text spans multiple rows.
-    
+
     Returns list of MergedRow objects with consolidated text and codes.
     """
     logger.info("Merging multi-row entries...")
@@ -191,13 +197,25 @@ def merge_rows(df: pd.DataFrame, header_row_idx: int, col_mapping: Dict[str, int
                 continue
 
         # Get codes
-        ministry_code = clean_code_value(row.iloc[col_mapping["ministry"]] if "ministry" in col_mapping else None)
-        chapter_code = clean_code_value(row.iloc[col_mapping["chapter"]] if "chapter" in col_mapping else None)
-        subchapter_code = clean_code_value(row.iloc[col_mapping["subchapter"]] if "subchapter" in col_mapping else None)
-        program_code = clean_code_value(row.iloc[col_mapping["program"]] if "program" in col_mapping else None)
-        expense_type_code = clean_code_value(row.iloc[col_mapping["expense_type"]] if "expense_type" in col_mapping else None)
+        ministry_code = clean_code_value(
+            row.iloc[col_mapping["ministry"]] if "ministry" in col_mapping else None
+        )
+        chapter_code = clean_code_value(
+            row.iloc[col_mapping["chapter"]] if "chapter" in col_mapping else None
+        )
+        subchapter_code = clean_code_value(
+            row.iloc[col_mapping["subchapter"]] if "subchapter" in col_mapping else None
+        )
+        program_code = clean_code_value(
+            row.iloc[col_mapping["program"]] if "program" in col_mapping else None
+        )
+        expense_type_code = clean_code_value(
+            row.iloc[col_mapping["expense_type"]] if "expense_type" in col_mapping else None
+        )
 
-        has_codes = any([ministry_code, chapter_code, subchapter_code, program_code, expense_type_code])
+        has_codes = any(
+            [ministry_code, chapter_code, subchapter_code, program_code, expense_type_code]
+        )
 
         if not has_codes:
             # Decide: append to previous or accumulate forward
@@ -226,16 +244,18 @@ def merge_rows(df: pd.DataFrame, header_row_idx: int, col_mapping: Dict[str, int
                 except (ValueError, TypeError):
                     pass
 
-        merged_rows.append(MergedRow(
-            row_idx=idx,
-            name=full_name,
-            ministry_code=ministry_code,
-            chapter_code=chapter_code,
-            subchapter_code=subchapter_code,
-            program_code=program_code,
-            expense_type_code=expense_type_code,
-            value=value,
-        ))
+        merged_rows.append(
+            MergedRow(
+                row_idx=idx,
+                name=full_name,
+                ministry_code=ministry_code,
+                chapter_code=chapter_code,
+                subchapter_code=subchapter_code,
+                program_code=program_code,
+                expense_type_code=expense_type_code,
+                value=value,
+            )
+        )
 
     logger.info(f"Merged into {len(merged_rows)} rows")
     return merged_rows
@@ -245,10 +265,11 @@ def merge_rows(df: pd.DataFrame, header_row_idx: int, col_mapping: Dict[str, int
 # DEDUPLICATION
 # =============================================================================
 
+
 def deduplicate_dimensions(dimensions_list: List[Dimension]) -> List[Dimension]:
     """
     Remove duplicates and warn about data quality issues.
-    
+
     Deduplication key: (name, type, original_identifier, parent_id)
     """
     # Check for same identifier with different names (data quality warning)
@@ -262,7 +283,9 @@ def deduplicate_dimensions(dimensions_list: List[Dimension]) -> List[Dimension]:
     for (identifier, dim_type, parent_id), names in identifier_names.items():
         unique_names = set(names)
         if len(unique_names) > 1:
-            logger.warning(f"Same {dim_type} '{identifier}' (parent={parent_id}) has {len(unique_names)} names:")
+            logger.warning(
+                f"Same {dim_type} '{identifier}' (parent={parent_id}) has {len(unique_names)} names:"
+            )
             for name in sorted(unique_names):
                 logger.warning(f"  - {name[:150]}")
 
@@ -284,6 +307,7 @@ def deduplicate_dimensions(dimensions_list: List[Dimension]) -> List[Dimension]:
 # TEXT EXTRACTION
 # =============================================================================
 
+
 def extract_expense_type_name(full_text: str) -> str:
     """Extract expense type name from last parenthesis pair, or return full text."""
     last_close = full_text.rfind(")")
@@ -296,7 +320,7 @@ def extract_expense_type_name(full_text: str) -> str:
             depth += 1
         elif full_text[i] in ("(", "（", "\uff08"):
             if depth == 0:
-                return full_text[i + 1:last_close].strip()
+                return full_text[i + 1 : last_close].strip()
             depth -= 1
 
     return full_text

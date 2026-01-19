@@ -1,4 +1,3 @@
-from typing import Literal
 from models.base import Base
 
 from sqlalchemy import (

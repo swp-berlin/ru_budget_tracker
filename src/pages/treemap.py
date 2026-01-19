@@ -20,7 +20,8 @@ from dash import (
 )
 from dash.exceptions import PreventUpdate
 
-from utils import TreemapTransformer, TremapDataFetcher
+from utils.fetch import TremapDataFetcher
+from utils.transform import TreemapTransformer
 from utils.calculate import Calculator
 from utils.definitions import (
     LanguageTypeLiteral,

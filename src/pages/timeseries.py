@@ -20,7 +20,8 @@ from dash import (
 )
 from dash.exceptions import PreventUpdate
 
-from utils import BarChartDataFetcher, BarchartTransformer, fetch_budgets
+from utils.fetch import BarChartDataFetcher, fetch_budgets
+from utils.transform import BarchartTransformer
 from utils.calculate import Calculator
 from utils.definitions import (
     LanguageTypeLiteral,

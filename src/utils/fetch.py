@@ -3,8 +3,6 @@ from database import get_sync_session
 from models import Budget, Dimension, Expense
 from sqlalchemy import RowMapping, func, select
 
-from utils.definitions import HIERARCHY_OBJECTS
-
 
 def fetch_budgets() -> list[dict[str, Any]]:
     """Load all budgets from the database."""
