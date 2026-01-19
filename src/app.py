@@ -19,7 +19,7 @@ from dash import (
 )
 from dash.exceptions import PreventUpdate
 
-from utils import fetch_budgets
+from utils.fetch import fetch_budgets
 from utils.definitions import (
     LanguageTypeLiteral,
     UnitLiteral,
