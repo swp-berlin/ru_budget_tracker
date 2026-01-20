@@ -83,7 +83,7 @@ def fetch_treemap_data(
     unit: UnitLiteral = "ABSOLUTE",
     viewby: ViewByDimensionTypeLiteral = "MINISTRY",
     character_limit: int = 25,
-) -> tuple[list[str], list[str], list[float], list[str]]:
+) -> tuple[list[str], list[str], list[float], list[str], list[str]]:
     """Fetch and transform treemap data for the current filters."""
     data_fetcher = TremapDataFetcher()
     dimensions, programs, sum_mapping = data_fetcher.fetch_data(
@@ -91,7 +91,7 @@ def fetch_treemap_data(
         unit=unit,
     )
     transformer = TreemapTransformer()
-    labels, parents, values, metadata = transformer.transform_data(
+    children, parents, values, metadata, names = transformer.transform_data(
         dimensions,
         programs,
         sum_mapping,
@@ -102,16 +102,16 @@ def fetch_treemap_data(
     calculator = Calculator(unit=unit)
     values = [calculator.calculate(v) if v is not None else 0.0 for v in values]
     # Add line breaks for better label rendering
-    labels = [add_breaks(lbl, interval=character_limit) for lbl in labels]
-    parents = [add_breaks(par, interval=character_limit) for par in parents]
-    return labels, parents, values, metadata
+    names = [add_breaks(lbl, interval=character_limit) for lbl in names]
+    return children, parents, values, metadata, names
 
 
 def generate_figure(
-    labels: list[str],
+    children: list[str],
     parents: list[str],
     values: list[float],
     metadata: list[str],
+    names: list[str],
     spending_type: SpendingTypeLiteral = "ALL",
     language: LanguageTypeLiteral = "EN",
 ) -> go.Figure:
@@ -121,18 +121,13 @@ def generate_figure(
 
     # Use leaf-only sizing by setting branch values to 0
     parent_labels = set(parents)
-    area_values = [0 if lbl in parent_labels else v for lbl, v in zip(labels, values)]
-
-    # Prepare stable ids and map parent labels -> ids
-    node_ids = metadata
-    label_to_id: dict[str, str] = {label: node_id for label, node_id in zip(labels, node_ids)}
-    parent_ids: list[str] = ["" if p == "" else label_to_id.get(p, "") for p in parents]
+    area_values = [0 if lbl in parent_labels else v for lbl, v in zip(children, values)]
 
     # Build figure
     fig = px.treemap(
-        names=labels,
-        parents=parent_ids,
-        ids=node_ids,
+        names=names,
+        parents=parents,
+        ids=children,
         values=area_values,
         hover_data=None,
     )
@@ -153,14 +148,12 @@ def generate_figure(
 
     # Populate hover with original values and percentages; include explicit node id
     fig.data[0].customdata = [
-        [v, m, pp, rp, nid]
-        for v, m, pp, rp, nid in zip(
-            values, metadata, parent_percentages, root_percentages, node_ids
-        )
+        [v, m, pp, rp]
+        for v, m, pp, rp in zip(values, metadata, parent_percentages, root_percentages)
     ]
     fig.data[0].hovertemplate = (
         "<b>%{label}</b><br>"
-        "ID: %{customdata[4]}<br>"
+        "ID: %{customdata[1]}<br>"
         "Value: %{customdata[0]:,.1f} Billion RUB<br>"
         "% Parent: %{customdata[2]:.2f}%<br>"
         "% Federal Budget: %{customdata[3]:.2f}%<br>"
@@ -212,15 +205,15 @@ def update_figure_from_filters(
     unit: UnitLiteral = "ABSOLUTE",
 ) -> tuple[go.Figure, dict[str, str]]:
     # Fetch and render using the selected values from stores
-    labels, parents, values, metadata = fetch_treemap_data(
+    children, parents, values, metadata, names = fetch_treemap_data(
         budget_id=budget_id,
         spending_type=spending_type,
         unit=unit,
         viewby=viewby,
     )
-    return generate_figure(labels, parents, values, metadata, spending_type, language="EN"), {
-        "visibility": "visible"
-    }
+    return generate_figure(
+        children, parents, values, metadata, names, spending_type, language="EN"
+    ), {"visibility": "visible"}
 
 
 @callback(
@@ -267,7 +260,7 @@ def download_treemap_data(
     Returns:
         dict[str, Any]: The data for download.
     """
-    labels, parents, values, metadata = fetch_treemap_data(
+    children, parents, values, metadata, names = fetch_treemap_data(
         budget_id=budget_id,
         spending_type=spending_type,
         unit=unit,
@@ -276,7 +269,8 @@ def download_treemap_data(
     return dcc.send_data_frame(  # type: ignore
         pd.DataFrame(
             {
-                "Label": labels,
+                "Name": names,
+                "Id": children,
                 "Parent": parents,
                 "Value": values,
                 "Level": metadata,

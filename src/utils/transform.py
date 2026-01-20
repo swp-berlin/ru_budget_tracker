@@ -85,42 +85,80 @@ class TreemapTransformer:
         name_mapping: dict[int, str],
         value_mapping: dict[int, float],
         root_name: str = "Federal Budget",
-    ) -> tuple[list[str], list[str], list[float], list[str]]:
-        """Build the treemap lists (names, parents, values, metadata) from hierarchy."""
-        seen_ids: set[int] = set()
+    ) -> tuple[list[str], list[str], list[float], list[str], list[str]]:
+        """Build the treemap lists (names, parents, values, metadata) from hierarchy.
+
+        Since the same dimension (e.g., CHAPTER) can appear under different parents
+        (e.g., different MINISTRYs), we create path-based unique identifiers.
+        This allows the treemap to correctly show the same dimension under multiple parents.
+        """
+        # Track seen paths to avoid duplicates - key is the full path from root
+        seen_paths: set[str] = set()
         metadata: list[str] = ["root"]
         names = [root_name]
         parents = [""]
+        children: list[str] = [root_name]
         values: list[float] = [0.0]
         highlevel_value = 0.0
+
+        # Ensure an intuitive ordering: MINISTRY -> CHAPTER -> SUBCHAPTER -> PROGRAM_*
+        LEVEL_ORDER_INDEX = {"MINISTRY": 0, "CHAPTER": 1, "SUBCHAPTER": 2, "PROGRAM": 3}
+
+        def _get_level_sort_key(level_name: str) -> tuple[int, int]:
+            """Sort key for hierarchy levels, ensuring PROGRAM_0 < PROGRAM_1 < PROGRAM_2."""
+            parts = level_name.split("_")
+            base_name = parts[0]
+            primary_order = LEVEL_ORDER_INDEX.get(base_name, 100)
+            secondary_order = 0
+            if base_name == "PROGRAM" and len(parts) > 1 and parts[1].isdigit():
+                secondary_order = int(parts[1])
+            return (primary_order, secondary_order)
+
         for _, levels in hierarchy.items():
-            parent_level = root_name
-            # Ensure an intuitive ordering: MINISTRY -> CHAPTER -> SUBCHAPTER -> others
-            LEVEL_ORDER_INDEX = {"MINISTRY": 0, "CHAPTER": 1, "SUBCHAPTER": 2}
-            # Sort levels based on predefined order, ignoring original identifier levels
+            # Build path-based identifiers for this expense's hierarchy
+            # parent_path tracks the full path string for parent references
+            parent_path = root_name
+
+            # Sort levels based on predefined order
             sorted_level_names = sorted(
                 (level_name for level_name in levels.keys() if not level_name.endswith("_ORIG_ID")),
-                key=lambda x: LEVEL_ORDER_INDEX.get(x.split("_")[0], 100),
+                key=_get_level_sort_key,
             )
+
             for level_name in sorted_level_names:
                 dim_id = levels[level_name]
-                if dim_id in seen_ids:
-                    parent_level = str(dim_id)
+                # Create a path-based unique identifier: "parent_path/dim_id"
+                # This ensures the same dim_id under different parents creates separate nodes
+                current_path = f"{parent_path}/{dim_id}"
+
+                if current_path in seen_paths:
+                    # This exact path already exists, just update parent reference for next level
+                    parent_path = current_path
                     continue
-                seen_ids.add(dim_id)
+
+                # New unique path, add to lists
+                seen_paths.add(current_path)
+                # Create metadata entry
                 metadata.append(level_name.title() + str(dim_id))
-                names.append(str(dim_id))
-                parents.append(parent_level)
-                parent_level = str(dim_id)
+                # Add name from mapping or default
+                names.append(name_mapping.get(dim_id, f"Unknown {dim_id}"))
+                # Add parent and child references
+                children.append(current_path)
+                parents.append(parent_path)
+                # Add value from mapping or default to 0
                 value = value_mapping.get(dim_id, 0)
                 values.append(value)
+                # Accumulate highlevel value for top-level nodes
                 if level_name == sorted_level_names[0]:
                     highlevel_value += value
+
+                # Update parent_path for the next level in this hierarchy
+                parent_path = current_path
 
         # Set Federal Budget value
         values[0] = highlevel_value
 
-        return names, parents, values, metadata
+        return children, parents, values, metadata, names
 
     def _create_id_name_mapping(
         self,
@@ -202,10 +240,10 @@ class TreemapTransformer:
         translated_names: bool = False,
         spending_type: SpendingTypeLiteral = "ALL",
         viewby: ViewByDimensionTypeLiteral = "MINISTRY",
-    ) -> tuple[list[str], list[str], list[float], list[str]]:
+    ) -> tuple[list[str], list[str], list[float], list[str], list[str]]:
         """Transform DB rows into treemap lists expected by the figure creator."""
         if not dimensions:
-            return [], [], [], []
+            return [], [], [], [], []
 
         # Extend sum mapping to include all hierarchy levels
         program_paths = self._calculate_program_hierarchy(programs)
