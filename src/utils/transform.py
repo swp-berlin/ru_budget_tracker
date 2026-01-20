@@ -86,15 +86,15 @@ class TreemapTransformer:
         value_mapping: dict[int, float],
         root_name: str = "Federal Budget",
     ) -> tuple[list[str], list[str], list[float], list[str]]:
-        """Build the treemap lists (labels, parents, values, metadata) from hierarchy."""
-        ids = [0]
+        """Build the treemap lists (names, parents, values, metadata) from hierarchy."""
+        seen_ids: set[int] = set()
         metadata: list[str] = ["root"]
-        labels = [root_name]
+        names = [root_name]
         parents = [""]
         values: list[float] = [0.0]
         highlevel_value = 0.0
-        for expense_id, levels in hierarchy.items():
-            previous_level_name = root_name
+        for _, levels in hierarchy.items():
+            parent_level = root_name
             # Ensure an intuitive ordering: MINISTRY -> CHAPTER -> SUBCHAPTER -> others
             LEVEL_ORDER_INDEX = {"MINISTRY": 0, "CHAPTER": 1, "SUBCHAPTER": 2}
             # Sort levels based on predefined order, ignoring original identifier levels
@@ -103,17 +103,16 @@ class TreemapTransformer:
                 key=lambda x: LEVEL_ORDER_INDEX.get(x.split("_")[0], 100),
             )
             for level_name in sorted_level_names:
-                id = hierarchy[expense_id][level_name]
-                label_name = name_mapping.get(id, "Unknown")
-                if id in ids:
-                    previous_level_name = label_name
+                dim_id = levels[level_name]
+                if dim_id in seen_ids:
+                    parent_level = str(dim_id)
                     continue
-                ids.append(id)
-                metadata.append(level_name.title() + str(id))
-                labels.append(label_name)
-                parents.append(previous_level_name)
-                previous_level_name = label_name
-                value = value_mapping.get(id, 0)
+                seen_ids.add(dim_id)
+                metadata.append(level_name.title() + str(dim_id))
+                names.append(str(dim_id))
+                parents.append(parent_level)
+                parent_level = str(dim_id)
+                value = value_mapping.get(dim_id, 0)
                 values.append(value)
                 if level_name == sorted_level_names[0]:
                     highlevel_value += value
@@ -121,7 +120,7 @@ class TreemapTransformer:
         # Set Federal Budget value
         values[0] = highlevel_value
 
-        return labels, parents, values, metadata
+        return names, parents, values, metadata
 
     def _create_id_name_mapping(
         self,
