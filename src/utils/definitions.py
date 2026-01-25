@@ -14,10 +14,10 @@ SpendingTypeLiteral = Literal["ALL", "MILITARY"]
 UnitLiteral = Literal[
     "ABSOLUTE",
     "PERCENT_GDP_FULL_YEAR",
-    "PERCENT_GDP_YEAR_TO_YEAR",
+    "PERCENT_GDP_YEAR_TO_DATE",
     "PERCENT_FULL_YEAR_SPENDING",
-    "PERCENT_YEAR_TO_YEAR_SPENDING",
-    "PERCENT_YEAR_TO_YEAR_REVENUE",
+    "PERCENT_YEAR_TO_DATE_SPENDING",
+    "PERCENT_YEAR_TO_DATE_REVENUE",
 ]
 # (Chapter = 02*) oder (Program = 31*)  oder (Ministry = 187) oder (Ministry = 180 und Chapter = 03*)
 MilitarySpendingDictionary: dict[str, Pattern | list[dict[str, Pattern]]] = {
@@ -30,4 +30,34 @@ MilitarySpendingDictionary: dict[str, Pattern | list[dict[str, Pattern]]] = {
             "CHAPTER": compile(r"^03.*"),
         }
     ],
+}
+
+UNIT_OPTIONS: list[tuple[str, str]] = [
+    ("Billion RUB", "ABSOLUTE"),
+    ("Dollars", "DOLLARS"),
+    ("% full-year GDP", "PERCENT_GDP_FULL_YEAR"),
+    ("% year-to-date GDP", "PERCENT_GDP_YEAR_TO_DATE"),
+    ("% full-year spending", "PERCENT_FULL_YEAR_SPENDING"),
+    ("% year-to-date spending", "PERCENT_YEAR_TO_DATE_SPENDING"),
+    ("% year-to-date revenue", "PERCENT_YEAR_TO_DATE_REVENUE"),
+]
+
+unit_map = {
+    "ABSOLUTE": "Billion RUB",
+    "DOLLARS": "Dollars",
+    "PERCENT_GDP_FULL_YEAR": "% full-year GDP",
+    "PERCENT_GDP_YEAR_TO_DATE": "% year-to-date GDP",
+    "PERCENT_FULL_YEAR_SPENDING": "% full-year spending",
+    "PERCENT_YEAR_TO_DATE_SPENDING": "% year-to-date spending",
+    "PERCENT_YEAR_TO_DATE_REVENUE": "% year-to-date revenue",
+}
+
+viewby_map = {
+    "MINISTRY": "Ministry",
+    "CHAPTER": "Chapter",
+    "PROGRAM": "Program",
+}
+spending_type_map = {
+    "ALL": "All Spending",
+    "MILITARY": "Military Only",
 }

@@ -11,14 +11,13 @@ def fetch_budgets() -> list[dict[str, Any]]:
             session.execute(
                 select(
                     Budget.id,
-                    Budget.description.label("name"),
-                    Budget.description_translated.label("name_translated"),
+                    Budget.original_identifier,
                     Budget.type,
                 )
                 .where(
                     Budget.type.not_like("TOTAL%"),
                 )
-                .order_by(Budget.description.desc())
+                .order_by(Budget.published_at.desc(), Budget.original_identifier.desc())
             )
             .unique()
             .mappings()
@@ -88,6 +87,8 @@ class TremapDataFetcher:
 
         return {sum["dimension_id"]: sum["total_expense_value"] for sum in sums}
 
+    # This is a recursive CTE to fetch all programs in the hierarchy for given leave program IDs
+
     def _fetch_treemap_programs_recursive(
         self, leave_program_ids: list[int]
     ) -> Sequence[RowMapping]:
@@ -153,45 +154,155 @@ class TremapDataFetcher:
         return dimensions, programs, sum_mapping
 
 
-# TODO Fix
 class BarChartDataFetcher:
-    def fetch_barchart_data(**kwargs) -> Sequence[RowMapping]:
+    def fetch_budget(
+        self,
+        budget_id: int,
+    ) -> Budget:
+        """
+        Load a single budget from the database based on its ID.
+        Args:
+            budget_id (int): The ID of the budget to fetch.
+        Returns:
+            Sequence[RowMapping]: The loaded budget data.
+        """
+        select_stmt = select(Budget).where(Budget.id == budget_id)
+        with get_sync_session() as session:
+            budget: Budget | None = session.scalars(select_stmt).one_or_none()
+
+        if budget is None:
+            raise ValueError(f"Budget with ID {budget_id} not found.")
+
+        return budget
+
+    def fetch_budgets_by_type(
+        self,
+        budget_id: int,
+    ) -> tuple[Sequence[RowMapping], str]:
+        """
+        Fetch budgets of type REPORT and TOTAL-REPORT-EXPENSE corresponding to a LAW budget.
+        """
+
+        def _fetch_law_budget_expenses() -> Sequence[RowMapping]:
+            """
+            Fetch budgets of type LAW and their corresponding TOTAL budgets.
+            Returns a union of:
+            - LAW budgets with MINISTRY dimension expenses (summed)
+            - LAW+TOTAL budgets with CHAPTER dimension expenses (summed * 1000)
+            """
+            # Import the association table for explicit joins
+            from models.budget import expense_dimension_association_table as assoc_table
+
+            # First query: LAW budgets with MINISTRY dimension type
+            ministry_query = (
+                select(
+                    Budget.id,
+                    Budget.original_identifier,
+                    Budget.published_at,
+                    Budget.type,
+                    func.sum(Expense.value).label("total_value"),
+                )
+                .select_from(Budget)
+                .join(Expense, Budget.id == Expense.budget_id, isouter=True)
+                .join(assoc_table, Expense.id == assoc_table.c.expense_id, isouter=True)
+                .join(Dimension, assoc_table.c.dimension_id == Dimension.id, isouter=True)
+                .where(Budget.type == "LAW")
+                .where(Dimension.type == "MINISTRY")
+                .group_by(Budget.id, Budget.original_identifier, Budget.type)
+            )
+
+            # Second query: LAW+TOTAL budgets with CHAPTER dimension type (value * 1000)
+            chapter_total_query = (
+                select(
+                    Budget.id,
+                    Budget.original_identifier,
+                    Budget.published_at,
+                    Budget.type,
+                    (func.sum(Expense.value) * 1000).label("total_value"),
+                )
+                .select_from(Budget)
+                .join(Expense, Budget.id == Expense.budget_id, isouter=True)
+                .join(assoc_table, Expense.id == assoc_table.c.expense_id, isouter=True)
+                .join(Dimension, assoc_table.c.dimension_id == Dimension.id, isouter=True)
+                .where(Dimension.type == "CHAPTER")
+                .where(Budget.type == "TOTAL")
+                .where(Budget.original_identifier.like("%LAW%"))
+                .group_by(Budget.id, Budget.original_identifier, Budget.type)
+            )
+
+            # Union both queries
+            union_query = ministry_query.union(chapter_total_query)
+
+            with get_sync_session() as session:
+                results = session.execute(union_query).mappings().all()
+
+            return results
+
+        def _fetch_execution_budget_expenses() -> Sequence[RowMapping]:
+            """
+            Fetch budgets of type REPORT and their corresponding TOTAL budgets.
+            Returns REPORT budgets where:
+            - dimension.type = 'MINISTRY', OR
+            - dimension.type is NULL and budget.type = 'TOTAL'
+            """
+            # Import the association table for explicit joins
+            from models.budget import expense_dimension_association_table as assoc_table
+            from sqlalchemy import or_, and_, extract
+
+            # Query: REPORT budgets with MINISTRY dimension OR TOTAL budgets with NULL dimension
+            report_query = (
+                select(
+                    Budget.id,
+                    Budget.original_identifier,
+                    Budget.published_at,
+                    Budget.type,
+                    func.sum(Expense.value).label("total_value"),
+                )
+                .select_from(Budget)
+                .join(Expense, Budget.id == Expense.budget_id, isouter=True)
+                .join(assoc_table, Expense.id == assoc_table.c.expense_id, isouter=True)
+                .join(Dimension, assoc_table.c.dimension_id == Dimension.id, isouter=True)
+                .where(Budget.type.in_(["REPORT", "TOTAL"]))
+                .where(
+                    or_(
+                        Dimension.type == "MINISTRY",
+                        and_(
+                            Dimension.type.is_(None),
+                            Budget.type == "TOTAL",
+                            Budget.original_identifier.like("%EXPENSE%"),
+                        ),
+                    )
+                )
+                # Filter to only include budgets published in months 3, 6, 9, or 12 (quarterly)
+                .where(extract("month", Budget.published_at).in_([3, 6, 9, 12]))
+                .group_by(Budget.id, Budget.original_identifier, Budget.type)
+            )
+
+            with get_sync_session() as session:
+                results = session.execute(report_query).mappings().all()
+
+            return results
+
+        initial_budget = self.fetch_budget(budget_id)
+        if initial_budget.type == "REPORT":
+            return _fetch_execution_budget_expenses(), "EXECUTION"
+        elif initial_budget.type == "LAW":
+            return _fetch_law_budget_expenses(), "LAW"
+        else:
+            raise ValueError(f"Unsupported budget type: {initial_budget.type} for ID {budget_id}")
+
+    def fetch_data(
+        self,
+        budget_id: int | None = None,
+        unit: str = "ABSOLUTE",
+    ) -> tuple[Sequence[RowMapping], str]:
         """
         Load budget and expense data from the database and return as a DataFrame.
         Takes an optional original_identifier to filter budgets.
         """
-        # Build the select statement
-        # We need to fetch budgets along with their (summed) expenses and the
-        select_stmt = (
-            select(
-                Budget.id.label("budget_id"),
-                Budget.original_identifier.label("original_identifier"),
-                Budget.published_at.label("published_at"),
-                Budget.type.label("type"),
-                Expense.id.label("expense_id"),
-                Dimension.id.label("dimension_id"),
-                Dimension.type.label("dimension_type"),
-                Dimension.name.label("dimension_name"),
-                Dimension.name_translated.label("dimension_name_translated"),
-                Expense.value.label("expense_value"),
-            )
-            .join(Dimension.expenses, isouter=True)
-            .join(Expense.budget, isouter=True)
-        )
+        if budget_id is None:
+            raise ValueError("budget_id must be provided to fetch data.")
 
-        if kwargs.get("budget_dataset") is not None:
-            select_stmt = select_stmt.where(Budget.id == kwargs.get("budget_dataset"))
+        budgets, type = self.fetch_budgets_by_type(budget_id=budget_id)
 
-        if kwargs.get("spending_type") != "ALL":
-            select_stmt = select_stmt.where(
-                Dimension.id.in_(
-                    select(Dimension.id)
-                    .join(Dimension.expenses)
-                    .where(Expense.dimensions.any(Dimension.name == kwargs.get("spending_type")))
-                )
-            )
-
-        with get_sync_session() as session:
-            budgets = session.execute(select_stmt).unique().mappings().all()
-
-        return budgets
+        return budgets, type

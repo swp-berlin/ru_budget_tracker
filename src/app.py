@@ -20,12 +20,7 @@ from dash import (
 from dash.exceptions import PreventUpdate
 
 from utils.fetch import fetch_budgets
-from utils.definitions import (
-    LanguageTypeLiteral,
-    UnitLiteral,
-    SpendingTypeLiteral,
-    ViewByDimensionTypeLiteral,
-)
+from utils.definitions import UNIT_OPTIONS, unit_map, spending_type_map, viewby_map
 
 external_stylesheets = [
     dbc.themes.BOOTSTRAP,
@@ -58,16 +53,6 @@ SPENDING_TYPE_OPTIONS: list[tuple[str, str]] = [
     ("Military Only", "MILITARY"),
 ]
 
-UNIT_OPTIONS: list[tuple[str, str]] = [
-    ("Billion RUB", "ABSOLUTE"),
-    ("Dollars", "DOLLARS"),
-    ("% full-year GDP", "PERCENT_GDP_FULL_YEAR"),
-    ("% year-to-year GDP", "PERCENT_GDP_YEAR_TO_YEAR"),
-    ("% full-year spending", "PERCENT_FULL_YEAR_SPENDING"),
-    ("% year-to-year spending", "PERCENT_YEAR_TO_YEAR_SPENDING"),
-    ("% year-to-year revenue", "PERCENT_YEAR_TO_YEAR_REVENUE"),
-]
-
 viewby_items = [
     dbc.DropdownMenuItem(
         html.Span(label, title=label),
@@ -97,7 +82,7 @@ layout = html.Div(
         # Store currently selected filter values (these replace dcc.Dropdown.value)
         dcc.Store(id="store-budget-options"),
         dcc.Store(id="store-budget-id"),
-        dcc.Store(id="store-viewby", data="MINISTRY"),
+        dcc.Store(id="store-viewby", data="CHAPTER"),
         dcc.Store(id="store-spending-type", data="ALL"),
         dcc.Store(id="store-unit", data="ABSOLUTE"),
         dcc.Store(id="store-language", data="RU"),
@@ -272,16 +257,21 @@ app.layout = html.Div(
     Output("btn-switch-graphs", "children"),
     Output("btn-switch-graphs", "title"),
     Input("url", "pathname"),
+    Input("store-budget-id", "data"),
 )
-def switch_graphs(pathname: str | None):
+def switch_graphs(pathname: str | None, budget_id: int | None):
     """Swap destination, icon, and label based on current page.
 
     - On root (/): link to /timeseries with stacked_bar_chart icon and label 'Timeseries'.
     - On /timeseries: link to / with dashboard icon and label 'Treemap'.
+    - Includes budget_id as query parameter if available.
     """
+    # Build query string with budget_id if available
+    query_string = f"?budget_id={budget_id}" if budget_id is not None else ""
+
     if pathname == "/timeseries":
         return (
-            "/",
+            f"/{query_string}",
             [
                 html.Img(src="/assets/icons/dashboard.svg", alt="Treemap icon"),
                 html.Span("Treemap", className="btn-label"),
@@ -290,7 +280,7 @@ def switch_graphs(pathname: str | None):
         )
     # Default: treat anything else as root
     return (
-        "/timeseries",
+        f"/timeseries{query_string}",
         [
             html.Img(src="/assets/icons/stacked_bar_chart.svg", alt="Timeseries icon"),
             html.Span("Timeseries", className="btn-label"),
@@ -407,13 +397,12 @@ def select_unit(_clicks):
     Output("store-budget-id", "data"),
     Output("menu-budget", "children"),
     Input("url", "pathname"),  # fire once on load
+    State("url", "search"),  # get URL search params to check for budget_id
     prevent_initial_call=False,
 )
-def init_budgets(_):
+def init_budgets(_, url_search: str | None):
     # Fetch once and share everywhere via Store
-    options = [
-        {"label": b["name_translated"] or b["name"], "value": b["id"]} for b in fetch_budgets()
-    ]
+    options = [{"label": b["original_identifier"], "value": b["id"]} for b in fetch_budgets()]
     # Build menu items with pattern ids
     items = [
         dbc.DropdownMenuItem(
@@ -422,7 +411,22 @@ def init_budgets(_):
         )
         for opt in options
     ]
+
+    # Check if budget_id is in URL params, otherwise use default
     default_value = options[0]["value"] if options else None
+    if url_search:
+        from urllib.parse import parse_qs, unquote_plus
+
+        params = parse_qs(url_search.replace("?", ""))
+        budget_id_raw = params.get("budget_id", [None])[0]
+        if budget_id_raw:
+            budget_id_raw = unquote_plus(budget_id_raw).strip()
+            if budget_id_raw.isdigit():
+                # Verify the budget_id exists in options
+                budget_id_int = int(budget_id_raw)
+                if any(opt["value"] == budget_id_int for opt in options):
+                    default_value = budget_id_int
+
     return options, default_value, items
 
 
@@ -542,24 +546,6 @@ def show_selected_budget_label(budget_id: int | None, options: list[dict[str, An
     Input("store-unit", "data"),
 )
 def update_menu_labels(viewby: str | None, spending_type: str | None, unit: str | None):
-    viewby_map = {
-        "MINISTRY": "Ministry",
-        "CHAPTER": "Chapter",
-        "PROGRAM": "Program",
-    }
-    spending_type_map = {
-        "ALL": "All Spending",
-        "MILITARY": "Military Only",
-    }
-    unit_map = {
-        "ABSOLUTE": "Billion RUB",
-        "DOLLARS": "Dollars",
-        "PERCENT_GDP_FULL_YEAR": "% full-year GDP",
-        "PERCENT_GDP_YEAR_TO_YEAR": "% year-to-year GDP",
-        "PERCENT_FULL_YEAR_SPENDING": "% full-year spending",
-        "PERCENT_YEAR_TO_YEAR_SPENDING": "% year-to-year spending",
-        "PERCENT_YEAR_TO_YEAR_REVENUE": "% year-to-year revenue",
-    }
     return (
         viewby_map.get(viewby or "", "View by"),
         spending_type_map.get(spending_type or "", "Spending type"),

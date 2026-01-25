@@ -264,26 +264,57 @@ class TreemapTransformer:
 
 
 class BarchartTransformer:
-    def __init__(self, rows: Sequence[RowMapping], translated: bool = False):
-        self.rows = rows
-        self.translated = translated
-
-    def transform_data(self) -> pd.DataFrame:
-        """Transform raw rows into a dataframe suitable for barchart visualization."""
-        rows = self.rows
-        if not rows:
+    def _transform_budget_totals(self, budgets: Sequence[RowMapping]) -> pd.DataFrame:
+        """Transform law budget rows into a dataframe suitable for barchart visualization."""
+        if not budgets:
             return pd.DataFrame()
-        expenses = [
-            row["expense_value"] if row["type"] != "TOTAL" else -row["expense_value"]
-            for row in rows
-        ]
-        dates = [row["published_at"] for row in rows]
-        types = [row["type"] for row in rows]
+
+        # For every published_at, subtract the law value from the total value
+        # and set new value as classified expenses
+
+        expenses = [budget["total_value"] for budget in budgets if budget["type"] != "TOTAL"]
+        dates = [budget["published_at"] for budget in budgets if budget["type"] != "TOTAL"]
+        types = [budget["type"] for budget in budgets if budget["type"] != "TOTAL"]
 
         df = pd.DataFrame({"expenses": expenses, "dates": dates, "types": types})
-        # Parse dates to datetime
-        df["dates"] = pd.to_datetime(df["dates"])
-        # Truncate dates to years
-        df["dates"] = df["dates"].dt.to_period("Y").dt.to_timestamp()  # type: ignore
+
+        # For every TOTAL-LAW budget, find the corresponding LAW budget and subtract its value
+        for budget in budgets:
+            if budget["type"] == "TOTAL":
+                corresponding_law = next(
+                    (
+                        b
+                        for b in budgets
+                        if b["published_at"] == budget["published_at"] and b["type"] != "TOTAL"
+                    ),
+                    None,
+                )
+                if corresponding_law is None:
+                    continue
+                law_value = corresponding_law["total_value"] if corresponding_law else 0.0
+                classified_expense = budget["total_value"] - law_value
+
+                df = pd.concat(
+                    [
+                        df,
+                        pd.DataFrame(
+                            {
+                                "expenses": [classified_expense],
+                                "dates": [budget["published_at"]],
+                                "types": ["CLASSIFIED"],
+                            }
+                        ),
+                    ],
+                    ignore_index=True,
+                )
+
+        return df
+
+    def transform_data(self, budgets: Sequence[RowMapping]) -> pd.DataFrame:
+        """Transform raw rows into a dataframe suitable for barchart visualization."""
+        if not budgets:
+            return pd.DataFrame()
+
+        df = self._transform_budget_totals(budgets)
 
         return df
