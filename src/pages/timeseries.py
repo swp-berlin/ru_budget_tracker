@@ -78,7 +78,6 @@ def fetch_timeseries_data(
     data_fetcher = BarChartDataFetcher()
     budgets, type = data_fetcher.fetch_data(
         budget_id=budget_id,
-        unit=unit,
     )
     transformer = BarchartTransformer()
     df = transformer.transform_data(budgets=budgets)
@@ -123,16 +122,22 @@ def generate_figure(
         xaxis_title="",
     )
 
-    fig.data[0].customdata = [[unit_label] for _ in df["dates"]]
-    fig.data[
-        0
-    ].hovertemplate = "<b>%{x}</b><br>Value: %{y:,.1f} %{customdata[0]}<br><extra></extra>"
-    fig.data[1].customdata = [[unit_label] for _ in df["dates"]]
-    fig.data[
-        1
-    ].hovertemplate = (
-        "<b>%{x}</b><br>Value: %{y:,.1f} %{customdata[0]} (classified)<br><extra></extra>"
-    )
+    # Set custom hover templates for each trace
+    # First trace is regular budget data (LAW or REPORT)
+    if len(fig.data) > 0:  # type: ignore
+        fig.data[0].customdata = [[unit_label] for _ in df["dates"]]
+        fig.data[
+            0
+        ].hovertemplate = "<b>%{x}</b><br>Value: %{y:,.1f} %{customdata[0]}<br><extra></extra>"
+
+    # Second trace is classified spending (only present when TOTAL budget exists)
+    if len(fig.data) > 1:  # type: ignore
+        fig.data[1].customdata = [[unit_label] for _ in df["dates"]]
+        fig.data[
+            1
+        ].hovertemplate = (
+            "<b>%{x}</b><br>Value: %{y:,.1f} %{customdata[0]} (classified)<br><extra></extra>"
+        )
 
     return fig
 

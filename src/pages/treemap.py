@@ -89,7 +89,6 @@ def fetch_treemap_data(
     data_fetcher = TremapDataFetcher()
     dimensions, programs, sum_mapping = data_fetcher.fetch_data(
         budget_id=budget_id,
-        unit=unit,
     )
     transformer = TreemapTransformer()
     children, parents, values, metadata, names = transformer.transform_data(
@@ -131,6 +130,7 @@ def generate_figure(
         ids=children,
         values=area_values,
         hover_data=None,
+        maxdepth=4,
     )
     # Layout adjustments
     # Change font to Source Sans 3 and make it wrapped
@@ -139,16 +139,56 @@ def generate_figure(
         font=dict(family="Source Sans 3"),
     )
 
-    # Color classified spending nodes in gray
-    # metadata structure: [level_name, budget_type] - check if budget_type is "CLASSIFIED"
-    colors = []
-    for m in metadata:
-        if len(m) > 1 and m[1] == "CLASSIFIED":
-            colors.append("#9e9e9e")  # Gray for classified
-        else:
-            colors.append(None)  # Use default color
+    # Build color list for specific nodes
+    # metadata structure: [level_name, budget_type]
+    # - Root level: white
+    # - MINISTRY nodes: gray (top-level only, not children)
+    # - CLASSIFIED nodes: gray
+    # - Others: use default treemap colorway (based on root parent)
 
-    # Apply colors - only set color for classified nodes, let others use default
+    # First, identify ministry-level nodes and assign them distinct colors from the colorway
+    default_colorway = px.colors.qualitative.Plotly  # Default Plotly color palette
+    ministry_color_map = {}  # Map ministry node id -> color for children inheritance
+    ministry_index = 0
+
+    for child_id, parent, m in zip(children, parents, metadata):
+        # Ministry nodes are directly under the root (Federal Budget)
+        if len(m) > 0 and m[0].lower().startswith("ministry"):
+            ministry_color_map[child_id] = default_colorway[ministry_index % len(default_colorway)]
+            ministry_index += 1
+
+    # Build a map of each node to its ministry ancestor for color inheritance
+    def get_ministry_ancestor(node_id: str) -> str | None:
+        """Traverse up to find the ministry ancestor of a node."""
+        id_to_parent = dict(zip(children, parents))
+        current = node_id
+        while current:
+            if current in ministry_color_map:
+                return current
+            current = id_to_parent.get(current)
+        return None
+
+    colors = []
+    for child_id, parent, m in zip(children, parents, metadata):
+        # Root level (no parent) - white
+        if not parent:
+            colors.append("#ffffff")  # White for root
+        # Check for classified nodes
+        elif len(m) > 1 and m[1] == "CLASSIFIED":
+            colors.append("#9e9e9e")  # Gray for classified
+        # Check for ministry-level nodes
+        elif len(m) > 0 and m[0].lower().startswith("ministry"):
+            colors.append("#9e9e9e")  # Gray for ministry
+        else:
+            # Inherit color from ministry ancestor
+            ministry = get_ministry_ancestor(child_id)
+            colors.append(
+                ministry_color_map.get(ministry, default_colorway[0])
+                if ministry
+                else default_colorway[0]
+            )
+
+    # Apply colors to all nodes
     fig.update_traces(marker_colors=colors)
 
     # If spending type is military, adjust the color of the root tiles to #7e8f5f
@@ -168,6 +208,7 @@ def generate_figure(
     fig.data[0].hovertemplate = (
         "<b>%{label}</b><br>"
         "%{customdata[0]:,.1f} Billion RUB<br>"
+        "%{customdata[1][0]}<br>"
         "% Parent: %{customdata[2]:.2f}%<br>"
         "% Federal Budget: %{customdata[3]:.2f}%<br>"
         "<extra></extra>"

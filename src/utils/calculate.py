@@ -29,6 +29,12 @@ class Calculator:
             value_in_billions = self.calculate_conversion(value_in_billions)
         return value_in_billions
 
+    def _ppp_dollars(self, value: float) -> float:
+        """Calculate value in PPP dollars."""
+        if self.conversion_from_to:
+            value = self.calculate_conversion(value)
+        return value / 1_000_000_000
+
     def _percentage_gdp_full_year(self, value: float, date: date) -> float:
         return value
 

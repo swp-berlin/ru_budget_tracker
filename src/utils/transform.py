@@ -156,6 +156,9 @@ class TreemapTransformer:
         """
         # Track seen paths to avoid duplicates - key is the full path from root
         seen_paths: set[str] = set()
+        # Track program placement to prevent the same program from appearing under different parents
+        # This avoids false assignments when expense-dimension associations are inconsistent
+        seen_program_paths: dict[int, str] = {}
         metadata: list[list[str]] = [["root", ""]]
         names = [root_name]
         parents = [""]
@@ -207,6 +210,14 @@ class TreemapTransformer:
                 # This ensures the same dim_id under different parents creates separate nodes
                 current_path = f"{parent_path}/{dim_id}"
 
+                # Prevent programs from being placed under multiple parents
+                # If a program already has a recorded path, skip inconsistent placements
+                if level_name.startswith("PROGRAM") and isinstance(dim_id_int, int):
+                    existing_program_path = seen_program_paths.get(dim_id_int)
+                    if existing_program_path and existing_program_path != current_path:
+                        # Skip the remainder of this branch to avoid false duplication
+                        break
+
                 if current_path in seen_paths:
                     # This exact path already exists, just update parent reference for next level
                     parent_path = current_path
@@ -214,10 +225,12 @@ class TreemapTransformer:
 
                 # New unique path, add to lists
                 seen_paths.add(current_path)
+                # Record program path once to enforce unique placement across the treemap
+                if level_name.startswith("PROGRAM") and isinstance(dim_id_int, int):
+                    seen_program_paths.setdefault(dim_id_int, current_path)
                 # Create metadata entry - use dim_id_int for lookups
-                metadata.append(
-                    [level_name.title() + str(dim_id), type_mapping.get(dim_id_int, "UNKNOWN")]
-                )  # type: ignore[arg-type]
+                budget_type = type_mapping.get(dim_id_int, "UNKNOWN")
+                metadata.append([level_name.title() + str(dim_id), budget_type])  # type: ignore[arg-type]
                 # Add name from mapping or default
                 names.append(name_mapping.get(dim_id_int, f"Unknown {dim_id}"))  # type: ignore[arg-type]
                 # Add parent and child references
@@ -227,7 +240,12 @@ class TreemapTransformer:
                 value = value_mapping.get(dim_id_int, 0)  # type: ignore[arg-type]
                 values.append(value)
                 # Accumulate highlevel value for top-level nodes
+                # Also include classified spending values in the root total
                 if level_name == sorted_level_names[0]:
+                    highlevel_value += value
+                elif budget_type == "CLASSIFIED":
+                    # Classified spending should be included in root total
+                    # even when it's not a top-level node (e.g., in CHAPTER view)
                     highlevel_value += value
 
                 # Update parent_path for the next level in this hierarchy
