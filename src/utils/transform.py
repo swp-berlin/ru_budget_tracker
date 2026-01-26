@@ -56,6 +56,44 @@ class TreemapTransformer:
         classified_rows = [row for row in expense_dimensions if row["budget_type"] == "CLASSIFIED"]
         non_classified = [row for row in expense_dimensions if row["budget_type"] != "CLASSIFIED"]
 
+        # Build dimension lookup to derive ministry via chapter parent_id
+        dim_info: dict[int, dict[str, int | str | None]] = {}
+        id_to_orig: dict[int, str] = {}
+        for row in non_classified:
+            dim_id = row["dimension_id"]
+            # Record dimension metadata for parent traversal
+            if dim_id not in dim_info:
+                dim_info[dim_id] = {
+                    "id": dim_id,
+                    "parent_id": row["dimension_parent_id"],
+                    "type": row["dimension_type"],
+                    "orig_id": row["dimension_original_identifier"],
+                }
+            # Record original identifier for reverse lookup
+            if dim_id not in id_to_orig and row.get("dimension_original_identifier") is not None:
+                id_to_orig[dim_id] = row["dimension_original_identifier"]
+
+        # Build a canonical chapter->ministry mapping based on expense associations
+        # This avoids duplicate chapters under multiple ministries when parent_id is missing
+        chapter_ministry_counts: dict[int, dict[int, int]] = {}
+        expense_to_rows: dict[int, list[RowMapping]] = {}
+        for row in non_classified:
+            expense_to_rows.setdefault(row["id"], []).append(row)
+        for rows in expense_to_rows.values():
+            chapter_ids = {r["dimension_id"] for r in rows if r.get("dimension_type") == "CHAPTER"}
+            ministry_ids = {
+                r["dimension_id"] for r in rows if r.get("dimension_type") == "MINISTRY"
+            }
+            for chapter_id in chapter_ids:
+                ministry_counts = chapter_ministry_counts.setdefault(chapter_id, {})
+                for ministry_id in ministry_ids:
+                    ministry_counts[ministry_id] = ministry_counts.get(ministry_id, 0) + 1
+        chapter_to_ministry: dict[int, int] = {}
+        for chapter_id, ministry_counts in chapter_ministry_counts.items():
+            # Pick the most frequent ministry for each chapter
+            ministry_id = max(ministry_counts.items(), key=lambda item: item[1])[0]
+            chapter_to_ministry[chapter_id] = ministry_id
+
         for row in non_classified:
             # Initialize dict structure and expense value if not already present
             hierarchy_dict.setdefault(
@@ -87,6 +125,19 @@ class TreemapTransformer:
                         "dimension_original_identifier"
                     ]
                     level += 1
+
+        # Fix ministry assignment using chapter->ministry mapping to avoid false ministry mappings
+        if viewby in ["MINISTRY"]:
+            for _, levels in hierarchy_dict.items():
+                chapter_id = levels.get("CHAPTER")
+                if isinstance(chapter_id, int):
+                    ministry_id = chapter_to_ministry.get(chapter_id)
+                    if isinstance(ministry_id, int):
+                        # Always overwrite with derived ministry to keep chapter->ministry consistent
+                        levels["MINISTRY"] = ministry_id
+                        ministry_orig = id_to_orig.get(ministry_id)
+                        if ministry_orig is not None:
+                            levels["MINISTRY_ORIG_ID"] = ministry_orig
 
         # Add classified expenses as separate entries - siblings to subchapters under their chapter
         # These are terminal nodes (no children like SUBCHAPTER or PROGRAM)

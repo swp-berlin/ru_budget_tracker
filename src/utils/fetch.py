@@ -8,7 +8,7 @@ for treemap and bar chart visualizations.
 from typing import Any, Sequence
 
 from sqlalchemy import RowMapping, Select, and_, extract, func, or_, select
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import aliased, selectinload
 
 from database import get_sync_session
 from models import Budget, Dimension, Expense
@@ -154,6 +154,7 @@ class TreemapDataFetcher:
 
         budget_ids = [budget.id for budget in relevant_budgets]
 
+        parent_dimension = aliased(Dimension)
         stmt = (
             select(
                 Expense.id,
@@ -164,12 +165,16 @@ class TreemapDataFetcher:
                 Dimension.original_identifier.label("dimension_original_identifier"),
                 Dimension.parent_id.label("dimension_parent_id"),
                 Dimension.type.label("dimension_type"),
+                parent_dimension.id.label("parent_dimension_id"),
+                parent_dimension.original_identifier.label("parent_dimension_original_identifier"),
+                parent_dimension.type.label("parent_dimension_type"),
                 _build_dimension_name_column(translated=False).label("dimension_name"),
                 _build_dimension_name_column(translated=True).label("dimension_name_translated"),
             )
             .where(or_(Dimension.type.in_(TREEMAP_DIMENSION_TYPES), Dimension.type.is_(None)))
             .join(Expense.dimensions, isouter=True)
             .join(Expense.budget, isouter=True)
+            .join(parent_dimension, Dimension.parent_id == parent_dimension.id, isouter=True)
             .where(Expense.budget_id.in_(budget_ids))
         )
 
