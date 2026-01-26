@@ -134,6 +134,9 @@ class TremapDataFetcher:
             func.CONCAT(Dimension.original_identifier, " - ", Dimension.name).label(
                 "dimension_name"
             ),
+            func.CONCAT(Dimension.original_identifier, " - ", Dimension.name_translated).label(
+                "dimension_name_translated"
+            ),
         )
         child_programs_cte = (basic_select_stmt.where(Dimension.id.in_(leave_program_ids))).cte(
             "program_hierarchy", recursive=True
@@ -152,6 +155,7 @@ class TremapDataFetcher:
             union.c.dimension_parent_id,
             union.c.dimension_original_identifier,
             union.c.dimension_name,
+            union.c.dimension_name_translated,
         )
 
         with get_sync_session() as session:

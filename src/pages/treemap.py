@@ -82,6 +82,7 @@ def fetch_treemap_data(
     spending_type: SpendingTypeLiteral = "ALL",
     unit: UnitLiteral = "ABSOLUTE",
     viewby: ViewByDimensionTypeLiteral = "MINISTRY",
+    translated_names: bool = False,
     character_limit: int = 25,
 ) -> tuple[list[str], list[str], list[float], list[list[str]], list[str]]:
     """Fetch and transform treemap data for the current filters."""
@@ -95,7 +96,7 @@ def fetch_treemap_data(
         dimensions,
         programs,
         sum_mapping,
-        translated_names=False,
+        translated_names=translated_names,
         viewby=viewby,
         spending_type=spending_type,
     )
@@ -166,9 +167,7 @@ def generate_figure(
     ]
     fig.data[0].hovertemplate = (
         "<b>%{label}</b><br>"
-        "ID: %{customdata[1][0]}<br>"
-        "Budget Type: %{customdata[1][1]}<br>"
-        "Value: %{customdata[0]:,.1f} Billion RUB<br>"
+        "%{customdata[0]:,.1f} Billion RUB<br>"
         "% Parent: %{customdata[2]:.2f}%<br>"
         "% Federal Budget: %{customdata[3]:.2f}%<br>"
         "<extra></extra>"
@@ -210,20 +209,25 @@ def layout(**other_kwargs) -> html.Div:
     Input("store-budget-id", "data"),
     Input("store-viewby", "data"),
     Input("store-spending-type", "data"),
-    Input("store-unit", "data", allow_optional=True),
+    Input("store-unit", "data"),
+    Input("store-language", "data"),
 )
 def update_figure_from_filters(
     budget_id: int | None = None,
     viewby: ViewByDimensionTypeLiteral = "MINISTRY",
     spending_type: SpendingTypeLiteral = "ALL",
     unit: UnitLiteral = "ABSOLUTE",
+    language: str = "RU",
 ) -> tuple[go.Figure, dict[str, str]]:
     # Fetch and render using the selected values from stores
+    # Use translated names when language is ENG (English)
+    translated = language == "ENG"
     children, parents, values, metadata, names = fetch_treemap_data(
         budget_id=budget_id,
         spending_type=spending_type,
         unit=unit,
         viewby=viewby,
+        translated_names=translated,
     )
     return generate_figure(
         children, parents, values, metadata, names, spending_type, language="EN"
