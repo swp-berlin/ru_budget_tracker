@@ -19,7 +19,7 @@ from dash import (
 )
 from dash.exceptions import PreventUpdate
 
-from utils.fetch import fetch_budgets
+from utils.fetch import fetch_budgets_for_dropdown
 from utils.definitions import UNIT_OPTIONS, unit_map, spending_type_map, viewby_map
 
 external_stylesheets = [
@@ -402,7 +402,9 @@ def select_unit(_clicks):
 )
 def init_budgets(_, url_search: str | None):
     # Fetch once and share everywhere via Store
-    options = [{"label": b["original_identifier"], "value": b["id"]} for b in fetch_budgets()]
+    options = [
+        {"label": b["original_identifier"], "value": b["id"]} for b in fetch_budgets_for_dropdown()
+    ]
     # Build menu items with pattern ids
     items = [
         dbc.DropdownMenuItem(

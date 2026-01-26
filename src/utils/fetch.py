@@ -1,10 +1,10 @@
 from typing import Any, Sequence
 from database import get_sync_session
 from models import Budget, Dimension, Expense
-from sqlalchemy import RowMapping, func, select
+from sqlalchemy import RowMapping, and_, extract, func, or_, select
 
 
-def fetch_budgets() -> list[dict[str, Any]]:
+def fetch_budgets_for_dropdown() -> list[dict[str, Any]]:
     """Load all budgets from the database."""
     with get_sync_session() as session:
         budgets = (
@@ -27,9 +27,28 @@ def fetch_budgets() -> list[dict[str, Any]]:
 
 
 class TremapDataFetcher:
+    def fetch_relevant_budgets(self, budget_id: int) -> list[Budget]:
+        """Load all budgets from the database."""
+        select_stmt = select(Budget).where(Budget.id == budget_id)
+        with get_sync_session() as session:
+            initial_budget = session.scalars(select_stmt).one_or_none()
+        if initial_budget is None:
+            raise ValueError(f"Budget with ID {budget_id} not found.")
+        report_query = (
+            select(Budget)
+            .where(Budget.type.in_(["TOTAL"]))
+            .where(extract("year", Budget.published_at) == initial_budget.published_at.year)
+            .where(extract("month", Budget.published_at) == initial_budget.published_at.month)
+        )
+
+        with get_sync_session() as session:
+            budgets = session.execute(report_query).scalars().all()
+
+        return [initial_budget] + [budget for budget in budgets if budget.id != initial_budget.id]
+
     def _fetch_treemap_dimensions(
         self,
-        budget_id: int | None = None,
+        budget_id: int,
     ) -> Sequence[RowMapping]:
         """
         Load data from the database based on provided filters.
@@ -40,9 +59,17 @@ class TremapDataFetcher:
         Returns:
             pd.DataFrame: The loaded and transformed data.
         """
+
+        relevant_budgets = self.fetch_relevant_budgets(budget_id=budget_id)
+        if not relevant_budgets:
+            raise ValueError(f"No relevant budgets found for budget ID {budget_id}.")
+
         select_stmt = (
             select(
                 Expense.id,
+                Budget.id.label("budget_id"),
+                Budget.original_identifier.label("budget_original_identifier"),
+                Budget.type.label("budget_type"),
                 Dimension.id.label("dimension_id"),
                 Dimension.original_identifier.label("dimension_original_identifier"),
                 Dimension.parent_id.label("dimension_parent_id"),
@@ -58,17 +85,18 @@ class TremapDataFetcher:
                 Dimension.type.in_(["MINISTRY", "CHAPTER", "SUBCHAPTER", "PROGRAM"]),
             )
             .join(Expense.dimensions)
+            .join(Expense.budget)
+            .where(Expense.budget_id.in_([budget.id for budget in relevant_budgets]))
         )
-
-        if budget_id is not None:
-            select_stmt = select_stmt.where(Expense.budget_id == budget_id)
 
         with get_sync_session() as session:
             dimensions = session.execute(select_stmt).unique().mappings().all()
 
         return dimensions
 
-    def _create_treemap_value_sums_mapping(self, budget_id: int) -> dict[int, float]:
+    def _create_treemap_value_sums_mapping(
+        self, budget_id: int, is_total: bool = False
+    ) -> dict[int, float]:
         sum_stmt = (
             select(
                 Dimension.id.label("dimension_id"),
@@ -79,8 +107,14 @@ class TremapDataFetcher:
                 Dimension.type.in_(["MINISTRY", "CHAPTER", "SUBCHAPTER", "PROGRAM"]),
             )
             .join(Expense.dimensions)
+            .join(Expense.budget)
             .group_by(Dimension.id)
         )
+
+        if is_total:
+            sum_stmt = sum_stmt.where(Budget.type == "TOTAL")
+        else:
+            sum_stmt = sum_stmt.where(Budget.type != "TOTAL")
 
         with get_sync_session() as session:
             sums = session.execute(sum_stmt).unique().mappings().all()
@@ -125,6 +159,95 @@ class TremapDataFetcher:
 
         return programs
 
+    def _create_difference_dimension(
+        self,
+        dimensions: Sequence[RowMapping],
+        sum_mapping: dict[int, float],
+    ) -> tuple[Sequence[RowMapping], dict[int, float]]:
+        """
+        Create a dimension that represents the difference to the total budget.
+        Args:
+            dimensions (Sequence[RowMapping]): The existing dimensions.
+            sum_mapping (dict[int, float]): Mapping of dimension IDs to their summed values.
+        Returns:
+            Sequence[RowMapping]: The updated dimensions including the difference dimension.
+            dict[int, float]: The updated sum mapping including the difference dimension.
+        """
+        totals_dimensions = [dim for dim in dimensions if dim["budget_type"] == "TOTAL"]
+        if not totals_dimensions:
+            return dimensions, sum_mapping
+
+        total_dim_sum_mapping = self._create_treemap_value_sums_mapping(
+            budget_id=totals_dimensions[0]["budget_id"],
+            is_total=True,
+        )
+
+        # Build mappings per expense_id from LAW budget dimensions
+        # This allows us to find the ministry for a specific expense
+        law_dimensions = [dim for dim in dimensions if dim["budget_type"] != "TOTAL"]
+
+        # expense_id -> (ministry_dim_id, ministry_orig_id)
+        select_stmt = (
+            select(
+                Expense.id.label("expense_id"),
+                Dimension.id.label("ministry_dim_id"),
+                Dimension.original_identifier.label("ministry_orig_id"),
+            )
+            .where(Dimension.type == "MINISTRY")
+            .join(Expense.dimensions)
+            .join(Expense.budget)
+            .where(Expense.budget_id == law_dimensions[0]["budget_id"])
+        )
+        with get_sync_session() as session:
+            expense_ministries_results = session.execute(select_stmt).unique().mappings().all()
+
+        # Find LAW dimensions that are chapters (to match with TOTAL chapters)
+        law_chapter_dimensions = [
+            dim for dim in law_dimensions if dim["dimension_type"] == "CHAPTER"
+        ]
+
+        difference_dimensions = []
+        for total_dim in totals_dimensions:
+            # Find the corresponding LAW chapter dimension with the same original_identifier
+            # This gives us the specific expense that has this chapter
+            corresponding_dim = next(
+                (
+                    dim
+                    for dim in law_chapter_dimensions
+                    if dim["dimension_original_identifier"]
+                    == total_dim["dimension_original_identifier"]
+                ),
+                None,
+            )
+            if corresponding_dim:
+                total_sum = total_dim_sum_mapping.get(total_dim["dimension_id"], 0) * 1000
+                corresponding_sum = sum_mapping.get(corresponding_dim["dimension_id"], 0)
+                difference_value = total_sum - corresponding_sum
+                if difference_value > 0:
+                    new_id = total_dim["dimension_id"] + 1000000  # Offset ID to avoid conflicts
+                    law_chapter_id = corresponding_dim["dimension_id"]
+
+                    difference_dimension = {
+                        "id": total_dim["id"],
+                        "budget_original_identifier": total_dim["budget_original_identifier"],
+                        "budget_type": "CLASSIFIED",
+                        "dimension_id": new_id,  # Offset ID to avoid conflicts
+                        "dimension_original_identifier": total_dim["dimension_original_identifier"],
+                        "dimension_parent_id": law_chapter_id,  # Use LAW budget's chapter ID as parent
+                        "dimension_type": "CLASSIFIED",
+                        "dimension_name": total_dim["dimension_original_identifier"]
+                        + " - Classified Spending",
+                        "dimension_name_translated": total_dim["dimension_original_identifier"]
+                        + " - Classified Spending",
+                    }
+                    difference_dimensions.append(difference_dimension)
+                    sum_mapping[new_id] = difference_value
+
+        updated_dimensions = [
+            dim for dim in dimensions if dim not in totals_dimensions
+        ] + difference_dimensions
+        return updated_dimensions, sum_mapping
+
     def fetch_data(
         self,
         budget_id: int | None = None,
@@ -150,6 +273,9 @@ class TremapDataFetcher:
         programs = self._fetch_treemap_programs_recursive(program_dimension_ids)
 
         sum_mapping = self._create_treemap_value_sums_mapping(budget_id=budget_id)
+
+        # Add dimension that represents difference to total budget if needed
+        dimensions, sum_mapping = self._create_difference_dimension(dimensions, sum_mapping)
 
         return dimensions, programs, sum_mapping
 
@@ -245,9 +371,6 @@ class BarChartDataFetcher:
             - dimension.type = 'MINISTRY', OR
             - dimension.type is NULL and budget.type = 'TOTAL'
             """
-            # Import the association table for explicit joins
-            from models.budget import expense_dimension_association_table as assoc_table
-            from sqlalchemy import or_, and_, extract
 
             # Query: REPORT budgets with MINISTRY dimension OR TOTAL budgets with NULL dimension
             report_query = (
@@ -260,8 +383,7 @@ class BarChartDataFetcher:
                 )
                 .select_from(Budget)
                 .join(Expense, Budget.id == Expense.budget_id, isouter=True)
-                .join(assoc_table, Expense.id == assoc_table.c.expense_id, isouter=True)
-                .join(Dimension, assoc_table.c.dimension_id == Dimension.id, isouter=True)
+                .join(Expense.dimensions)
                 .where(Budget.type.in_(["REPORT", "TOTAL"]))
                 .where(
                     or_(

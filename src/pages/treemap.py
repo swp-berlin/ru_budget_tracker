@@ -83,7 +83,7 @@ def fetch_treemap_data(
     unit: UnitLiteral = "ABSOLUTE",
     viewby: ViewByDimensionTypeLiteral = "MINISTRY",
     character_limit: int = 25,
-) -> tuple[list[str], list[str], list[float], list[str], list[str]]:
+) -> tuple[list[str], list[str], list[float], list[list[str]], list[str]]:
     """Fetch and transform treemap data for the current filters."""
     data_fetcher = TremapDataFetcher()
     dimensions, programs, sum_mapping = data_fetcher.fetch_data(
@@ -110,7 +110,7 @@ def generate_figure(
     children: list[str],
     parents: list[str],
     values: list[float],
-    metadata: list[str],
+    metadata: list[list[str]],
     names: list[str],
     spending_type: SpendingTypeLiteral = "ALL",
     language: LanguageTypeLiteral = "EN",
@@ -137,6 +137,19 @@ def generate_figure(
         margin=dict(t=15, l=10, r=10, b=10),
         font=dict(family="Source Sans 3"),
     )
+
+    # Color classified spending nodes in gray
+    # metadata structure: [level_name, budget_type] - check if budget_type is "CLASSIFIED"
+    colors = []
+    for m in metadata:
+        if len(m) > 1 and m[1] == "CLASSIFIED":
+            colors.append("#9e9e9e")  # Gray for classified
+        else:
+            colors.append(None)  # Use default color
+
+    # Apply colors - only set color for classified nodes, let others use default
+    fig.update_traces(marker_colors=colors)
+
     # If spending type is military, adjust the color of the root tiles to #7e8f5f
     # and then get lighter shades of #7e8f5f for the children the deeper they are in the hierarchy
     if spending_type == "MILITARY":
@@ -153,7 +166,8 @@ def generate_figure(
     ]
     fig.data[0].hovertemplate = (
         "<b>%{label}</b><br>"
-        "ID: %{customdata[1]}<br>"
+        "ID: %{customdata[1][0]}<br>"
+        "Budget Type: %{customdata[1][1]}<br>"
         "Value: %{customdata[0]:,.1f} Billion RUB<br>"
         "% Parent: %{customdata[2]:.2f}%<br>"
         "% Federal Budget: %{customdata[3]:.2f}%<br>"
