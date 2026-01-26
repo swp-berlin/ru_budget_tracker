@@ -198,6 +198,7 @@ class TreemapTransformer:
         value_mapping: dict[int, float],
         type_mapping: dict[int, str],
         root_name: str = "Federal Budget",
+        viewby: ViewByDimensionTypeLiteral = "MINISTRY",
     ) -> tuple[list[str], list[str], list[float], list[list[str]], list[str]]:
         """Build the treemap lists (names, parents, values, metadata) from hierarchy.
 
@@ -302,8 +303,51 @@ class TreemapTransformer:
                 # Update parent_path for the next level in this hierarchy
                 parent_path = current_path
 
-        # Set Federal Budget value
+        # Set Federal Budget value (initial, will be refined after aggregation)
         values[0] = highlevel_value
+
+        # Aggregate values bottom-up to ensure ministries/chapters reflect the sum of their children
+        # Exclude classified nodes from non-root parent aggregation unless CHAPTER view
+        parent_to_children: dict[str, list[int]] = {}
+        for i, parent in enumerate(parents):
+            if parent:
+                parent_to_children.setdefault(parent, []).append(i)
+
+        child_to_index = {child: i for i, child in enumerate(children)}
+
+        def _is_classified(idx: int) -> bool:
+            """Check if a node is classified based on its metadata."""
+            if idx >= len(metadata):
+                return False
+            level_label = str(metadata[idx][0]).lower() if metadata[idx] else ""
+            budget_type = metadata[idx][1] if len(metadata[idx]) > 1 else ""
+            return budget_type == "CLASSIFIED" or level_label.startswith("classified")
+
+        # Process parents in reverse order to aggregate from leaves upward
+        for parent_path in reversed(list(parent_to_children.keys())):
+            parent_idx = child_to_index.get(parent_path)
+            if parent_idx is None:
+                continue
+            child_indices = parent_to_children.get(parent_path, [])
+            if not child_indices:
+                continue
+            # Sum children for non-root parents
+            if parent_path != root_name:
+                # Include classified in CHAPTER view to reflect chapter totals correctly
+                if viewby == "CHAPTER":
+                    values[parent_idx] = sum(values[i] for i in child_indices)
+                else:
+                    values[parent_idx] = sum(
+                        values[i] for i in child_indices if not _is_classified(i)
+                    )
+            else:
+                # Root should include all top-level children (including classified parent)
+                values[parent_idx] = sum(values[i] for i in child_indices)
+
+        # Ensure root equals sum of its top-level children after aggregation
+        root_children = parent_to_children.get(root_name, [])
+        if root_children:
+            values[0] = sum(values[i] for i in root_children)
 
         return children, parents, values, metadata, names
 
@@ -463,7 +507,13 @@ class TreemapTransformer:
                 hierarchy_dict, spending_type
             )
         # Create dataframe from paths
-        result_tuple = self._create_lists(hierarchy_dict, name_mapping, sum_mapping, type_mapping)
+        result_tuple = self._create_lists(
+            hierarchy_dict,
+            name_mapping,
+            sum_mapping,
+            type_mapping,
+            viewby=viewby,
+        )
 
         return result_tuple
 
