@@ -13,6 +13,7 @@ LanguageTypeLiteral = Literal["EN", "ORIGINAL"]
 SpendingTypeLiteral = Literal["ALL", "MILITARY"]
 UnitLiteral = Literal[
     "ABSOLUTE",
+    "DOLLARS",
     "PERCENT_GDP_FULL_YEAR",
     "PERCENT_GDP_YEAR_TO_DATE",
     "PERCENT_FULL_YEAR_SPENDING",
@@ -22,7 +23,10 @@ UnitLiteral = Literal[
 # (Chapter = 02*) oder (Program = 31*)  oder (Ministry = 187) oder (Ministry = 180 und Chapter = 03*)
 MilitarySpendingDictionary: dict[str, Pattern | list[dict[str, Pattern]]] = {
     "CHAPTER": compile(r"^02.*"),
-    "PROGRAM": compile(r"^31.*"),
+    "PROGRAM_0": compile(r"^31.*"),
+    "PROGRAM_1": compile(r"^31.*"),
+    "PROGRAM_2": compile(r"^31.*"),
+    "PROGRAM_3": compile(r"^31.*"),
     "MINISTRY": compile(r"^187$"),
     "COMBINATION": [
         {
@@ -32,9 +36,9 @@ MilitarySpendingDictionary: dict[str, Pattern | list[dict[str, Pattern]]] = {
     ],
 }
 
-UNIT_OPTIONS: list[tuple[str, str]] = [
+UNIT_OPTIONS: list[tuple[str, UnitLiteral]] = [
     ("Billion RUB", "ABSOLUTE"),
-    ("Dollars", "DOLLARS"),
+    ("Billion PPP Dollars", "DOLLARS"),
     ("% full-year GDP", "PERCENT_GDP_FULL_YEAR"),
     ("% year-to-date GDP", "PERCENT_GDP_YEAR_TO_DATE"),
     ("% full-year spending", "PERCENT_FULL_YEAR_SPENDING"),
@@ -42,9 +46,9 @@ UNIT_OPTIONS: list[tuple[str, str]] = [
     ("% year-to-date revenue", "PERCENT_YEAR_TO_DATE_REVENUE"),
 ]
 
-unit_map = {
-    "ABSOLUTE": "Billion RUB",
-    "DOLLARS": "Dollars",
+unit_map: dict[UnitLiteral, str] = {
+    "ABSOLUTE": " Billion RUB",
+    "DOLLARS": " Billion PPP Dollars",
     "PERCENT_GDP_FULL_YEAR": "% full-year GDP",
     "PERCENT_GDP_YEAR_TO_DATE": "% year-to-date GDP",
     "PERCENT_FULL_YEAR_SPENDING": "% full-year spending",

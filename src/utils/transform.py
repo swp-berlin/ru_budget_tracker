@@ -8,9 +8,23 @@ from utils.definitions import (
     MilitarySpendingDictionary,
     ViewByDimensionTypeLiteral,
 )
+from utils.helper import add_breaks
 
 
 class TreemapTransformer:
+    def __init__(self, max_line_lenght: int | None = 30) -> None:
+        # Ensure an intuitive ordering: MINISTRY -> CHAPTER -> SUBCHAPTER -> PROGRAM_*
+        # CLASSIFIED_PARENT is at top level (sibling to MINISTRY), CLASSIFIED is under it
+        self.level_order_index = {
+            "MINISTRY": 0,
+            "CLASSIFIED_PARENT": 0,  # Same level as MINISTRY (top-level under root)
+            "CHAPTER": 1,
+            "CLASSIFIED": 2,  # Under CLASSIFIED_PARENT or under CHAPTER
+            "SUBCHAPTER": 3,
+            "PROGRAM": 4,
+        }
+        self.max_line_length = max_line_lenght
+
     def _calculate_program_hierarchy(self, programs: Sequence[RowMapping]) -> dict[int, list[int]]:
         """Calculate all paths from root to leaves in the hierarchy graph.
 
@@ -39,317 +53,158 @@ class TreemapTransformer:
     def _build_hierarchy_dict(
         self,
         expense_dimensions: Sequence[RowMapping],
+        programs: Sequence[RowMapping],
         program_paths: dict[int, list[int]],
-        viewby: ViewByDimensionTypeLiteral = "MINISTRY",
-    ) -> dict[int, dict[str, int | str]]:
+        max_program_levels: int,
+    ) -> dict[str, dict[str, int | float | str]]:
         """Build a hierarchy dictionary mapping each row ID to its hierarchy levels.
 
         CLASSIFIED expenses (from TOTAL budgets) are placed as siblings to SUBCHAPTERs
         (under CHAPTER) and are terminal nodes (no children).
         """
 
-        hierarchy_dict: dict[int, dict[str, int | str]] = {}
+        hierarchy_dict: dict[str, dict[str, int | float | str]] = {}
 
-        # Separate classified and non-classified rows
-        # Classified rows are synthetic dimensions created by _create_difference_dimension in fetch.py
-        # They include ministry_id and ministry_original_identifier for proper hierarchy placement
-        classified_rows = [row for row in expense_dimensions if row["budget_type"] == "CLASSIFIED"]
-        non_classified = [row for row in expense_dimensions if row["budget_type"] != "CLASSIFIED"]
+        # Extract expense_ids from expense_dimensions and map to program path keys
+        leaf_expense_mapping: dict[tuple[str, int], set[str]] = {}
+        for row in expense_dimensions:
+            if row["dimension_id"] in program_paths.keys():
+                leaf_expense_mapping.setdefault(
+                    (row["dimension_original_identifier"], row["dimension_id"]), set()
+                )
+                leaf_expense_mapping[
+                    (row["dimension_original_identifier"], row["dimension_id"])
+                ].add(row["id"])
 
-        # Build dimension lookup to derive ministry via chapter parent_id
-        dim_info: dict[int, dict[str, int | str | None]] = {}
-        id_to_orig: dict[int, str] = {}
-        for row in non_classified:
-            dim_id = row["dimension_id"]
-            # Record dimension metadata for parent traversal
-            if dim_id not in dim_info:
-                dim_info[dim_id] = {
-                    "id": dim_id,
-                    "parent_id": row["dimension_parent_id"],
-                    "type": row["dimension_type"],
-                    "orig_id": row["dimension_original_identifier"],
-                }
-            # Record original identifier for reverse lookup
-            if dim_id not in id_to_orig and row.get("dimension_original_identifier") is not None:
-                id_to_orig[dim_id] = row["dimension_original_identifier"]
-
-        # Build a canonical chapter->ministry mapping based on expense associations
-        # This avoids duplicate chapters under multiple ministries when parent_id is missing
-        chapter_ministry_counts: dict[int, dict[int, int]] = {}
-        expense_to_rows: dict[int, list[RowMapping]] = {}
-        for row in non_classified:
-            expense_to_rows.setdefault(row["id"], []).append(row)
-        for rows in expense_to_rows.values():
-            chapter_ids = {r["dimension_id"] for r in rows if r.get("dimension_type") == "CHAPTER"}
-            ministry_ids = {
-                r["dimension_id"] for r in rows if r.get("dimension_type") == "MINISTRY"
-            }
-            for chapter_id in chapter_ids:
-                ministry_counts = chapter_ministry_counts.setdefault(chapter_id, {})
-                for ministry_id in ministry_ids:
-                    ministry_counts[ministry_id] = ministry_counts.get(ministry_id, 0) + 1
-        chapter_to_ministry: dict[int, int] = {}
-        for chapter_id, ministry_counts in chapter_ministry_counts.items():
-            # Pick the most frequent ministry for each chapter
-            ministry_id = max(ministry_counts.items(), key=lambda item: item[1])[0]
-            chapter_to_ministry[chapter_id] = ministry_id
-
-        for row in non_classified:
+        for (_, program_id), expenses in leaf_expense_mapping.items():
             # Initialize dict structure and expense value if not already present
-            hierarchy_dict.setdefault(
-                row["id"],
-                {},
-            )
-            if row["dimension_type"] == "MINISTRY" and viewby in ["MINISTRY"]:
-                hierarchy_dict[row["id"]]["MINISTRY"] = row["dimension_id"]
-                hierarchy_dict[row["id"]]["MINISTRY_ORIG_ID"] = row["dimension_original_identifier"]
-
-            if row["dimension_type"] == "CHAPTER" and viewby in ["MINISTRY", "CHAPTER"]:
-                hierarchy_dict[row["id"]]["CHAPTER"] = row["dimension_id"]
-                hierarchy_dict[row["id"]]["CHAPTER_ORIG_ID"] = row["dimension_original_identifier"]
-
-            if row["dimension_type"] == "SUBCHAPTER" and viewby in ["MINISTRY", "CHAPTER"]:
-                hierarchy_dict[row["id"]]["SUBCHAPTER"] = row["dimension_id"]
-                hierarchy_dict[row["id"]]["SUBCHAPTER_ORIG_ID"] = row[
-                    "dimension_original_identifier"
-                ]
-
-            program_path = []
-            if row["dimension_type"] == "PROGRAM":
-                program_path = program_paths.get(row["dimension_id"], [])
-            if program_path and len(program_path) > 0:
-                level = 0
-                for program in program_path:
-                    hierarchy_dict[row["id"]][f"PROGRAM_{level}"] = program
-                    hierarchy_dict[row["id"]][f"PROGRAM_{level}_ORIG_ID"] = row[
+            relevant_dims = [row for row in expense_dimensions if row["id"] in expenses]
+            for row in relevant_dims:
+                expense_id = row["id"]
+                hierarchy_dict.setdefault(
+                    expense_id,
+                    {
+                        "VALUE": row.get("value", 0.0),
+                        "BUDGET_TYPE": relevant_dims[0].get("budget_type", ""),
+                    },
+                )
+                # Add MINISTRY
+                if row["dimension_type"] == "MINISTRY":
+                    hierarchy_dict[expense_id]["MINISTRY_DIM_ID"] = row["dimension_id"]
+                    hierarchy_dict[expense_id]["MINISTRY_ORIG_ID"] = row[
                         "dimension_original_identifier"
                     ]
-                    level += 1
+                    hierarchy_dict[expense_id]["MINISTRY_NAME"] = row.get("dimension_name", None)
+                    hierarchy_dict[expense_id]["MINISTRY_NAME_TRANSLATED"] = row.get(
+                        "dimension_name_translated", None
+                    )
+                # Add CHAPTER
+                if row["dimension_type"] == "CHAPTER":
+                    hierarchy_dict[expense_id]["CHAPTER_DIM_ID"] = row["dimension_id"]
+                    hierarchy_dict[expense_id]["CHAPTER_ORIG_ID"] = row[
+                        "dimension_original_identifier"
+                    ]
+                    hierarchy_dict[expense_id]["CHAPTER_NAME"] = row.get("dimension_name", None)
+                    hierarchy_dict[expense_id]["CHAPTER_NAME_TRANSLATED"] = row.get(
+                        "dimension_name_translated", None
+                    )
+                # Add SUBCHAPTER
+                if row["dimension_type"] == "SUBCHAPTER":
+                    hierarchy_dict[expense_id]["SUBCHAPTER_DIM_ID"] = row["dimension_id"]
+                    hierarchy_dict[expense_id]["SUBCHAPTER_ORIG_ID"] = row[
+                        "dimension_original_identifier"
+                    ]
+                    hierarchy_dict[expense_id]["SUBCHAPTER_NAME"] = row.get("dimension_name", None)
+                    hierarchy_dict[expense_id]["SUBCHAPTER_NAME_TRANSLATED"] = row.get(
+                        "dimension_name_translated", None
+                    )
 
-        # Fix ministry assignment using chapter->ministry mapping to avoid false ministry mappings
-        if viewby in ["MINISTRY"]:
-            for _, levels in hierarchy_dict.items():
-                chapter_id = levels.get("CHAPTER")
-                if isinstance(chapter_id, int):
-                    ministry_id = chapter_to_ministry.get(chapter_id)
-                    if isinstance(ministry_id, int):
-                        # Always overwrite with derived ministry to keep chapter->ministry consistent
-                        levels["MINISTRY"] = ministry_id
-                        ministry_orig = id_to_orig.get(ministry_id)
-                        if ministry_orig is not None:
-                            levels["MINISTRY_ORIG_ID"] = ministry_orig
-
-        # Add classified expenses as separate entries - siblings to subchapters under their chapter
-        # These are terminal nodes (no children like SUBCHAPTER or PROGRAM)
-        # Classified rows from fetch.py have dimension_type="CLASSIFIED" and include
-        # ministry_id and ministry_original_identifier for proper placement
-
-        # For MINISTRY or PROGRAM view: aggregate all classified into ONE parent tile under root
-        # with individual classified items as children
-        # For CHAPTER view: keep classified under each chapter as siblings to subchapters
-        if viewby in ["MINISTRY", "PROGRAM"] and classified_rows:
-            # Create a parent "Classified Spending" node under root
-            # Use a special negative key that won't conflict with expense IDs
-            parent_key = -999999
-            # Use a synthetic dimension_id for the parent node (high negative number)
-            parent_dim_id = -999999
-            hierarchy_dict[parent_key] = {}
-            hierarchy_dict[parent_key]["CLASSIFIED_PARENT"] = parent_dim_id
-            hierarchy_dict[parent_key]["CLASSIFIED_PARENT_ORIG_ID"] = "CLASSIFIED"
-
-            # Add each individual classified spending as a child under the parent
-            for row in classified_rows:
-                hierarchy_dict.setdefault(row["id"], {})
-                # Set the parent level so this item appears under the aggregated tile
-                hierarchy_dict[row["id"]]["CLASSIFIED_PARENT"] = parent_dim_id
-                hierarchy_dict[row["id"]]["CLASSIFIED_PARENT_ORIG_ID"] = "CLASSIFIED"
-                # Add the individual classified item
-                chapter_orig_id = row.get("dimension_original_identifier", "")
-                hierarchy_dict[row["id"]]["CLASSIFIED"] = row["dimension_id"]
-                hierarchy_dict[row["id"]]["CLASSIFIED_ORIG_ID"] = chapter_orig_id
-        else:
-            # CHAPTER view: place classified under each chapter
-            for row in classified_rows:
-                hierarchy_dict.setdefault(
-                    row["id"],
-                    {},
-                )
-
-                # For CLASSIFIED dimension_type, use the ministry info included in the row
-                if row["dimension_type"] == "CLASSIFIED":
-                    chapter_orig_id = row.get("dimension_original_identifier")
-
-                    # Add CHAPTER level using dimension_parent_id (which is the LAW budget's chapter ID)
-                    parent_chapter_id = row.get("dimension_parent_id")
-                    if parent_chapter_id and chapter_orig_id:
-                        hierarchy_dict[row["id"]]["CHAPTER"] = parent_chapter_id
-                        hierarchy_dict[row["id"]]["CHAPTER_ORIG_ID"] = chapter_orig_id
-
-                    # Add the CLASSIFIED node itself as a terminal node (sibling to SUBCHAPTER)
-                    hierarchy_dict[row["id"]]["CLASSIFIED"] = row["dimension_id"]
-                    hierarchy_dict[row["id"]]["CLASSIFIED_ORIG_ID"] = chapter_orig_id or ""
+                # Add PROGRAM levels by traversing the program path
+                program_path = program_paths.get(program_id, [])
+                program_rows = [row for row in programs if row["dimension_id"] in program_path][
+                    ::-1
+                ]
+                if len(program_rows) == 0:
+                    raise ValueError(
+                        f"No program rows found for program_id {program_id}"
+                        f" in program_path {program_path} for budget expense_id {expense_id}"
+                    )
+                # Sort program rows according to their position in the path
+                last_row = program_rows[0]
+                for idx in range(0, max_program_levels):
+                    if idx < len(program_path):
+                        row = program_rows[idx]
+                        last_row = row
+                    else:
+                        row = last_row
+                    hierarchy_dict[expense_id][f"PROGRAM_{idx}_DIM_ID"] = row["dimension_id"]
+                    hierarchy_dict[expense_id][f"PROGRAM_{idx}_ORIG_ID"] = row[
+                        "dimension_original_identifier"
+                    ]
+                    hierarchy_dict[expense_id][f"PROGRAM_{idx}_NAME"] = row.get(
+                        "dimension_name", None
+                    )
+                    hierarchy_dict[expense_id][f"PROGRAM_{idx}_NAME_TRANSLATED"] = row.get(
+                        "dimension_name_translated", None
+                    )
 
         return hierarchy_dict
 
-    def _create_lists(
+    def _get_level_sort_key(self, level_name: str) -> tuple[int, int]:
+        """Sort key for hierarchy levels, ensuring PROGRAM_0 < PROGRAM_1 < PROGRAM_2."""
+        parts = level_name.split("_")
+        base_name = parts[0]
+        primary_order = self.level_order_index.get(base_name, 100)
+        secondary_order = 0
+        if base_name == "PROGRAM" and len(parts) > 1 and parts[1].isdigit():
+            secondary_order = int(parts[1])
+        return (primary_order, secondary_order)
+
+    def _create_dataframe(
         self,
-        hierarchy: dict[int, dict[str, int | str]],
-        name_mapping: dict[int, str],
-        value_mapping: dict[int, float],
-        type_mapping: dict[int, str],
+        hierarchy: dict[str, dict[str, int | float | str]],
         root_name: str = "Federal Budget",
-        viewby: ViewByDimensionTypeLiteral = "MINISTRY",
-    ) -> tuple[list[str], list[str], list[float], list[list[str]], list[str]]:
+    ) -> pd.DataFrame:
         """Build the treemap lists (names, parents, values, metadata) from hierarchy.
 
         Since the same dimension (e.g., CHAPTER) can appear under different parents
         (e.g., different MINISTRYs), we create path-based unique identifiers.
         This allows the treemap to correctly show the same dimension under multiple parents.
         """
-        # Track seen paths to avoid duplicates - key is the full path from root
-        seen_paths: set[str] = set()
-        # Track program placement to prevent the same program from appearing under different parents
-        # This avoids false assignments when expense-dimension associations are inconsistent
-        seen_program_paths: dict[int, str] = {}
-        metadata: list[list[str]] = [["root", ""]]
-        names = [root_name]
-        parents = [""]
-        children: list[str] = [root_name]
-        values: list[float] = [0.0]
-        highlevel_value = 0.0
+        # Create a DataFrame
+        df = pd.DataFrame(data=hierarchy).T
+        # replace NaN with None
+        df["ROOT"] = root_name
 
-        # Ensure an intuitive ordering: MINISTRY -> CHAPTER -> SUBCHAPTER -> PROGRAM_*
-        # CLASSIFIED_PARENT is at top level (sibling to MINISTRY), CLASSIFIED is under it
-        LEVEL_ORDER_INDEX = {
-            "MINISTRY": 0,
-            "CLASSIFIED_PARENT": 0,  # Same level as MINISTRY (top-level under root)
-            "CHAPTER": 1,
-            "CLASSIFIED": 2,  # Under CLASSIFIED_PARENT or under CHAPTER
-            "SUBCHAPTER": 3,
-            "PROGRAM": 4,
-        }
+        # Reorder columns to have a consistent order
+        ordered_columns = ["VALUE", "BUDGET_TYPE", "ROOT"]
+        for level in sorted(df.columns, key=self._get_level_sort_key):
+            if level not in ordered_columns:
+                ordered_columns.append(level)
+        df = df[ordered_columns]
 
-        def _get_level_sort_key(level_name: str) -> tuple[int, int]:
-            """Sort key for hierarchy levels, ensuring PROGRAM_0 < PROGRAM_1 < PROGRAM_2."""
-            parts = level_name.split("_")
-            base_name = parts[0]
-            primary_order = LEVEL_ORDER_INDEX.get(base_name, 100)
-            secondary_order = 0
-            if base_name == "PROGRAM" and len(parts) > 1 and parts[1].isdigit():
-                secondary_order = int(parts[1])
-            return (primary_order, secondary_order)
+        # Set type for value as float
+        df["VALUE"] = df["VALUE"].astype(float)
+        # Preserve nulls before any string conversion for Plotly path handling.
+        df = df.where(pd.notnull(df), None)
+        # Normalize non-null entries to strings for id/name columns.
+        for col in df.columns:
+            if col != "VALUE":
+                df[col] = df[col].apply(lambda x: str(x) if x is not None else None)
 
-        for _, levels in hierarchy.items():
-            # Build path-based identifiers for this expense's hierarchy
-            # parent_path tracks the full path string for parent references
-            parent_path = root_name
-
-            # Sort levels based on predefined order
-            sorted_level_names = sorted(
-                (level_name for level_name in levels.keys() if not level_name.endswith("_ORIG_ID")),
-                key=_get_level_sort_key,
-            )
-
-            for level_name in sorted_level_names:
-                dim_id = levels[level_name]
-                # Cast to int since we know non-_ORIG_ID values are dimension IDs (integers)
-                dim_id_int = (
-                    int(dim_id)
-                    if isinstance(dim_id, (int, str)) and str(dim_id).lstrip("-").isdigit()
-                    else dim_id
-                )
-                # Create a path-based unique identifier: "parent_path/dim_id"
-                # This ensures the same dim_id under different parents creates separate nodes
-                current_path = f"{parent_path}/{dim_id}"
-
-                # Prevent programs from being placed under multiple parents
-                # If a program already has a recorded path, skip inconsistent placements
-                if level_name.startswith("PROGRAM") and isinstance(dim_id_int, int):
-                    existing_program_path = seen_program_paths.get(dim_id_int)
-                    if existing_program_path and existing_program_path != current_path:
-                        # Skip the remainder of this branch to avoid false duplication
-                        break
-
-                if current_path in seen_paths:
-                    # This exact path already exists, just update parent reference for next level
-                    parent_path = current_path
-                    continue
-
-                # New unique path, add to lists
-                seen_paths.add(current_path)
-                # Record program path once to enforce unique placement across the treemap
-                if level_name.startswith("PROGRAM") and isinstance(dim_id_int, int):
-                    seen_program_paths.setdefault(dim_id_int, current_path)
-                # Create metadata entry - use dim_id_int for lookups
-                budget_type = type_mapping.get(dim_id_int, "UNKNOWN")
-                metadata.append([level_name.title() + str(dim_id), budget_type])  # type: ignore[arg-type]
-                # Add name from mapping or default
-                names.append(name_mapping.get(dim_id_int, f"Unknown {dim_id}"))  # type: ignore[arg-type]
-                # Add parent and child references
-                children.append(current_path)
-                parents.append(parent_path)
-                # Add value from mapping or default to 0
-                value = value_mapping.get(dim_id_int, 0)  # type: ignore[arg-type]
-                values.append(value)
-                # Accumulate highlevel value for top-level nodes
-                # Also include classified spending values in the root total
-                if level_name == sorted_level_names[0]:
-                    highlevel_value += value
-                elif budget_type == "CLASSIFIED":
-                    # Classified spending should be included in root total
-                    # even when it's not a top-level node (e.g., in CHAPTER view)
-                    highlevel_value += value
-
-                # Update parent_path for the next level in this hierarchy
-                parent_path = current_path
-
-        # Set Federal Budget value (initial, will be refined after aggregation)
-        values[0] = highlevel_value
-
-        # Aggregate values bottom-up to ensure ministries/chapters reflect the sum of their children
-        # Exclude classified nodes from non-root parent aggregation unless CHAPTER view
-        parent_to_children: dict[str, list[int]] = {}
-        for i, parent in enumerate(parents):
-            if parent:
-                parent_to_children.setdefault(parent, []).append(i)
-
-        child_to_index = {child: i for i, child in enumerate(children)}
-
-        def _is_classified(idx: int) -> bool:
-            """Check if a node is classified based on its metadata."""
-            if idx >= len(metadata):
-                return False
-            level_label = str(metadata[idx][0]).lower() if metadata[idx] else ""
-            budget_type = metadata[idx][1] if len(metadata[idx]) > 1 else ""
-            return budget_type == "CLASSIFIED" or level_label.startswith("classified")
-
-        # Process parents in reverse order to aggregate from leaves upward
-        for parent_path in reversed(list(parent_to_children.keys())):
-            parent_idx = child_to_index.get(parent_path)
-            if parent_idx is None:
-                continue
-            child_indices = parent_to_children.get(parent_path, [])
-            if not child_indices:
-                continue
-            # Sum children for non-root parents
-            if parent_path != root_name:
-                # Include classified in CHAPTER view to reflect chapter totals correctly
-                if viewby == "CHAPTER":
-                    values[parent_idx] = sum(values[i] for i in child_indices)
-                else:
-                    values[parent_idx] = sum(
-                        values[i] for i in child_indices if not _is_classified(i)
+        # Add line breaks to long names if max_line_length is set.
+        line_length = self.max_line_length
+        if line_length is not None:
+            for col in df.columns:
+                if "NAME" in col:
+                    df[col] = df[col].apply(
+                        lambda x: add_breaks(x, interval=line_length) if x else x
                     )
-            else:
-                # Root should include all top-level children (including classified parent)
-                values[parent_idx] = sum(values[i] for i in child_indices)
 
-        # Ensure root equals sum of its top-level children after aggregation
-        root_children = parent_to_children.get(root_name, [])
-        if root_children:
-            values[0] = sum(values[i] for i in root_children)
+        # Normalize empty strings to None for Plotly compatibility.
+        df = df.replace(to_replace={"": None})
 
-        return children, parents, values, metadata, names
+        return df
 
     def _create_id_name_mapping(
         self,
@@ -442,14 +297,14 @@ class TreemapTransformer:
 
     def _filter_hierarchy_dict_by_spending_type(
         self,
-        hierarchy: dict[int, dict[str, int | str]],
+        hierarchy: dict[str, dict[str, int | float | str]],
         spending_type: SpendingTypeLiteral,
-    ) -> dict[int, dict[str, int | str]]:
+    ) -> dict[str, dict[str, int | float | str]]:
         """Filter the hierarchy dictionary based on spending type (e.g., military only)."""
         if spending_type == "ALL":
             return hierarchy
 
-        filtered_hierarchy: dict[int, dict[str, int | str]] = {}
+        filtered_hierarchy: dict[str, dict[str, int | float | str]] = {}
         for expense_id, levels in hierarchy.items():
             is_military = False
             # Check single level patterns
@@ -482,40 +337,33 @@ class TreemapTransformer:
         self,
         dimensions: Sequence[RowMapping],
         programs: Sequence[RowMapping],
-        sum_mapping: dict[int, float],
-        translated_names: bool = False,
         spending_type: SpendingTypeLiteral = "ALL",
-        viewby: ViewByDimensionTypeLiteral = "MINISTRY",
-    ) -> tuple[list[str], list[str], list[float], list[list[str]], list[str]]:
+    ) -> pd.DataFrame:
         """Transform DB rows into treemap lists expected by the figure creator."""
         if not dimensions:
-            return [], [], [], [], []
+            return pd.DataFrame()
 
         # Extend sum mapping to include all hierarchy levels
         program_paths = self._calculate_program_hierarchy(programs)
-        sum_mapping = self._extend_sum_mapping_with_hierarchy(sum_mapping, program_paths)
-        # Extend sum mapping to include classified expense values (aggregated for MINISTRY/PROGRAM views)
-        sum_mapping = self._extend_sum_mapping_with_classified(sum_mapping, dimensions, viewby)
-
-        name_mapping = self._create_id_name_mapping(dimensions, programs, translated_names)
-        type_mapping = self._create_id_type_mapping(dimensions)
+        # Calculate max length of program paths for consistent PROGRAM_* columns
+        max_program_levels = max((len(path) for path in program_paths.values()), default=0)
         # Calculate all paths between dimensions
-        hierarchy_dict = self._build_hierarchy_dict(dimensions, program_paths, viewby)
+        hierarchy_dict = self._build_hierarchy_dict(
+            dimensions, programs, program_paths, max_program_levels
+        )
         # Filter hierarchy based on spending type if needed
         if spending_type != "ALL":
             hierarchy_dict = self._filter_hierarchy_dict_by_spending_type(
                 hierarchy_dict, spending_type
             )
         # Create dataframe from paths
-        result_tuple = self._create_lists(
+        df = self._create_dataframe(
             hierarchy_dict,
-            name_mapping,
-            sum_mapping,
-            type_mapping,
-            viewby=viewby,
         )
 
-        return result_tuple
+        # Build ordered name columns aligned to id columns.
+
+        return df
 
 
 class BarchartTransformer:
@@ -548,6 +396,7 @@ class BarchartTransformer:
                     continue
                 law_value = corresponding_law["total_value"] if corresponding_law else 0.0
                 classified_expense = budget["total_value"] - law_value
+                budget_id = budget["id"]
 
                 df = pd.concat(
                     [
@@ -557,6 +406,7 @@ class BarchartTransformer:
                                 "expenses": [classified_expense],
                                 "dates": [budget["published_at"]],
                                 "types": ["CLASSIFIED"],
+                                "budget_id": [budget_id],
                             }
                         ),
                     ],

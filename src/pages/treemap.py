@@ -1,5 +1,8 @@
+from datetime import date
+from functools import lru_cache
+import hashlib
 import logging
-from typing import Any, Optional
+from typing import Any, Optional, Sequence  # Use typing.Sequence for type annotations
 
 import dash
 import dash_bootstrap_components as dbc
@@ -19,17 +22,19 @@ from dash import (
     register_page,
 )
 from dash.exceptions import PreventUpdate
+from sqlalchemy import RowMapping
 
-from utils.fetch import TremapDataFetcher
+from utils.fetch import TreemapDataFetcher
 from utils.transform import TreemapTransformer
 from utils.calculate import Calculator
 from utils.definitions import (
     LanguageTypeLiteral,
     UnitLiteral,
+    unit_map,
     SpendingTypeLiteral,
     ViewByDimensionTypeLiteral,
+    MilitarySpendingDictionary,
 )
-from utils.helper import add_breaks
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -52,20 +57,20 @@ def _compute_percentages(
     - parent_percentages: share of a node within its parent's direct children.
     - root_percentages: share of a node relative to all roots combined.
     """
-    # Sum over root nodes
+    # Sum over root nodes.
     total_root_value = sum(v for v, p in zip(values, parents) if not p)
-    # Root share per node
+    # Root share per node.
     root_percentages = [
         ((v / total_root_value) * 100) if total_root_value > 0 else 0.0 for v in values
     ]
 
-    # Aggregate direct children per parent label
+    # Aggregate direct children per parent label.
     parent_totals: dict[str, float] = {}
     for p, v in zip(parents, values):
         if p:
             parent_totals[p] = parent_totals.get(p, 0.0) + (v or 0.0)
 
-    # Each node's share inside its parent
+    # Each node's share inside its parent.
     parent_percentages: list[float] = []
     for p, v in zip(parents, values):
         if not p:
@@ -77,60 +82,164 @@ def _compute_percentages(
     return parent_percentages, root_percentages
 
 
+def _build_treemap_colors(
+    df: pd.DataFrame,
+    fig: go.Figure,
+    spending_type: SpendingTypeLiteral,
+    translated: bool,
+) -> list[Optional[str]]:
+    """Return marker colors for treemap nodes with ministry/root rules applied."""
+    name_ending = "_NAME_TRANSLATED" if translated else "_NAME"
+    ministry_col = f"MINISTRY{name_ending}"
+    ministry_labels = (
+        set(df[ministry_col].dropna().astype(str)) if ministry_col in df.columns else set()
+    )
+    root_label = str(df["ROOT"].iloc[0]) if "ROOT" in df.columns and not df.empty else "ROOT"
+    labels = list(fig.data[0].labels)  # type: ignore
+    parents = list(fig.data[0].parents)  # type: ignore
+
+    # Use a deterministic palette so non-ministry tiles don't inherit gray.
+    palette = (
+        ["#7e8f5f", "#a3b18a", "#c7d0b8"]
+        if spending_type == "MILITARY"
+        else px.colors.qualitative.Set2
+    )
+
+    colors: list[Optional[str]] = []
+    for label, parent in zip(labels, parents):
+        # Root tile should be transparent unless MILITARY, then use the military color.
+        if not parent and str(label) == root_label:
+            colors.append("#7e8f5f" if spending_type == "MILITARY" else "rgba(0,0,0,0)")
+        elif parent == root_label and str(label) in ministry_labels:
+            colors.append("#dddddd")
+        else:
+            # Stable color assignment based on label.
+            label_key = str(label)
+            color_index = int(hashlib.md5(label_key.encode("utf-8")).hexdigest(), 16) % len(palette)
+            colors.append(palette[color_index])
+
+    return colors
+
+
 def fetch_treemap_data(
-    budget_id: int | None = None,
-    spending_type: SpendingTypeLiteral = "ALL",
-    unit: UnitLiteral = "ABSOLUTE",
-    viewby: ViewByDimensionTypeLiteral = "MINISTRY",
-    translated_names: bool = False,
-    character_limit: int = 25,
-) -> tuple[list[str], list[str], list[float], list[list[str]], list[str]]:
+    budget_id: int,
+) -> tuple[Sequence[RowMapping], Sequence[RowMapping], date]:
     """Fetch and transform treemap data for the current filters."""
-    data_fetcher = TremapDataFetcher()
-    dimensions, programs, sum_mapping = data_fetcher.fetch_data(
+    data_fetcher = TreemapDataFetcher()
+    published_at = data_fetcher.get_published_at_date(budget_id)
+    dimensions, programs, _ = data_fetcher.fetch_data(
         budget_id=budget_id,
     )
-    transformer = TreemapTransformer()
-    children, parents, values, metadata, names = transformer.transform_data(
+
+    return dimensions, programs, published_at
+
+
+@lru_cache(maxsize=5)
+def transform_treemap_data(
+    budget_id: int,
+    spending_type: SpendingTypeLiteral,
+    unit: UnitLiteral,
+    character_limit: int = 25,
+) -> pd.DataFrame:
+    transformer = TreemapTransformer(max_line_lenght=character_limit)
+    dimensions, programs, published_at = fetch_treemap_data(budget_id)
+    df = transformer.transform_data(
         dimensions,
         programs,
-        sum_mapping,
-        translated_names=translated_names,
-        viewby=viewby,
         spending_type=spending_type,
     )
-    calculator = Calculator(unit=unit)
-    values = [calculator.calculate(v) if v is not None else 0.0 for v in values]
-    # Add line breaks for better label rendering
-    names = [add_breaks(lbl, interval=character_limit) for lbl in names]
-    return children, parents, values, metadata, names
+    # Calculate values based on unit, budget, and published_at
+    calculator = Calculator(unit, budget_id, published_at)
+    df["VALUE"] = df["VALUE"].apply(calculator.calculate)
+    # Keep the base dataframe clean; percentages are computed from the treemap trace.
+
+    return df
+
+
+def shape_for_viewby(
+    df: pd.DataFrame,
+    viewby: ViewByDimensionTypeLiteral,
+) -> pd.DataFrame:
+    """Return the shape configuration for the given viewby dimension."""
+
+    # create a copy to avoid modifying the original dataframe
+    df_copy = df.copy()
+
+    relevant_cols = []
+    if viewby == "MINISTRY":
+        # Remove Everything but Ministry, Chapter, lowest level and Value
+        relevant_cols = [
+            col for col in df_copy.columns if col.startswith(("MINISTRY", "CHAPTER", "PROGRAM_3"))
+        ] + ["VALUE", "ROOT"]
+
+    if viewby == "CHAPTER":
+        # Remove Everything but Chapter, lowest level and Value
+        relevant_cols = [
+            col for col in df_copy.columns if col.startswith(("CHAPTER", "SUBCHAPTER", "PROGRAM_3"))
+        ] + ["VALUE", "ROOT"]
+
+    if viewby == "PROGRAM":
+        # Remove Everything but lowest level and Value
+        relevant_cols = [
+            col
+            for col in df_copy.columns
+            if col.startswith(("PROGRAM_0", "PROGRAM_1", "PROGRAM_3"))
+        ] + ["VALUE", "ROOT"]
+
+    df_copy = df_copy[relevant_cols]
+
+    return df_copy
+
+
+def shape_for_spending_type(
+    df: pd.DataFrame,
+    spending_type: SpendingTypeLiteral,
+) -> pd.DataFrame:
+    """Return the shape configuration for the given spending type."""
+    # For military spending, we might want to highlight certain ministries or chapters.
+    # This function can be expanded in the future if needed.
+    df_copy = df.copy()
+    if spending_type == "MILITARY":
+        # Filter the dataframe columns that begin the the keys in MilitarySpendingDictionary
+        # and end in ORIG_ID. Keep only those rows that match the patterns in the dictionary.
+        filter_conditions = []
+        for key, pattern in MilitarySpendingDictionary.items():
+            if key == "COMBINATION":
+                for combo in pattern:  # type: ignore
+                    condition = pd.Series([True] * len(df_copy))
+                    for combo_key, combo_pattern in combo.items():
+                        col_name = f"{combo_key}_ORIG_ID"
+                        condition &= df_copy[col_name].astype(str).str.match(combo_pattern)
+                    filter_conditions.append(condition)
+            else:
+                col_name = f"{key}_ORIG_ID"
+                condition = df_copy[col_name].astype(str).str.match(pattern)  # type: ignore
+                filter_conditions.append(condition)
+
+        df_copy["ROOT"] = "Military Spending"
+
+    return df_copy
 
 
 def generate_figure(
-    children: list[str],
-    parents: list[str],
-    values: list[float],
-    metadata: list[list[str]],
-    names: list[str],
+    df: pd.DataFrame,
     spending_type: SpendingTypeLiteral = "ALL",
-    language: LanguageTypeLiteral = "EN",
+    unit: UnitLiteral = "ABSOLUTE",
+    translated: bool = False,
 ) -> go.Figure:
     """Build a treemap with stable ids and clean hover info."""
-    # Compute percentage metrics for hover
-    parent_percentages, root_percentages = _compute_percentages(parents, values)
-
-    # Use leaf-only sizing by setting branch values to 0
-    parent_labels = set(parents)
-    area_values = [0 if lbl in parent_labels else v for lbl, v in zip(children, values)]
+    # If translated, use translated names
+    # ending = "NAME_TRANSLATED" if translated else "NAME"
+    name_ending = "_NAME_TRANSLATED" if translated else "_NAME"
+    name_cols = ["ROOT"] + [col for col in df.columns if col.endswith(name_ending)]
 
     # Build figure
     fig = px.treemap(
-        names=names,
-        parents=parents,
-        ids=children,
-        values=area_values,
+        data_frame=df,
+        path=name_cols,
+        values="VALUE",
         hover_data=None,
-        maxdepth=4,
+        custom_data=["VALUE"],
     )
     # Layout adjustments
     # Change font to Source Sans 3 and make it wrapped
@@ -139,56 +248,8 @@ def generate_figure(
         font=dict(family="Source Sans 3"),
     )
 
-    # Build color list for specific nodes
-    # metadata structure: [level_name, budget_type]
-    # - Root level: white
-    # - MINISTRY nodes: gray (top-level only, not children)
-    # - CLASSIFIED nodes: gray
-    # - Others: use default treemap colorway (based on root parent)
-
-    # First, identify ministry-level nodes and assign them distinct colors from the colorway
-    default_colorway = px.colors.qualitative.Plotly  # Default Plotly color palette
-    ministry_color_map = {}  # Map ministry node id -> color for children inheritance
-    ministry_index = 0
-
-    for child_id, parent, m in zip(children, parents, metadata):
-        # Ministry nodes are directly under the root (Federal Budget)
-        if len(m) > 0 and m[0].lower().startswith("ministry"):
-            ministry_color_map[child_id] = default_colorway[ministry_index % len(default_colorway)]
-            ministry_index += 1
-
-    # Build a map of each node to its ministry ancestor for color inheritance
-    def get_ministry_ancestor(node_id: str) -> str | None:
-        """Traverse up to find the ministry ancestor of a node."""
-        id_to_parent = dict(zip(children, parents))
-        current = node_id
-        while current:
-            if current in ministry_color_map:
-                return current
-            current = id_to_parent.get(current)
-        return None
-
-    colors = []
-    for child_id, parent, m in zip(children, parents, metadata):
-        # Root level (no parent) - white
-        if not parent:
-            colors.append("#ffffff")  # White for root
-        # Check for classified nodes
-        elif len(m) > 1 and m[1] == "CLASSIFIED":
-            colors.append("#9e9e9e")  # Gray for classified
-        # Check for ministry-level nodes
-        elif len(m) > 0 and m[0].lower().startswith("ministry"):
-            colors.append("#9e9e9e")  # Gray for ministry
-        else:
-            # Inherit color from ministry ancestor
-            ministry = get_ministry_ancestor(child_id)
-            colors.append(
-                ministry_color_map.get(ministry, default_colorway[0])
-                if ministry
-                else default_colorway[0]
-            )
-
-    # Apply colors to all nodes
+    # Apply colors to all nodes.
+    colors = _build_treemap_colors(df, fig, spending_type, translated)
     fig.update_traces(marker_colors=colors)
 
     # If spending type is military, adjust the color of the root tiles to #7e8f5f
@@ -199,20 +260,29 @@ def generate_figure(
             treemapcolorway=["#7e8f5f"],
             coloraxis_colorscale=colorscale,
         )
+    # Compute percentages for all nodes based on treemap aggregation.
+    parents = list(fig.data[0].parents)  # type: ignore
+    values = [float(v) if v is not None else 0.0 for v in fig.data[0].values]  # type: ignore
+    parent_percentages, root_percentages = _compute_percentages(parents, values)
+    # Safely read Plotly ids/labels (may be numpy arrays).
+    raw_ids = fig.data[0].ids  # type: ignore
+    node_ids = [str(node_id) for node_id in (list(raw_ids) if raw_ids is not None else [])]
+    if not node_ids:
+        raw_labels = fig.data[0].labels  # type: ignore
+        node_ids = [str(label) for label in (list(raw_labels) if raw_labels is not None else [])]
 
-    # Populate hover with original values and percentages; include explicit node id
-    fig.data[0].customdata = [
-        [v, m, pp, rp]
-        for v, m, pp, rp in zip(values, metadata, parent_percentages, root_percentages)
-    ]
-    fig.data[0].hovertemplate = (
-        "<b>%{label}</b><br>"
-        "%{customdata[0]:,.1f} Billion RUB<br>"
-        "%{customdata[1][0]}<br>"
-        "% Parent: %{customdata[2]:.2f}%<br>"
-        "% Federal Budget: %{customdata[3]:.2f}%<br>"
-        "<extra></extra>"
+    # Attach custom data for hover to every node, including id for click selection.
+    fig.data[0].customdata = list(zip(values, parent_percentages, root_percentages, node_ids))
+
+    fig.data[0].hovertemplate = "<br>".join(
+        [
+            "%{label}",
+            "%{customdata[0]:.2f}" + unit_map[unit],
+            "%{customdata[1]:.2f}%" + " of parent",
+            "%{customdata[2]:.2f}%" + " of total",
+        ]
     )
+    fig.data[0].texttemplate = "%{label}<br>%{value:.2f}" + unit_map[unit]
 
     return fig
 
@@ -254,7 +324,7 @@ def layout(**other_kwargs) -> html.Div:
     Input("store-language", "data"),
 )
 def update_figure_from_filters(
-    budget_id: int | None = None,
+    budget_id: int,
     viewby: ViewByDimensionTypeLiteral = "MINISTRY",
     spending_type: SpendingTypeLiteral = "ALL",
     unit: UnitLiteral = "ABSOLUTE",
@@ -263,16 +333,16 @@ def update_figure_from_filters(
     # Fetch and render using the selected values from stores
     # Use translated names when language is ENG (English)
     translated = language == "ENG"
-    children, parents, values, metadata, names = fetch_treemap_data(
+    df = transform_treemap_data(
         budget_id=budget_id,
         spending_type=spending_type,
         unit=unit,
-        viewby=viewby,
-        translated_names=translated,
     )
-    return generate_figure(
-        children, parents, values, metadata, names, spending_type, language="EN"
-    ), {"visibility": "visible"}
+    df_shaped = shape_for_spending_type(df, spending_type=spending_type)
+    df_shaped = shape_for_viewby(df_shaped, viewby=viewby)
+    return generate_figure(df_shaped, spending_type, unit=unit, translated=translated), {
+        "visibility": "visible"
+    }
 
 
 @callback(
@@ -280,16 +350,19 @@ def update_figure_from_filters(
     Input("treemap-graph", "clickData"),
 )
 def update_selected_id(click_data: dict | None) -> Optional[str]:
-    """Store the currently selected treemap node id from clickData.customdata[4]."""
+    """Store the currently selected treemap node id from clickData.customdata[3]."""
     if not click_data:
         raise PreventUpdate
     try:
         pts = click_data.get("points", [])
         if not pts:
             raise PreventUpdate
-        # customdata structure: [value, metadata, parent_pct, root_pct, node_id]
-        custom = pts[0].get("customdata", [])
-        node_id = custom[4] if len(custom) >= 5 else None
+        # Prefer explicit id provided by Plotly for treemap nodes.
+        node_id = pts[0].get("id")
+        if not node_id:
+            # customdata structure: [value, parent_pct, root_pct, node_id]
+            custom = pts[0].get("customdata", [])
+            node_id = custom[3] if len(custom) >= 4 else None
         if not node_id:
             raise PreventUpdate
         return node_id
@@ -309,7 +382,7 @@ def update_selected_id(click_data: dict | None) -> Optional[str]:
 )
 def download_treemap_data(
     n_clicks,
-    budget_id: int | None,
+    budget_id: int,
     viewby: ViewByDimensionTypeLiteral,
     spending_type: SpendingTypeLiteral,
     unit: UnitLiteral,
@@ -319,22 +392,13 @@ def download_treemap_data(
     Returns:
         dict[str, Any]: The data for download.
     """
-    children, parents, values, metadata, names = fetch_treemap_data(
+    df = transform_treemap_data(
         budget_id=budget_id,
         spending_type=spending_type,
         unit=unit,
-        viewby=viewby,
     )
     return dcc.send_data_frame(  # type: ignore
-        pd.DataFrame(
-            {
-                "Name": names,
-                "Id": children,
-                "Parent": parents,
-                "Value": values,
-                "Level": metadata,
-            }
-        ).to_csv,
+        df.to_csv,
         "treemap_data.csv",
         sep=";",
         index=False,
@@ -390,7 +454,7 @@ def download_treemap_image(
         xref="paper",
         yref="paper",
         x=1,
-        y=-0.02,
+        y=0.01,
         xanchor="right",
         yanchor="top",
         showarrow=False,
@@ -400,6 +464,12 @@ def download_treemap_image(
             color="black",
         ),
     )
+
+    # Convert the figure to PNG bytes (kaleido backend)
+    image_bytes = fig.to_image(format="png", scale=3.0)  # Ensure 'kaleido' is in your dependencies
+
+    # Build filename with budget name, unit, and military filter
+    now = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
 
     # Convert the figure to PNG bytes (kaleido backend)
     image_bytes = fig.to_image(format="png", scale=3.0)  # Ensure 'kaleido' is in your dependencies
@@ -423,7 +493,7 @@ def download_treemap_image(
     # Add military filter suffix if active
     military_suffix = "_military" if spending_type == "MILITARY" else ""
 
-    filename = f"{now}_{budget_name}_{unit_label}{military_suffix}.png"
+    filename = f"treemap_{now}_{budget_name}_{unit_label}{military_suffix}.png"
 
     # Send bytes to the browser as a downloadable file
     return dcc.send_bytes(image_bytes, filename)  # type: ignore

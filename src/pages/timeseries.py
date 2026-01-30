@@ -68,21 +68,26 @@ unit_labels = {
 
 
 def fetch_timeseries_data(
-    budget_id: int | None = None,
+    budget_id: int,
     spending_type: SpendingTypeLiteral = "ALL",
     unit: UnitLiteral = "ABSOLUTE",
-    viewby: ViewByDimensionTypeLiteral = "MINISTRY",
-    character_limit: int = 25,
 ) -> tuple[pd.DataFrame, str]:
     """Fetch and transform treemap data for the current filters."""
-    data_fetcher = BarChartDataFetcher()
+    data_fetcher = BarChartDataFetcher(spending_type)
+    published_at = data_fetcher.get_published_at_date(budget_id=budget_id)
     budgets, type = data_fetcher.fetch_data(
         budget_id=budget_id,
     )
     transformer = BarchartTransformer()
-    df = transformer.transform_data(budgets=budgets)
-    calculator = Calculator(unit=unit)
-    df["expenses"] = [calculator.calculate(v) if v is not None else 0.0 for v in df["expenses"]]
+    df = transformer.transform_data(budgets)
+    # Use apply to calculate expenses for each row in a vectorized way
+    for index, row in df.iterrows():
+        calculator = Calculator(
+            budget_id=budget_id,
+            unit=unit,
+            date=row["dates"],
+        )
+        df.at[index, "expenses"] = calculator.calculate(row["expenses"])  # type: ignore
     # Add line breaks for better label rendering
     return df, type
 
@@ -120,6 +125,8 @@ def generate_figure(
         showlegend=False,
         yaxis_title=f"{unit_label}",
         xaxis_title="",
+        # Force a full redraw when unit changes so the chart reloads reliably.
+        uirevision=f"unit:{unit}",
     )
 
     # Set custom hover templates for each trace
@@ -201,17 +208,16 @@ def layout(**other_kwargs) -> html.Div:
     Input("store-unit", "data"),
 )
 def update_figure_from_filters(
-    budget_id: int | None = None,
+    budget_id: int,
     viewby: ViewByDimensionTypeLiteral = "MINISTRY",
     spending_type: SpendingTypeLiteral = "ALL",
     unit: UnitLiteral = "ABSOLUTE",
 ) -> tuple[go.Figure, dict[str, str]]:
     # Fetch and render using the selected values from stores
-    df, type = fetch_timeseries_data(
+    df, _ = fetch_timeseries_data(
         budget_id=budget_id,
         spending_type=spending_type,
         unit=unit,
-        viewby=viewby,
     )
     return generate_figure(df, [], unit, spending_type, language="EN"), {"visibility": "visible"}
 
@@ -347,7 +353,7 @@ def download_timeseries_image(
     # Add military filter suffix if active
     military_suffix = "_military" if spending_type == "MILITARY" else ""
 
-    filename = f"{now}_{budget_name}_{unit_label}{military_suffix}.png"
+    filename = f"timeseries_{now}_{budget_name}_{unit_label}{military_suffix}.png"
 
     # Send bytes to the browser as a downloadable file
     return dcc.send_bytes(image_bytes, filename)  # type: ignore

@@ -57,6 +57,33 @@ window.dash_clientside.clientside = {
 
       // Simulate a click on the corresponding DOM slice by index
       const plotDiv = hostDiv.querySelector('.js-plotly-plot');
+      // Prefer Plotly's internal click API when available to ensure deep-node focus.
+      try {
+        if (plotDiv && window.Plotly && typeof window.Plotly.Fx?.click === 'function') {
+          // Resolve the correct treemap trace and point index inside Plotly's data arrays.
+          const plotData = Array.isArray(plotDiv.data) ? plotDiv.data : [];
+          let traceIndex = -1;
+          let pointNumber = idx;
+          for (let i = 0; i < plotData.length; i += 1) {
+            const tr = plotData[i];
+            if (tr && tr.type === 'treemap' && Array.isArray(tr.ids)) {
+              const localIdx = tr.ids.findIndex((id) => id === targetId);
+              if (localIdx >= 0) {
+                traceIndex = i;
+                pointNumber = localIdx;
+                break;
+              }
+            }
+          }
+          if (traceIndex >= 0) {
+            console.debug('[Treemap Focus] Plotly.Fx.click', { traceIndex, pointNumber, targetId });
+            window.Plotly.Fx.click(plotDiv, { points: [{ curveNumber: traceIndex, pointNumber }] });
+            return true;
+          }
+        }
+      } catch (e) {
+        console.debug('[Treemap Focus] Plotly.Fx.click failed', e);
+      }
       // Attach a one-time click listener to confirm event receipt
       if (plotDiv && !plotDiv.__treemapDebugClickAttached) {
         plotDiv.__treemapDebugClickAttached = true;
@@ -146,12 +173,12 @@ window.dash_clientside.clientside = {
 
       const clickable = slice.querySelector('path.surface') || slice.querySelector('path') || slice;
       // Compute click position using the slice's bounding box.
-      // Use a point near the top-left inside the tile to avoid hitting nested children.
+      // Use a point well inside the tile to avoid boundary misses or label overlays.
       const bbox = clickable.getBoundingClientRect();
-      // Use small fixed padding from the top-left to avoid nested children,
-      // and prevent drifting too far to the right due to width percentages.
-      const cx = bbox.left;
-      const cy = bbox.top;
+      // Pick a point inside the slice with safe padding so pointer-events resolve to the path.
+      const padding = 6; // px
+      const cx = Math.min(bbox.right - padding, Math.max(bbox.left + padding, bbox.left + bbox.width / 2));
+      const cy = Math.min(bbox.bottom - padding, Math.max(bbox.top + padding, bbox.top + bbox.height / 2));
       // Ensure the target area is in view
       try { clickable.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch (_) { }
       const hitElem = document.elementFromPoint(cx, cy);
@@ -162,10 +189,11 @@ window.dash_clientside.clientside = {
         hitClass: hitElem && hitElem.className,
       });
       const eventInit = { view: window, bubbles: true, cancelable: true, clientX: cx, clientY: cy, buttons: 1, detail: 1 };
-      // Dispatch on the plot div to mimic real user interaction routing
-      const targetForEvents = plotDiv || clickable;
+      // Prefer dispatching on the element resolved from the point to align with Plotly's hit-testing.
+      const targetForEvents = hitElem || clickable || plotDiv;
       const seq = ['pointerover', 'mouseover', 'pointerenter', 'mouseenter', 'pointermove', 'mousemove', 'pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
       seq.forEach((type) => {
+        // Use MouseEvent for compatibility; Plotly listens to mouse events on SVG elements.
         const evt = new MouseEvent(type, eventInit);
         targetForEvents.dispatchEvent(evt);
       });
@@ -199,6 +227,24 @@ window.dash_clientside.clientside = {
       return true;
     }
 
+    /**
+     * Click through the ancestor path to ensure the final node is visible at maxdepth.
+     * This is important when Plotly treemap requires expanding parents to reach deep nodes.
+     * @param {string} targetId
+     * @param {object} figJson
+     * @returns {boolean}
+     */
+    function focusSliceByIdSequential(targetId, figJson) {
+      // Single delayed click: wait ~2s for render and then click the target.
+      if (!figJson || !figJson.data || !figJson.data[0]) return false;
+      console.debug('[Treemap Focus] Single delayed focus for id', targetId);
+      setTimeout(() => {
+        const ok = focusSliceById(targetId, figJson);
+        console.debug('[Treemap Focus] Delayed click result', { id: targetId, ok });
+      }, 2000);
+      return true;
+    }
+
     // Start polling mechanism to find the slice (in case DOM is still loading)
     let attempts = 0;
     const maxAttempts = 5; // Maximum polling attempts
@@ -225,7 +271,8 @@ window.dash_clientside.clientside = {
       const usedId = usedIdRaw ? decodeURIComponent(usedIdRaw.replace(/\+/g, ' ')).trim() : null;
 
       if (usedId) {
-        const ok = focusSliceById(usedId, figure);
+        // Prefer sequential clicks to expand parents before targeting the final node.
+        const ok = focusSliceByIdSequential(usedId, figure) || focusSliceById(usedId, figure);
         console.debug('[Treemap Focus] Synthetic click by id result', ok, 'for id', usedId);
         if (ok) return;
       }

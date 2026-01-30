@@ -6,12 +6,17 @@ for treemap and bar chart visualizations.
 """
 
 from typing import Any, Sequence
+from datetime import date
+from functools import lru_cache
 
 from sqlalchemy import RowMapping, Select, and_, extract, func, or_, select
-from sqlalchemy.orm import aliased, selectinload
+from sqlalchemy.orm import aliased
 
 from database import get_sync_session
 from models import Budget, Dimension, Expense
+from utils.definitions import (
+    SpendingTypeLiteral,
+)
 
 # =============================================================================
 # Constants
@@ -69,6 +74,7 @@ def _build_dimension_name_column(translated: bool = False):
     return func.CONCAT(Dimension.original_identifier, " - ", name_field)
 
 
+@lru_cache(maxsize=1)
 def fetch_budgets_for_dropdown() -> list[dict[str, Any]]:
     """
     Load all non-TOTAL budgets for the dropdown selector.
@@ -91,6 +97,23 @@ def fetch_budgets_for_dropdown() -> list[dict[str, Any]]:
 
 class TreemapDataFetcher:
     """Fetches and prepares data for treemap visualization."""
+
+    @lru_cache(maxsize=10)
+    def get_published_at_date(self, budget_id: int) -> date:
+        """
+        Fetch the published_at date for a given budget ID.
+
+        Args:
+            budget_id: The ID of the budget to fetch.
+        Returns:
+            The published_at date
+        """
+        stmt = select(Budget.published_at).where(Budget.id == budget_id)
+        with get_sync_session() as session:
+            date = session.execute(stmt).scalar_one_or_none()
+        if date is None:
+            raise ValueError(f"Budget with ID {budget_id} not found.")
+        return date
 
     def fetch_relevant_budgets(self, budget_id: int) -> list[Budget]:
         """
@@ -158,6 +181,7 @@ class TreemapDataFetcher:
         stmt = (
             select(
                 Expense.id,
+                Expense.value,
                 Budget.id.label("budget_id"),
                 Budget.original_identifier.label("budget_original_identifier"),
                 Budget.type.label("budget_type"),
@@ -395,6 +419,7 @@ class TreemapDataFetcher:
         updated_dimensions = [d for d in dimensions if d not in total_dimensions]
         return updated_dimensions + classified_dimensions, sum_mapping
 
+    @lru_cache(maxsize=10)
     def fetch_data(
         self,
         budget_id: int | None = None,
@@ -423,11 +448,17 @@ class TreemapDataFetcher:
         # Add classified spending dimensions
         dimensions, sum_mapping = self._create_difference_dimensions(dimensions, sum_mapping)
 
+        seen = set()
+        num_duplicates = 0
+        for dim in dimensions:
+            if len(dim["dimension_original_identifier"]) != 14:
+                continue
+            if dim["dimension_original_identifier"] in seen:
+                num_duplicates += 1
+            else:
+                seen.add(dim["dimension_original_identifier"])
+
         return dimensions, programs, sum_mapping
-
-
-# Backwards compatibility alias (typo in original class name)
-TremapDataFetcher = TreemapDataFetcher
 
 
 # =============================================================================
@@ -438,7 +469,26 @@ TremapDataFetcher = TreemapDataFetcher
 class BarChartDataFetcher:
     """Fetches and prepares data for bar chart (timeseries) visualization."""
 
-    def fetch_budget(self, budget_id: int) -> Budget:
+    def __init__(self, spending_type: SpendingTypeLiteral = "ALL") -> None:
+        self.spending_type: SpendingTypeLiteral = spending_type
+
+    def get_published_at_date(self, budget_id: int) -> date:
+        """
+        Fetch the published_at date for a given budget ID.
+
+        Args:
+            budget_id: The ID of the budget to fetch.
+        Returns:
+            The published_at date
+        """
+        stmt = select(Budget.published_at).where(Budget.id == budget_id)
+        with get_sync_session() as session:
+            date = session.execute(stmt).scalar_one_or_none()
+        if date is None:
+            raise ValueError(f"Budget with ID {budget_id} not found.")
+        return date
+
+    def _fetch_budget(self, budget_id: int) -> Budget:
         """
         Fetch a single budget by ID.
 
@@ -468,7 +518,7 @@ class BarChartDataFetcher:
             Budget.type,
         ]
 
-    def _fetch_law_budget_expenses(self) -> Sequence[RowMapping]:
+    def _fetch_budget_expenses(self) -> Sequence[RowMapping]:
         """
         Fetch LAW budgets and their corresponding TOTAL budgets.
 
@@ -495,6 +545,9 @@ class BarChartDataFetcher:
             .group_by(Budget.id, Budget.original_identifier, Budget.type)
         )
 
+        if self.spending_type == "MILITARY":
+            law_ministry_stmt = law_ministry_stmt.where(Dimension.original_identifier.like("187%"))
+
         # TOTAL budgets with CHAPTER dimensions (values stored in thousands)
         total_chapter_stmt = (
             select(
@@ -510,6 +563,9 @@ class BarChartDataFetcher:
             .where(Dimension.type == "CHAPTER")
             .group_by(Budget.id, Budget.original_identifier, Budget.type)
         )
+
+        if self.spending_type == "MILITARY":
+            total_chapter_stmt = total_chapter_stmt.where(Dimension.original_identifier.like("02%"))
 
         union_stmt = law_ministry_stmt.union(total_chapter_stmt)
 
@@ -569,12 +625,12 @@ class BarChartDataFetcher:
         Raises:
             ValueError: If the budget type is not supported.
         """
-        initial_budget = self.fetch_budget(budget_id)
+        initial_budget = self._fetch_budget(budget_id)
 
         if initial_budget.type == "REPORT":
             return self._fetch_execution_budget_expenses(), "EXECUTION"
         elif initial_budget.type == "LAW":
-            return self._fetch_law_budget_expenses(), "LAW"
+            return self._fetch_budget_expenses(), "LAW"
         else:
             raise ValueError(f"Unsupported budget type: {initial_budget.type} for ID {budget_id}")
 
