@@ -1,0 +1,9 @@
+services:
+  dashboard:
+    container_name: ru_budget_tracker_dashboard
+    image: ghcr.io/swp-berlin/ru_budget_tracker:{{ image_tag }}
+    restart: always
+    pull_policy: always
+    ports:
+      - 8000:8000
+    user: 1000:1000
