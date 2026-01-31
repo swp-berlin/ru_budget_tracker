@@ -14,7 +14,7 @@
   - [Local Setup Instructions](#local-setup-instructions)
   - [Data Import Instructions](#data-import-instructions)
   - [Database Schema Overview](#database-schema-overview)
-  
+
 ## Description
 
 A dashboard application for Stiftung Wissenschaft und Politik (SWP). Dashboard provides insights into budgets and expenditures of the russion government. Includes military spending and classified expenses.
@@ -107,50 +107,48 @@ Data import scripts are located in the [`src/scripts/`](src/scripts/) directory.
 Refer to this [documentation](src/scripts/README.md) for guidance on how to use them.
 
 ## Database Schema Overview
-
 Unique identifier for Dimensions:\
 `original_identifier` + `type` + `budget_id` + `name`\
 This unique identifier is available via join of `Dimension` and `Expense` tables.
-
 ```mermaid
 erDiagram
- Dimension {
-   INTEGER id PK
-   STRING original_identifier "Not Nullable"
-   ENUM type "Not Nullable; MINISTRY | EXPENSE_TYPE | ..."
-   STRING name "Not Nullable"
-   STRING name_translation "Nullable"
-   INTEGER parent_id FK "Nullable"
+	Dimension {
+	  INTEGER id PK
+	  STRING original_identifier "Not Nullable"
+	  ENUM type "Not Nullable; MINISTRY | EXPENSE_TYPE | ..."
+	  STRING name "Not Nullable"
+	  STRING name_translation "Nullable"
+	  INTEGER parent_id FK "Nullable"
   }
   Dimension ||--|{ expense_dimension_association_table : has
   expense_dimension_association_table {
-   INTEGER expense_id PK "Not Nullable"
-   INTEGER category_id PK "Not Nullable"
- }
- expense_dimension_association_table }|--|| Expense : has
+	  INTEGER expense_id PK "Not Nullable"
+	  INTEGER category_id PK "Not Nullable"
+	}
+	expense_dimension_association_table }|--|| Expense : has
   Expense {
-   INTEGER id PK
-   INTEGER budget_id FK "Not Nullable"
-   STRING original_identifier "Not Nullable"
-   FLOAT value "Not Nullable"
-   DATETIME created_at "Not Nullable"
-   DATETIME updated_at "Nullable"
+	  INTEGER id PK
+	  INTEGER budget_id FK "Not Nullable"
+	  STRING original_identifier "Not Nullable"
+	  FLOAT value "Not Nullable"
+	  DATETIME created_at "Not Nullable"
+	  DATETIME updated_at "Nullable"
   }
   Budget ||--|{ Expense : contains
- Budget {
-   INTEGER id PK
-   STRING original_identifier "Not Nullable"
-   STRING name "Not Nullable"
-   STRING name_translated "Nullable"
-   STRING description "Nullable"
-   STRING description_translated "Nullable"
-   ENUM type "Not Nullable; DRAFT | LAW | REPORT | TOTAL"
-   ENUM scope "Not Nullable; QUARTERLY | ... "
-   DATE published_at "Nullable"
-   DATE planned_at "Nullable"
-   DATETIME created_at "Not Nullable"
-   DATETIME updated_at "Nullable"
- }
+	Budget {
+	  INTEGER id PK
+	  STRING original_identifier "Not Nullable"
+	  STRING name "Not Nullable"
+	  STRING name_translated "Nullable"
+	  STRING description "Nullable"
+	  STRING description_translated "Nullable"
+	  ENUM type "Not Nullable; DRAFT | LAW | REPORT | TOTAL"
+	  ENUM scope "Not Nullable; QUARTERLY | ... "
+	  DATE published_at "Nullable"
+	  DATE planned_at "Nullable"
+	  DATETIME created_at "Not Nullable"
+	  DATETIME updated_at "Nullable"
+	}
   ConversionRate{
    STRING name PK "e.g. RUB_USD"
    FLOAT value "Not Nullable"

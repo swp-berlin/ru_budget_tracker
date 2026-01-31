@@ -24,7 +24,11 @@ wheels/
 *.xls
 *.pdf
 
-sanity_check*.json
+# Notebooks
+**/*.ipynb
 
 # Notebooks
 **/*.ipynb
+*.pdf
+
+sanity_check*.json

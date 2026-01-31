@@ -1,0 +1,99 @@
+/* Typography: text color and truncation for dropdowns and buttons
+    Using variable font Source Sans 3 from local ttf files in /src/assets/fonts/Source_Sans_3/
+    */
+@font-face {
+    font-family: 'Source Sans 3';
+    src: url('../assets/fonts/Source_Sans_3/SourceSans3-VariableFont_wght.ttf') format('truetype');
+}
+
+
+
+/* Dark text color for dropdown toggles and items */
+#menu-budget .dropdown-toggle,
+#menu-viewby .dropdown-toggle,
+#menu-spending-type .dropdown-toggle,
+#menu-unit .dropdown-toggle,
+#menu-budget .dropdown-menu,
+#menu-viewby .dropdown-menu,
+#menu-spending-type .dropdown-menu,
+#menu-unit .dropdown-menu,
+#menu-budget .dropdown-item,
+#menu-viewby .dropdown-item,
+#menu-spending-type .dropdown-item,
+#menu-unit .dropdown-item {
+    color: #333333 !important;
+    font-family: 'Source Sans 3';
+    font-size: 14px;
+    font-weight: 600;
+}
+
+/* Truncation for toggle labels and dropdown items */
+#menu-budget .dropdown-toggle,
+#menu-viewby .dropdown-toggle,
+#menu-spending-type .dropdown-toggle,
+#menu-unit .dropdown-toggle {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#menu-budget .dropdown-item,
+#menu-viewby .dropdown-item,
+#menu-spending-type .dropdown-item,
+#menu-unit .dropdown-item {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Ensure inner spans (used for tooltips) inherit the dark text color */
+#menu-budget .dropdown-item span,
+#menu-viewby .dropdown-item span,
+#menu-spending-type .dropdown-item span,
+#menu-unit .dropdown-item span,
+#menu-budget .dropdown-toggle span,
+#menu-viewby .dropdown-toggle span,
+#menu-spending-type .dropdown-toggle span,
+#menu-unit .dropdown-toggle span {
+    color: #333333 !important;
+    font-family: 'Source Sans 3';
+    font-weight: 300;
+}
+
+/* Buttons: apply text color */
+#btn-switch-graphs,
+#btn-share-link,
+#btn-download-image,
+#btn-download-csv,
+#btn-about,
+#btn-switch-data-language {
+    color: #333333 !important;
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+/* Buttons: enforce color on inner content (text and inline SVGs) */
+#btn-switch-graphs *,
+#btn-share-link *,
+#btn-download-image *,
+#btn-download-csv *,
+#btn-about *,
+#btn-switch-data-language * {
+    color: #333333 !important;
+    fill: #333333 !important;
+    font-family: 'Source Sans 3';
+    /* inline SVG icons */
+}
+
+/* Ensure inner spans (used for tooltips) inherit the dark text color */
+#menu-budget .dropdown-item span,
+#menu-viewby .dropdown-item span,
+#menu-spending-type .dropdown-item span,
+#menu-unit .dropdown-item span,
+#menu-budget .dropdown-toggle span,
+#menu-viewby .dropdown-toggle span,
+#menu-spending-type .dropdown-toggle span,
+#menu-unit .dropdown-toggle span {
+    color: #333333 !important;
+}

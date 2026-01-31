@@ -11,6 +11,19 @@ layout = html.Div(
         # Header section
         html.Header(
             [
+                # Logo image without button styling - only the image is visible
+                html.A(
+                    [
+                        html.Img(
+                            src="/assets/logo/logo.svg",
+                            style={"height": "2em"},
+                            alt="Logo of Stiftung Wissenschaft und Politik",
+                        ),
+                    ],
+                    style={"margin-right": "20px", "align-self": "center"},
+                    href="/",
+                    title="Go to Home Page",
+                ),
                 html.Div(className="spacer"),
                 html.H1("About this project"),
             ]

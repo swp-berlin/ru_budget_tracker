@@ -1,16 +1,13 @@
 from datetime import date
-import logging
 from models import (
     Budget,
     Expense,
     Dimension,
-    BudgetTypeLiteral,
-    BudgetScopeLiteral,
     DimensionTypeLiteral,
 )
 from faker import Faker
+import networkx as nx
 from database import get_sync_session
-from itertools import combinations
 
 
 def _create_budgets() -> list[Budget]:
@@ -47,20 +44,19 @@ def generate_budgets(num_budgets: int = 10) -> list[Budget]:
 
 
 def generate_expenses(
-    budgets: list[Budget],
+    budget: Budget,
     num_expenses_per_budget_min: int = 5,
     num_expenses_per_budget_max: int = 20,
 ) -> list[Expense]:
     """Generate mock expenses for each budget."""
     fake = Faker()
     expenses = []
-    for budget in budgets:
-        for _ in range(fake.random_int(num_expenses_per_budget_min, num_expenses_per_budget_max)):
-            expense = Expense(
-                budget_id=budget.id,
-                value=fake.pyfloat(left_digits=5, right_digits=2, positive=True),
-            )
-            expenses.append(expense)
+    for _ in range(fake.random_int(num_expenses_per_budget_min, num_expenses_per_budget_max)):
+        expense = Expense(
+            budget_id=budget.id,
+            value=fake.pyfloat(left_digits=5, right_digits=2, positive=True),
+        )
+        expenses.append(expense)
     return expenses
 
 
@@ -77,11 +73,17 @@ def _generate_dimension(
         # highest level
         number = fake.random_int(1, 20)
         name = f"{number:02d} {dimension_type.title()}"
+        while invalid_names is not None and name in invalid_names:
+            number = fake.random_int(1, 1000)
+            name = f"{number:02d} {dimension_type.title()}"
     if dimension_type == "CHAPTER" and parent_dimension is not None:
         # second level, take digits from parent ministry and add a number
         parent_number = parent_dimension.name.split(" ")[0]
         number = fake.random_int(1, 20)
         name = f"{parent_number}.{number:02d} {dimension_type.title()}"
+        while invalid_names is not None and name in invalid_names:
+            number = fake.random_int(1, 1000)
+            name = f"{parent_number}.{number:02d} {dimension_type.title()}"
     if dimension_type == "PROGRAMM" and parent_dimension is not None:
         # third or more level, take digits from parent chapter and add a number
         parent_number = parent_dimension.name.split(" ")[0]
@@ -90,7 +92,7 @@ def _generate_dimension(
         name = f"{parent_number}.{number:02d} {dimension_type.title()}"
         if invalid_names is not None:
             while name in invalid_names:
-                number = fake.random_int(1, 50)
+                number = fake.random_int(1, 1000)
                 name = f"{parent_number}.{number:02d} {dimension_type.title()}"
     if dimension_type == "EXPENSE_TYPE":
         # lowest level, just a name
@@ -113,21 +115,20 @@ def _generate_nested_dimension(
     depth_subprograms_min: int = 0,
     depth_subprograms_max: int = 0,
     invalid_names: set[str] = set(),
-) -> tuple[list[Dimension], list[int]]:
+) -> tuple[list[Dimension], set[str]]:
     """Generate nested dimensions up to a certain depth."""
     dimensions: list[Dimension] = []
     # Generate one ministry
-    ministry = _generate_dimension("MINISTRY", None)
+    ministry = _generate_dimension("MINISTRY", None, invalid_names)
     invalid_names.add(ministry.name)
     dimensions.append(ministry)
     # Generate chapters
     for _ in range(num_chapters):
-        chapter = _generate_dimension("CHAPTER", ministry)
+        chapter = _generate_dimension("CHAPTER", ministry, invalid_names)
         invalid_names.add(chapter.name)
         dimensions.append(chapter)
 
     # Generate programms
-    leaf_ids = []
     for chapter in [d for d in dimensions if d.type == "CHAPTER"]:
         for _ in range(num_programms):
             programm = _generate_dimension("PROGRAMM", chapter, invalid_names)
@@ -136,7 +137,6 @@ def _generate_nested_dimension(
             # Generate subprograms if depth > 0
             parent = programm
             if depth_subprograms_max == 0:
-                leaf_ids.append(programm.id)
                 continue
             # Determine random depth for subprograms
             fake = Faker()
@@ -147,16 +147,15 @@ def _generate_nested_dimension(
                 invalid_names.add(subprogramm.name)
                 dimensions.append(subprogramm)
                 parent = subprogramm
-            if subprogramm is not None:
-                leaf_ids.append(subprogramm.id)
 
-    return dimensions, leaf_ids
+    return dimensions, invalid_names
 
 
-def generate_dimensions(num_dimensions: int = 10) -> tuple[list[Dimension], list[int]]:
+def generate_dimensions(
+    num_dimensions: int = 10, dimension_names: set[str] = set()
+) -> tuple[list[Dimension], set[str]]:
     """Generate a list of mock nested dimensions."""
     dimensions: list[Dimension] = []
-    leaf_ids: list[int] = []
     for _ in range(num_dimensions):
         # Randomly decide on number of chapters, programms, and depth of subprograms
         fake = Faker()
@@ -164,62 +163,86 @@ def generate_dimensions(num_dimensions: int = 10) -> tuple[list[Dimension], list
         num_programms = fake.random_int(1, 5)
         depth_subprograms_min = 0
         depth_subprograms_max = fake.random_int(0, 5)
-        nested_dimensions, current_leaf_ids = _generate_nested_dimension(
+        nested_dimensions, invalid_names = _generate_nested_dimension(
             num_chapters=num_chapters,
             num_programms=num_programms,
             depth_subprograms_min=depth_subprograms_min,
             depth_subprograms_max=depth_subprograms_max,
-            invalid_names={d.name for d in dimensions},
+            invalid_names=dimension_names,
         )
         dimensions.extend(nested_dimensions)
-        leaf_ids.extend(current_leaf_ids)
+        dimension_names.update(invalid_names)
 
-    return dimensions, leaf_ids
+    return dimensions, dimension_names
+
+
+def calculate_hierarchy_paths(
+    dimensions: list[Dimension],
+) -> list[list[Dimension | None]]:
+    """Calculate all paths from root to leaves in the hierarchy graph."""
+    g = nx.DiGraph()
+    g.add_edges_from([(d.parent, d) for d in dimensions if d.parent is not None])
+    roots = (v for v, d in g.in_degree() if d == 0)
+    leaves = [v for v, d in g.out_degree() if d == 0]
+    all_paths = []
+    for root in roots:
+        paths = nx.all_simple_paths(g, root, leaves)
+        all_paths.extend(paths)
+    return all_paths
 
 
 def assign_dimensions_to_expenses(
     expenses: list[Expense],
     dimensions: list[Dimension],
     expenses_per_dimension_min: int = 1,
-    expenses_per_dimension_max: int = 3,
+    expenses_per_dimension_max: int = 1,
 ) -> None:
     """Assign between min and max expenses per most deeply nested dimension."""
-    fake = Faker()
-    for expense in expenses:
-        if not dimensions:
-            logging.warning("No more dimensions available to assign to expenses.")
+    paths = calculate_hierarchy_paths(dimensions)
+    seen_expense_ids = set()
+    for path in paths:
+        # Get the most deeply nested dimension
+        leaf_dimension = path[-1]
+        if leaf_dimension is None:
+            continue
+        # Randomly select expense to assign to this dimension
+        valid_expenses = [e for e in expenses if e.id not in seen_expense_ids]
+        if not valid_expenses:
             break
-        # Pop a randomly chosen set of dimensions from the available dimensions
-        if expenses_per_dimension_max > len(dimensions):
-            num_dimensions = len(dimensions)
-        else:
-            num_dimensions = fake.random_int(expenses_per_dimension_min, expenses_per_dimension_max)
-        random_dimensions = fake.random_sample(dimensions, num_dimensions)
-        expense.dimensions.extend(random_dimensions)
-        # Remove dimensions from pool once assigned
-        for dim in random_dimensions:
-            dimensions.remove(dim)
+        fake = Faker()
+        num_expenses = fake.random_int(expenses_per_dimension_min, expenses_per_dimension_max)
+        selected_expenses = fake.random_elements(expenses, length=num_expenses, unique=True)
+        for expense in selected_expenses:
+            expense.dimensions.append(leaf_dimension)
+            seen_expense_ids.add(expense.id)
+
+    return None
 
 
 def main() -> None:
     """Populate the database with mock data."""
     with get_sync_session() as session:
         # Generate budgets
-        budgets = generate_budgets(5)
+        budgets = generate_budgets(2)
         session.add_all(budgets)
         session.flush()  # Ensure budgets have IDs assigned
 
-        # Generate expenses
-        expenses = generate_expenses(budgets, 15, 30)
-        session.add_all(expenses)
+    # Generate expenses
+    dimension_names: set[str] = set()
+    for budget in budgets:
+        with get_sync_session() as session:
+            budget = session.merge(budget)  # Re-attach budget to session
+            expenses = generate_expenses(budget, 10, 20)
+            session.add_all(expenses)
 
-        # Generate dimensions
-        dimensions, leaf_ids = generate_dimensions(100)
-        session.add_all(dimensions)
+            # Generate dimensions
+            dimensions, names = generate_dimensions(30, dimension_names)
+            dimension_names.update(names)
+            session.add_all(dimensions)
 
-        # Assign dimensions to expenses
-        leaf_dimensions = [d for d in dimensions if d.id in leaf_ids]
-        assign_dimensions_to_expenses(expenses, leaf_dimensions)
+            # Assign dimensions to expenses
+            assign_dimensions_to_expenses(expenses, dimensions)
+            session.commit()
 
 
 if __name__ == "__main__":
