@@ -3,20 +3,16 @@ from functools import lru_cache
 import hashlib
 import logging
 from typing import Any, Optional, Sequence  # Use typing.Sequence for type annotations
+import re
 
-import dash
-import dash_bootstrap_components as dbc
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from dash import (
-    ALL,
-    ClientsideFunction,
     Input,
     Output,
     State,
     callback,
-    clientside_callback,
     dcc,
     html,
     register_page,
@@ -28,7 +24,6 @@ from utils.fetch import TreemapDataFetcher
 from utils.transform import TreemapTransformer
 from utils.calculate import Calculator
 from utils.definitions import (
-    LanguageTypeLiteral,
     UnitLiteral,
     unit_map,
     SpendingTypeLiteral,
@@ -97,6 +92,9 @@ def _build_treemap_colors(
     root_label = str(df["ROOT"].iloc[0]) if "ROOT" in df.columns and not df.empty else "ROOT"
     labels = list(fig.data[0].labels)  # type: ignore
     parents = list(fig.data[0].parents)  # type: ignore
+    # Prefer ids for unique ancestry traversal (labels can repeat).
+    raw_ids = fig.data[0].ids  # type: ignore
+    ids = list(raw_ids) if raw_ids is not None else list(labels)
 
     # Use a deterministic palette so non-ministry tiles don't inherit gray.
     palette = (
@@ -105,18 +103,56 @@ def _build_treemap_colors(
         else px.colors.qualitative.Set2
     )
 
+    # Build quick lookups so we can trace ancestors by unique id.
+    parent_lookup = {str(node_id): str(parent) for node_id, parent in zip(ids, parents)}
+    id_to_label = {str(node_id): str(label) for node_id, label in zip(ids, labels)}
+
+    # Chapters are identified by labels starting with two digits and " - ".
+    chapter_label_pattern = re.compile(r"^\d{2}\s-\s")
+
+    def _has_classified_ancestor(node_id: str) -> bool:
+        """Return True if this node or any of its ancestors contains 'classified'."""
+        current = node_id
+        # Walk up the parent chain to detect classified tiles.
+        while current:
+            label = id_to_label.get(current, "")
+            if "classified" in label.lower():
+                return True
+            current = parent_lookup.get(current, "")
+        return False
+
+    def _get_chapter_ancestor(node_id: str) -> Optional[str]:
+        """Return the closest chapter ancestor label for a node, if any."""
+        current = node_id
+        # Walk up the parent chain and stop at the first chapter-pattern label.
+        while current:
+            label = id_to_label.get(current, "")
+            if chapter_label_pattern.match(label):
+                return label
+            current = parent_lookup.get(current, "")
+        return None
+
     colors: list[Optional[str]] = []
-    for label, parent in zip(labels, parents):
-        # Root tile should be transparent unless MILITARY, then use the military color.
-        if not parent and str(label) == root_label:
-            colors.append("#7e8f5f" if spending_type == "MILITARY" else "rgba(0,0,0,0)")
-        elif parent == root_label and str(label) in ministry_labels:
-            colors.append("#dddddd")
+    for node_id, label, parent in zip(ids, labels, parents):
+        # Assign a base color for every tile based on its chapter ancestry.
+        chapter_key = _get_chapter_ancestor(str(node_id))
+        # Use a fixed blue for all chapter-based tiles for now.
+        if chapter_key:
+            color = "#4a90e2"
         else:
-            # Stable color assignment based on label.
+            # Fall back to the label if no chapter ancestor is present.
             label_key = str(label)
             color_index = int(hashlib.md5(label_key.encode("utf-8")).hexdigest(), 16) % len(palette)
-            colors.append(palette[color_index])
+            color = palette[color_index]
+        # Apply special rules after the base color is chosen.
+        if _has_classified_ancestor(str(node_id)):
+            color = "#dddddd"
+        elif not parent and str(label) == root_label:
+            color = "#7e8f5f" if spending_type == "MILITARY" else "rgba(0,0,0,0)"
+        elif parent == root_label and str(label) in ministry_labels:
+            # Ministry tiles should be gray.
+            color = "#dddddd"
+        colors.append(color)
 
     return colors
 
@@ -177,7 +213,6 @@ def shape_for_viewby(
 
     if viewby == "PROGRAM":
         # Remove Everything but lowest level and Value
-        non_classified_rows = df_copy["BUDGET_TYPE"] != "CLASSIFIED"
         classified_rows = df_copy["BUDGET_TYPE"] == "CLASSIFIED"
         relevant_cols = [
             col
@@ -284,12 +319,12 @@ def generate_figure(
     fig.data[0].hovertemplate = "<br>".join(
         [
             "%{label}",
-            "%{customdata[0]:.2f}" + unit_map[unit],
-            "%{customdata[1]:.2f}%" + " of parent",
-            "%{customdata[2]:.2f}%" + " of total",
+            "%{customdata[0]:,.1f}" + unit_map[unit],
+            "%{customdata[1]:.1f}%" + " of parent",
+            "%{customdata[2]:.1f}%" + " of total",
         ]
     )
-    fig.data[0].texttemplate = "%{label}<br>%{value:.2f}" + unit_map[unit]
+    fig.data[0].texttemplate = "%{label}<br>%{value:,.1f}" + unit_map[unit]
 
     return fig
 

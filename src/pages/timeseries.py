@@ -1,19 +1,15 @@
 import logging
-from typing import Any, Optional
+from typing import Any
 
-import dash
 import dash_bootstrap_components as dbc
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from dash import (
-    ALL,
-    ClientsideFunction,
     Input,
     Output,
     State,
     callback,
-    clientside_callback,
     dcc,
     html,
     register_page,
@@ -30,7 +26,6 @@ from utils.definitions import (
     ViewByDimensionTypeLiteral,
     UNIT_OPTIONS,
 )
-from utils.helper import add_breaks
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
