@@ -1,20 +1,54 @@
 # Scripts
 
-This directory contains various scripts used for development and maintenance of the project.
-For exammple data import scripts.
+This directory contains various scripts used for development and maintenance of the project,
+for example data import scripts.
 
 ## Table of Contents
 - [Scripts](#scripts)
   - [Table of Contents](#table-of-contents)
   - [Importing Data](#importing-data)
-    - [Data Model](#data-model)
-    - [SQL Queries](#sql-queries)
     - [Order of Import](#order-of-import)
-    - [Mapping Expenses to Dimensions](#mapping-expenses-to-dimensions)
+    - [Commands](#commands)
 
 ## Importing Data
-To import data into the database, you have to create an import script in this directory.
-You can refer to the [`example_import_script.py`](src/scripts/example_import_script.py) for guidance on how to implement the import logic and handle relationships between expenses and dimensions. Please consider the following explanation, guidelines and tips before creating your own import scripts.
+
+To import data into the database, use [`import.py`](src/scripts/import.py).
+
+Since some of the Excel files can be corrupt, run the fixer first:
+[`fix_corrupt_excel_files.py`](src/scripts/fix_corrupt_excel_files.py).
+
+### Order of Import
+1. Fix Excel files
+2. Import budgets (laws/reports)
+3. Import totals (depends on chapter dimensions created by laws)
+4. (Optional) Import GDP conversion data
+5. Run translations
+
+### Commands
+
+```bash
+# 1) Clean up corrupted xlsx/xls files
+uv run python scripts/fix_corrupt_excel_files.py
+
+# 2) Import budgets (laws + reports)
+uv run python scripts/import.py budget --type all
+
+# this will read in the totals for the respective budgets from the Finance Ministry 
+# Report totals (monthly budget execution, xlsx):
+uv run python scripts/import.py totals data/import_files/raw/totals/total_report_2026.xlsx
+
+# Law totals (annual budget law, csv):
+uv run python scripts/import.py totals data/import_files/raw/totals/total_law_2026.csv
+
+# 4) Import GDP (auto-discover from raw/conversion_tables/gdp/...)
+uv run python scripts/import.py gdp
+
+# 4) Import PPP (from WorldBank API)
+uv run python scripts/import.py ppp
+
+# 5) Run translation pipeline (translates unseen dimension names)
+uv run python scripts/translations.py --batch-size 25
+```
 
 ### Data Model
 The SQLAlchemy models defining the database schema can be found in the [`src/models/`](src/models/) directory.

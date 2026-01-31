@@ -5,6 +5,10 @@ build/
 dist/
 wheels/
 *.egg-info
+*.log
+
+# environemnt files
+.env
 
 # IDE files
 .DS_Store
@@ -18,6 +22,9 @@ wheels/
 # data-files
 *.xlsx
 *.xls
+*.pdf
+
+sanity_check*.json
 
 # Notebooks
 **/*.ipynb
