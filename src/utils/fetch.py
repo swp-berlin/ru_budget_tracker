@@ -22,13 +22,6 @@ from utils.definitions import (
 # Constants
 # =============================================================================
 
-# Classified spending dimension IDs
-CLASSIFIED_DIMENSION_ID_OFFSET = 1_000_000  # Offset to avoid ID conflicts with real dimensions
-CLASSIFIED_PARENT_ID = -999_999  # Synthetic ID for aggregated classified parent node
-
-# Multiplier for TOTAL budget values (stored in thousands)
-TOTAL_VALUE_MULTIPLIER = 1000
-
 # Valid dimension types for treemap hierarchy
 TREEMAP_DIMENSION_TYPES = ["MINISTRY", "CHAPTER", "SUBCHAPTER", "PROGRAM"]
 
@@ -304,126 +297,11 @@ class TreemapDataFetcher:
 
         return _execute_query(final_stmt)
 
-    def _create_classified_dimension(
-        self, total_dim: RowMapping, law_chapter_id: int
-    ) -> dict[str, Any]:
-        """
-        Create a synthetic classified spending dimension.
-
-        Args:
-            total_dim: The TOTAL dimension row to base the classified dimension on.
-            law_chapter_id: The LAW budget's chapter ID to use as parent.
-
-        Returns:
-            Dictionary representing the classified dimension.
-        """
-        new_id = (total_dim["dimension_id"] or 0) + CLASSIFIED_DIMENSION_ID_OFFSET
-        orig_id = total_dim["dimension_original_identifier"]
-
-        return {
-            "id": total_dim["id"],
-            "budget_original_identifier": total_dim["budget_original_identifier"],
-            "budget_type": "CLASSIFIED",
-            "dimension_id": new_id,
-            "dimension_original_identifier": orig_id,
-            "dimension_parent_id": law_chapter_id,
-            "dimension_type": "CLASSIFIED",
-            "dimension_name": f"{orig_id} - Classified Spending"
-            if orig_id
-            else "Classified Spending",
-            "dimension_name_translated": f"{orig_id} - Classified Spending"
-            if orig_id
-            else "Classified Spending",
-        }
-
-    def _create_difference_dimensions(
-        self,
-        dimensions: Sequence[RowMapping],
-        sum_mapping: dict[int, float],
-    ) -> tuple[Sequence[RowMapping], dict[int, float]]:
-        """
-        Create dimensions representing classified spending (TOTAL - LAW difference).
-
-        Compares TOTAL budget chapters with LAW budget chapters to calculate
-        the classified spending difference for each chapter.
-
-        Args:
-            dimensions: Existing dimension row mappings.
-            sum_mapping: Mapping of dimension IDs to their summed values.
-
-        Returns:
-            Tuple of (updated dimensions, updated sum mapping).
-        """
-        # Separate TOTAL and non-TOTAL dimensions
-        total_dimensions = [d for d in dimensions if d["budget_type"] == "TOTAL"]
-        nontotal_dimensions = [d for d in dimensions if d["budget_type"] != "TOTAL"]
-
-        if not total_dimensions:
-            return dimensions, sum_mapping
-
-        budget_type = "LAW"
-        if nontotal_dimensions[0]["budget_type"] == "REPORT":
-            budget_type = "REPORT"
-
-        law_chapters_by_orig_id = None
-        nontotal_sum = 0
-        if budget_type == "REPORT":
-            # Get sum mapping for LAW budget
-            nontotal_sum_maping = self._create_treemap_value_sums_mapping(
-                budget_id=nontotal_dimensions[0]["budget_id"],
-                is_total=False,
-                dimension_type="PROGRAM",
-            )
-            nontotal_sum = sum(nontotal_sum_maping.values())
-        else:
-            # Build lookup for LAW chapter dimensions by original_identifier
-            law_chapters_by_orig_id = {
-                d["dimension_original_identifier"]: d
-                for d in nontotal_dimensions
-                if d["dimension_type"] == "CHAPTER"
-            }
-
-        total_sum_mapping = self._create_treemap_value_sums_mapping(
-            budget_id=total_dimensions[0]["budget_id"],
-            is_total=True,
-        )
-
-        # Calculate classified dimensions
-        classified_dimensions = []
-        for total_dim in total_dimensions:
-            orig_id = total_dim["dimension_original_identifier"]
-            value = 0
-            if budget_type == "LAW" and law_chapters_by_orig_id is not None:
-                law_chapter = law_chapters_by_orig_id.get(orig_id)
-                if not law_chapter:
-                    continue
-                value = sum_mapping.get(law_chapter["dimension_id"], 0)
-            else:
-                value = nontotal_sum
-                law_chapter = {"dimension_id": CLASSIFIED_PARENT_ID}
-
-            # Calculate the difference (TOTAL values are stored in thousands)
-            multiplier = TOTAL_VALUE_MULTIPLIER if budget_type == "LAW" else 1
-            total_value = total_sum_mapping.get(total_dim["dimension_id"], 0) * multiplier
-            classified_value = total_value - value
-
-            if classified_value > 0:
-                classified_dim = self._create_classified_dimension(
-                    total_dim=total_dim,
-                    law_chapter_id=law_chapter["dimension_id"],
-                )
-                classified_dimensions.append(classified_dim)
-                sum_mapping[classified_dim["dimension_id"]] = classified_value
-
-        # Return dimensions without TOTAL, plus new classified dimensions
-        updated_dimensions = [d for d in dimensions if d not in total_dimensions]
-        return updated_dimensions + classified_dimensions, sum_mapping
-
     @lru_cache(maxsize=10)
     def fetch_data(
         self,
         budget_id: int | None = None,
-    ) -> tuple[Sequence[RowMapping], Sequence[RowMapping], dict[int, float]]:
+    ) -> tuple[Sequence[RowMapping], Sequence[RowMapping]]:
         """
         Fetch all data needed for treemap visualization.
 
@@ -435,30 +313,16 @@ class TreemapDataFetcher:
             Tuple of (dimensions, programs, sum_mapping).
         """
         if budget_id is None:
-            return [], [], {}
+            return [], []
 
         # Fetch dimensions and calculate sums
         dimensions = self._fetch_treemap_dimensions(budget_id=budget_id)
-        sum_mapping = self._create_treemap_value_sums_mapping(budget_id=budget_id)
 
         # Fetch program hierarchy
         program_ids = [r["dimension_id"] for r in dimensions if r["dimension_type"] == "PROGRAM"]
         programs = self._fetch_treemap_programs_recursive(program_ids)
 
-        # Add classified spending dimensions
-        dimensions, sum_mapping = self._create_difference_dimensions(dimensions, sum_mapping)
-
-        seen = set()
-        num_duplicates = 0
-        for dim in dimensions:
-            if len(dim["dimension_original_identifier"]) != 14:
-                continue
-            if dim["dimension_original_identifier"] in seen:
-                num_duplicates += 1
-            else:
-                seen.add(dim["dimension_original_identifier"])
-
-        return dimensions, programs, sum_mapping
+        return dimensions, programs
 
 
 # =============================================================================
@@ -552,7 +416,7 @@ class BarChartDataFetcher:
         total_chapter_stmt = (
             select(
                 *base_columns,
-                (func.sum(Expense.value) * TOTAL_VALUE_MULTIPLIER).label("total_value"),
+                (func.sum(Expense.value)).label("total_value"),
             )
             .select_from(Budget)
             .join(Expense, Budget.id == Expense.budget_id, isouter=True)
@@ -560,7 +424,6 @@ class BarChartDataFetcher:
             .join(Dimension, assoc_table.c.dimension_id == Dimension.id, isouter=True)
             .where(Budget.type == "TOTAL")
             .where(Budget.original_identifier.like("%LAW%"))
-            .where(Dimension.type == "CHAPTER")
             .group_by(Budget.id, Budget.original_identifier, Budget.type)
         )
 

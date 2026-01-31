@@ -1,3 +1,4 @@
+from functools import lru_cache
 from re import Pattern
 from typing import Sequence
 import networkx as nx
@@ -10,19 +11,33 @@ from utils.definitions import (
 )
 from utils.helper import add_breaks
 
+# Classified spending dimension IDs
+CLASSIFIED_DIMENSION_ID_OFFSET = 1_000_000  # Offset to avoid ID conflicts with real dimensions
+CLASSIFIED_PARENT_ID = -999_999  # Synthetic ID for aggregated classified parent node
+
+# Multiplier for TOTAL budget values (stored in thousands)
+TOTAL_VALUE_MULTIPLIER = 1000
+
 
 class TreemapTransformer:
-    def __init__(self, max_line_lenght: int | None = 30) -> None:
+    def __init__(
+        self,
+        dimensions: Sequence[RowMapping],
+        programs: Sequence[RowMapping],
+        spending_type: SpendingTypeLiteral = "ALL",
+        max_line_lenght: int | None = 30,
+    ) -> None:
         # Ensure an intuitive ordering: MINISTRY -> CHAPTER -> SUBCHAPTER -> PROGRAM_*
         # CLASSIFIED_PARENT is at top level (sibling to MINISTRY), CLASSIFIED is under it
         self.level_order_index = {
             "MINISTRY": 0,
-            "CLASSIFIED_PARENT": 0,  # Same level as MINISTRY (top-level under root)
             "CHAPTER": 1,
-            "CLASSIFIED": 2,  # Under CLASSIFIED_PARENT or under CHAPTER
-            "SUBCHAPTER": 3,
-            "PROGRAM": 4,
+            "SUBCHAPTER": 2,
+            "PROGRAM": 3,
         }
+        self.spending_type = spending_type
+        self.dimensions = dimensions
+        self.programs = programs
         self.max_line_length = max_line_lenght
 
     def _calculate_program_hierarchy(self, programs: Sequence[RowMapping]) -> dict[int, list[int]]:
@@ -49,6 +64,58 @@ class TreemapTransformer:
         leave_mapping = {path[0]: path[::-1] for path in program_paths}
 
         return leave_mapping
+
+    def _calculate_difference_for_classified(
+        self,
+        expense_dimensions: Sequence[RowMapping],
+    ) -> tuple[list[dict[str, str | float | int]], float]:
+        """Calculate the difference between TOTAL and LAW budgets for classified expenses."""
+        difference_rows: list[dict[str, str | float | int]] = []
+        difference_value_budget = 0.0
+        totals: Sequence[RowMapping] = []
+        chapter_expense_mapping: dict[str, dict[str, float | RowMapping]] = {}
+        budget_sum_value: float = 0.0
+        budget_type = None
+        for row in expense_dimensions:
+            if row.get("budget_type") == "TOTAL":
+                totals.append(row)
+                continue
+            if budget_type is None:
+                budget_type = row.get("budget_type")
+            if row["dimension_type"] == "CHAPTER":
+                chapter_expense_mapping.setdefault(
+                    row["dimension_original_identifier"],
+                    {
+                        "value": 0.0,
+                        "row": row,
+                    },
+                )
+                chapter_expense_mapping[row["dimension_original_identifier"]]["value"] += row.get(
+                    "value", 0.0
+                )
+                budget_sum_value += row.get("value", 0.0)
+
+        # LAW Totals are split across chapters, so we can calculate the difference per chapter
+        # REPORT Totals only have 1 row, so we calculate the difference between the 1 TOTAL
+        # and the sum of the chapters
+        for row in totals:
+            multiplier = TOTAL_VALUE_MULTIPLIER
+            if budget_type == "REPORT":
+                multiplier = 1.0
+            if row["dimension_type"] is None:
+                total_value = row.get("value", 0.0)
+                difference_value_budget = total_value * multiplier - budget_sum_value
+            if row["dimension_type"] == "CHAPTER":
+                chapter_id = row["dimension_original_identifier"]
+                total_value = row.get("value", 0.0)
+                chapter_value = chapter_expense_mapping.get(chapter_id, {}).get("value", 0.0)
+                difference_value = total_value * multiplier - chapter_value
+                if difference_value > 0:
+                    difference_row = dict(row)
+                    difference_row["value"] = difference_value
+                    difference_rows.append(difference_row)
+
+        return difference_rows, difference_value_budget
 
     def _build_hierarchy_dict(
         self,
@@ -89,33 +156,14 @@ class TreemapTransformer:
                     },
                 )
                 # Add MINISTRY
-                if row["dimension_type"] == "MINISTRY":
-                    hierarchy_dict[expense_id]["MINISTRY_DIM_ID"] = row["dimension_id"]
-                    hierarchy_dict[expense_id]["MINISTRY_ORIG_ID"] = row[
+                dim_type = row.get("dimension_type")
+                if dim_type in ["MINISTRY", "CHAPTER", "SUBCHAPTER"]:
+                    hierarchy_dict[expense_id][f"{dim_type}_DIM_ID"] = row["dimension_id"]
+                    hierarchy_dict[expense_id][f"{dim_type}_ORIG_ID"] = row[
                         "dimension_original_identifier"
                     ]
-                    hierarchy_dict[expense_id]["MINISTRY_NAME"] = row.get("dimension_name", None)
-                    hierarchy_dict[expense_id]["MINISTRY_NAME_TRANSLATED"] = row.get(
-                        "dimension_name_translated", None
-                    )
-                # Add CHAPTER
-                if row["dimension_type"] == "CHAPTER":
-                    hierarchy_dict[expense_id]["CHAPTER_DIM_ID"] = row["dimension_id"]
-                    hierarchy_dict[expense_id]["CHAPTER_ORIG_ID"] = row[
-                        "dimension_original_identifier"
-                    ]
-                    hierarchy_dict[expense_id]["CHAPTER_NAME"] = row.get("dimension_name", None)
-                    hierarchy_dict[expense_id]["CHAPTER_NAME_TRANSLATED"] = row.get(
-                        "dimension_name_translated", None
-                    )
-                # Add SUBCHAPTER
-                if row["dimension_type"] == "SUBCHAPTER":
-                    hierarchy_dict[expense_id]["SUBCHAPTER_DIM_ID"] = row["dimension_id"]
-                    hierarchy_dict[expense_id]["SUBCHAPTER_ORIG_ID"] = row[
-                        "dimension_original_identifier"
-                    ]
-                    hierarchy_dict[expense_id]["SUBCHAPTER_NAME"] = row.get("dimension_name", None)
-                    hierarchy_dict[expense_id]["SUBCHAPTER_NAME_TRANSLATED"] = row.get(
+                    hierarchy_dict[expense_id][f"{dim_type}_NAME"] = row.get("dimension_name", None)
+                    hierarchy_dict[expense_id][f"{dim_type}_NAME_TRANSLATED"] = row.get(
                         "dimension_name_translated", None
                     )
 
@@ -206,102 +254,12 @@ class TreemapTransformer:
 
         return df
 
-    def _create_id_name_mapping(
-        self,
-        dimension_rows: Sequence[RowMapping],
-        program_rows: Sequence[RowMapping],
-        translated: bool = False,
-    ) -> dict[int, str]:
-        name_mapping: dict[int, str] = {}
-        for row in dimension_rows:
-            d_id = row["dimension_id"]
-            d_name = row["dimension_name"] if not translated else row["dimension_name_translated"]
-            name_mapping[d_id] = d_name
-
-            # For classified expenses, the dimension_id is already unique (offset by 1000000 in fetch.py)
-            # and the dimension_name contains "Classified Spending" so no extra mapping needed
-
-        for row in program_rows:
-            d_id = row["dimension_id"]
-            d_name = row["dimension_name"] if not translated else row["dimension_name_translated"]
-            name_mapping[d_id] = d_name
-
-        # Add name for the synthetic classified parent node used in MINISTRY/PROGRAM views
-        name_mapping[-999999] = "Classified Spending"
-
-        return name_mapping
-
-    def _create_id_type_mapping(
-        self,
-        dimension_rows: Sequence[RowMapping],
-    ) -> dict[int, str]:
-        type_mapping: dict[int, str] = {}
-        for row in dimension_rows:
-            d_id = row["dimension_id"]
-            d_type = row["budget_type"]
-            type_mapping[d_id] = d_type
-            # For classified expenses, dimension_id is already unique and budget_type is "CLASSIFIED"
-
-        # Add type for the synthetic classified parent node (for gray coloring)
-        type_mapping[-999999] = "CLASSIFIED"
-
-        return type_mapping
-
-    def _extend_sum_mapping_with_hierarchy(
-        self,
-        sum_mapping: dict[int, float],
-        program_paths: dict[int, list[int]],
-    ) -> dict[int, float]:
-        """
-        Extend the sum mapping to include sums for all ancestor dimensions, specifically for
-        programs. This ensures that parent dimensions have the correct aggregated sums.
-        """
-        extended = sum_mapping.copy()
-        for leaf_id, path in program_paths.items():
-            leaf_sum = sum_mapping.get(leaf_id, 0.0)
-            # Propagate from leaf up to (but excluding) the leaf itself
-            for ancestor_id in path[::-1][1:]:
-                extended[ancestor_id] = extended.get(ancestor_id, 0.0) + leaf_sum
-        return extended
-
-    def _extend_sum_mapping_with_classified(
-        self,
-        sum_mapping: dict[int, float],
-        dimensions: Sequence[RowMapping],
-        viewby: ViewByDimensionTypeLiteral = "MINISTRY",
-    ) -> dict[int, float]:
-        """
-        Extend the sum mapping to include values for classified expense nodes.
-
-        For MINISTRY/PROGRAM views: adds a parent node with aggregated total,
-        individual classified items keep their own values.
-
-        For CHAPTER view: keeps individual classified dimension values as-is.
-        """
-        classified_rows = [dim for dim in dimensions if dim.get("budget_type") == "CLASSIFIED"]
-
-        if not classified_rows:
-            return sum_mapping
-
-        if viewby in ["MINISTRY", "PROGRAM"]:
-            # Add the aggregated total for the parent node (dimension_id = -999999)
-            # Individual items keep their values from fetch.py
-            parent_dim_id = -999999
-            total_classified = sum(
-                sum_mapping.get(row["dimension_id"], 0) for row in classified_rows
-            )
-            sum_mapping[parent_dim_id] = total_classified
-
-        # For CHAPTER view, values are already in sum_mapping from fetch.py
-        return sum_mapping
-
     def _filter_hierarchy_dict_by_spending_type(
         self,
         hierarchy: dict[str, dict[str, int | float | str]],
-        spending_type: SpendingTypeLiteral,
     ) -> dict[str, dict[str, int | float | str]]:
         """Filter the hierarchy dictionary based on spending type (e.g., military only)."""
-        if spending_type == "ALL":
+        if self.spending_type == "ALL":
             return hierarchy
 
         filtered_hierarchy: dict[str, dict[str, int | float | str]] = {}
@@ -333,35 +291,97 @@ class TreemapTransformer:
 
         return filtered_hierarchy
 
+    @lru_cache(maxsize=5)
     def transform_data(
         self,
-        dimensions: Sequence[RowMapping],
-        programs: Sequence[RowMapping],
-        spending_type: SpendingTypeLiteral = "ALL",
     ) -> pd.DataFrame:
         """Transform DB rows into treemap lists expected by the figure creator."""
-        if not dimensions:
+        if not self.dimensions:
             return pd.DataFrame()
 
         # Extend sum mapping to include all hierarchy levels
-        program_paths = self._calculate_program_hierarchy(programs)
+        program_paths = self._calculate_program_hierarchy(self.programs)
         # Calculate max length of program paths for consistent PROGRAM_* columns
         max_program_levels = max((len(path) for path in program_paths.values()), default=0)
         # Calculate all paths between dimensions
         hierarchy_dict = self._build_hierarchy_dict(
-            dimensions, programs, program_paths, max_program_levels
+            self.dimensions, self.programs, program_paths, max_program_levels
         )
         # Filter hierarchy based on spending type if needed
-        if spending_type != "ALL":
-            hierarchy_dict = self._filter_hierarchy_dict_by_spending_type(
-                hierarchy_dict, spending_type
-            )
+        if self.spending_type != "ALL":
+            hierarchy_dict = self._filter_hierarchy_dict_by_spending_type(hierarchy_dict)
         # Create dataframe from paths
         df = self._create_dataframe(
             hierarchy_dict,
         )
 
-        # Build ordered name columns aligned to id columns.
+        return df
+
+    def add_classified_expenses(
+        self,
+        df: pd.DataFrame,
+    ) -> pd.DataFrame:
+        """Add classified expenses calculated from difference between TOTAL and LAW budgets."""
+        difference_rows, difference_budget_value = self._calculate_difference_for_classified(
+            self.dimensions
+        )
+        budget_type = "REPORT" if len(difference_rows) == 0 else "LAW"
+
+        for row in difference_rows:
+            # Get only first row in df with matching original identifier at CHAPTER_ORIG_ID column
+            chapter_orig_id = row["dimension_original_identifier"]
+
+            expense_id = row["id"]
+            expense_value = row.get("value", 0.0)
+            classified_entry: dict[str, int | float | str] = {
+                "VALUE": expense_value,
+                "BUDGET_TYPE": "CLASSIFIED",
+                "ROOT": "Federal Budget",
+            }
+            classified_entry["MINISTRY_DIM_ID"] = CLASSIFIED_PARENT_ID
+            classified_entry["MINISTRY_ORIG_ID"] = "CLASSIFIED_PARENT"
+            classified_entry["MINISTRY_NAME"] = "Classified Spending"
+            classified_entry["MINISTRY_NAME_TRANSLATED"] = "Classified Spending"
+            classified_entry["CHAPTER_DIM_ID"] = row["dimension_id"]
+            classified_entry["CHAPTER_ORIG_ID"] = row["dimension_original_identifier"]
+            classified_entry["CHAPTER_NAME"] = row["dimension_name"]
+            classified_entry["CHAPTER_NAME_TRANSLATED"] = row["dimension_name_translated"]
+            classified_entry["SUBCHAPTER_DIM_ID"] = CLASSIFIED_DIMENSION_ID_OFFSET + int(expense_id)
+            classified_entry["SUBCHAPTER_ORIG_ID"] = f"CLASSIFIED_{chapter_orig_id}"
+            classified_entry["SUBCHAPTER_NAME"] = "Classified Spending"
+            classified_entry["SUBCHAPTER_NAME_TRANSLATED"] = "Classified Expenses"
+            # PROGRAM levels
+            for idx in range(0, 3):
+                classified_entry[f"PROGRAM_{idx}_DIM_ID"] = CLASSIFIED_DIMENSION_ID_OFFSET + int(
+                    expense_id
+                )
+                classified_entry[f"PROGRAM_{idx}_ORIG_ID"] = f"CLASSIFIED_{chapter_orig_id}"
+                classified_entry[f"PROGRAM_{idx}_NAME"] = "Classified Expenses"
+                classified_entry[f"PROGRAM_{idx}_NAME_TRANSLATED"] = "Classified Expenses"
+
+            # Append the new row via concat to avoid deprecated append and type issues.
+            classified_entry_df = pd.DataFrame([classified_entry])
+            # Add line breaks to long names if max_line_length is set.
+            line_length = self.max_line_length
+            if line_length is not None:
+                for col in classified_entry_df.columns:
+                    if "NAME" in col:
+                        classified_entry_df[col] = classified_entry_df[col].apply(
+                            lambda x: add_breaks(x, interval=line_length) if x else x  # type: ignore
+                        )
+            df = pd.concat([df, classified_entry_df], ignore_index=True)
+
+        if budget_type == "REPORT":
+            root_row = {
+                "VALUE": difference_budget_value,
+                "BUDGET_TYPE": "CLASSIFIED",
+                "ROOT": "Federal Budget",
+                "MINISTRY_DIM_ID": CLASSIFIED_PARENT_ID,
+                "MINISTRY_ORIG_ID": "CLASSIFIED_PARENT",
+                "MINISTRY_NAME": "Classified Spending",
+                "MINISTRY_NAME_TRANSLATED": "Classified Spending",
+            }
+            df = pd.concat([df, pd.DataFrame([root_row])], ignore_index=True)
 
         return df
 

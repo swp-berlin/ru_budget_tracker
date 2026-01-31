@@ -127,7 +127,7 @@ def fetch_treemap_data(
     """Fetch and transform treemap data for the current filters."""
     data_fetcher = TreemapDataFetcher()
     published_at = data_fetcher.get_published_at_date(budget_id)
-    dimensions, programs, _ = data_fetcher.fetch_data(
+    dimensions, programs = data_fetcher.fetch_data(
         budget_id=budget_id,
     )
 
@@ -141,13 +141,10 @@ def transform_treemap_data(
     unit: UnitLiteral,
     character_limit: int = 25,
 ) -> pd.DataFrame:
-    transformer = TreemapTransformer(max_line_lenght=character_limit)
     dimensions, programs, published_at = fetch_treemap_data(budget_id)
-    df = transformer.transform_data(
-        dimensions,
-        programs,
-        spending_type=spending_type,
-    )
+    transformer = TreemapTransformer(dimensions, programs, max_line_lenght=character_limit)
+    df = transformer.transform_data()
+    df = transformer.add_classified_expenses(df)
     # Calculate values based on unit, budget, and published_at
     calculator = Calculator(unit, budget_id, published_at)
     df["VALUE"] = df["VALUE"].apply(calculator.calculate)
@@ -170,21 +167,31 @@ def shape_for_viewby(
         # Remove Everything but Ministry, Chapter, lowest level and Value
         relevant_cols = [
             col for col in df_copy.columns if col.startswith(("MINISTRY", "CHAPTER", "PROGRAM_3"))
-        ] + ["VALUE", "ROOT"]
+        ] + ["VALUE", "ROOT", "BUDGET_TYPE"]
 
     if viewby == "CHAPTER":
         # Remove Everything but Chapter, lowest level and Value
         relevant_cols = [
             col for col in df_copy.columns if col.startswith(("CHAPTER", "SUBCHAPTER", "PROGRAM_3"))
-        ] + ["VALUE", "ROOT"]
+        ] + ["VALUE", "ROOT", "BUDGET_TYPE"]
 
     if viewby == "PROGRAM":
         # Remove Everything but lowest level and Value
+        non_classified_rows = df_copy["BUDGET_TYPE"] != "CLASSIFIED"
+        classified_rows = df_copy["BUDGET_TYPE"] == "CLASSIFIED"
         relevant_cols = [
             col
             for col in df_copy.columns
             if col.startswith(("PROGRAM_0", "PROGRAM_1", "PROGRAM_3"))
-        ] + ["VALUE", "ROOT"]
+        ] + ["VALUE", "ROOT", "BUDGET_TYPE"]
+        # For classified rows, copy values from CHAPTER columns to PROGRAM_1 columns
+        # and set PROGRAM_3 columns to None
+        for col in df_copy.columns:
+            if col.startswith("CHAPTER") and "NAME" in col:
+                target_col = col.replace("CHAPTER", "PROGRAM_1")
+                df_copy.loc[classified_rows, target_col] = df_copy.loc[classified_rows, col].values
+            if col.startswith("PROGRAM_3") and "NAME" in col:
+                df_copy.loc[classified_rows, col] = None
 
     df_copy = df_copy[relevant_cols]
 
