@@ -73,14 +73,14 @@ class TreemapTransformer:
         program_paths: list[list[int]] = []
         for root in roots:
             # Filter leaves reachable from this root for efficiency
-            reachable_leaves = [leaf for leaf in leaves if nx.has_path(g, root, leaf)]
+            reachable = nx.descendants(g, root) | {root}
+            reachable_leaves = leaves & reachable
             if reachable_leaves:
-                paths_raw = nx.all_simple_paths(g, root, reachable_leaves)
+                paths_raw = nx.all_simple_paths(g, root, list(reachable_leaves))
                 paths = [[int(elem) for elem in path] for path in paths_raw]
                 program_paths.extend(paths)
 
-        # Create a mapping for leaves to their full paths
-        # Full path is used for root-to-leaf traversal, so we reverse the paths here
+        # Create a mapping for leaves to their full paths (reversed for root-to-leaf)
         leave_mapping = {path[0]: path[::-1] for path in program_paths}
 
         return leave_mapping
@@ -89,7 +89,7 @@ class TreemapTransformer:
         self,
         expense_dimensions: Sequence[RowMapping],
     ) -> tuple[list[dict[str, str | float | int]], float]:
-        """Calculate the difference between TOTAL and LAW budgets for classified expenses."""
+        """Calculate the difference between TOTAL and LAW budgets for Classified Spending."""
         difference_rows: list[dict[str, str | float | int]] = []
         difference_value_budget = 0.0
         totals: list[RowMapping] = []
@@ -183,36 +183,35 @@ class TreemapTransformer:
     ) -> dict[str, dict[str, int | float | str]]:
         """Build a hierarchy dictionary mapping each row ID to its hierarchy levels.
 
-        CLASSIFIED expenses (from TOTAL budgets) are placed as siblings to SUBCHAPTERs
+        Classified Spending (from TOTAL budgets) are placed as siblings to SUBCHAPTERs
         (under CHAPTER) and are terminal nodes (no children).
         """
 
         hierarchy_dict: dict[str, dict[str, int | float | str]] = {}
         program_by_dim_id = {row["dimension_id"]: row for row in programs}
-        expense_by_id = {row["id"]: row for row in expense_dimensions}
+        expenses_by_id: dict[int, list[RowMapping]] = {}
+        for row in expense_dimensions:
+            expenses_by_id.setdefault(row["id"], []).append(row)
 
         # Extract expense_ids from expense_dimensions and map to program path keys
-        leaf_expense_mapping: dict[tuple[str, int], set[RowMapping]] = {}
-        validate_program_ids = set(program_paths.keys())
+        leaf_expense_mapping: dict[int, set[int]] = {}
+        valid_program_ids = set(program_paths.keys())
         for row in expense_dimensions:
-            if row["dimension_id"] in program_paths.keys():
-                leaf_expense_mapping.setdefault(
-                    (row["dimension_original_identifier"], row["dimension_id"]), set()
-                )
-                leaf_expense_mapping[
-                    (row["dimension_original_identifier"], row["dimension_id"])
-                ].add(row["id"])
+            if row["dimension_id"] in valid_program_ids:
+                leaf_expense_mapping.setdefault(row["dimension_id"], set())
+                leaf_expense_mapping[row["dimension_id"]].add(row["id"])
 
-        for (_, program_id), expenses in leaf_expense_mapping.items():
+        for program_id, expenses in leaf_expense_mapping.items():
             # Calculate ONCE per program_id, not per expense
             program_path = program_paths.get(program_id, [])
             program_rows = [
                 program_by_dim_id[d] for d in reversed(program_path) if d in program_by_dim_id
             ]
 
-            relevant_dims = [
-                expense_by_id[exp_id] for exp_id in expenses if exp_id in expense_by_id
-            ]
+            relevant_dims = []
+            # Extract the id from each expense row mapping before using it as a dictionary key
+            for expense_id in expenses:
+                relevant_dims.extend(expenses_by_id.get(expense_id, []))
             for row in relevant_dims:
                 expense_id = row["id"]
                 dim_type = row.get("dimension_type", "")
@@ -225,16 +224,16 @@ class TreemapTransformer:
                         "BUDGET_TYPE": relevant_dims[0].get("budget_type", ""),
                     },
                 )
-                hierarchy_dict[expense_id]["IS_MILITARY"] = self._check_if_military(
+                entry["IS_MILITARY"] = self._check_if_military(
                     dim_type,
                     dim_original_id,
                     hierarchy_dict_entry=entry,
                 )
                 if dim_type in ["MINISTRY", "CHAPTER", "SUBCHAPTER"]:
-                    hierarchy_dict[expense_id][f"{dim_type}_DIM_ID"] = row["dimension_id"]
-                    hierarchy_dict[expense_id][f"{dim_type}_ORIG_ID"] = dim_original_id
-                    hierarchy_dict[expense_id][f"{dim_type}_NAME"] = row.get("dimension_name", None)
-                    hierarchy_dict[expense_id][f"{dim_type}_NAME_TRANSLATED"] = row.get(
+                    entry[f"{dim_type}_DIM_ID"] = row["dimension_id"]
+                    entry[f"{dim_type}_ORIG_ID"] = dim_original_id
+                    entry[f"{dim_type}_NAME"] = row.get("dimension_name", None)
+                    entry[f"{dim_type}_NAME_TRANSLATED"] = row.get(
                         "dimension_name_translated", None
                     )
 
@@ -246,14 +245,10 @@ class TreemapTransformer:
                         last_row = row
                     else:
                         row = last_row
-                    hierarchy_dict[expense_id][f"PROGRAM_{idx}_DIM_ID"] = row["dimension_id"]
-                    hierarchy_dict[expense_id][f"PROGRAM_{idx}_ORIG_ID"] = row[
-                        "dimension_original_identifier"
-                    ]
-                    hierarchy_dict[expense_id][f"PROGRAM_{idx}_NAME"] = row.get(
-                        "dimension_name", None
-                    )
-                    hierarchy_dict[expense_id][f"PROGRAM_{idx}_NAME_TRANSLATED"] = row.get(
+                    entry[f"PROGRAM_{idx}_DIM_ID"] = row["dimension_id"]
+                    entry[f"PROGRAM_{idx}_ORIG_ID"] = row["dimension_original_identifier"]
+                    entry[f"PROGRAM_{idx}_NAME"] = row.get("dimension_name", None)
+                    entry[f"PROGRAM_{idx}_NAME_TRANSLATED"] = row.get(
                         "dimension_name_translated", None
                     )
 
@@ -297,9 +292,8 @@ class TreemapTransformer:
         # Preserve nulls before any string conversion for Plotly path handling.
         df = df.where(pd.notnull(df), None)
         # Normalize non-null entries to strings for id/name columns.
-        for col in df.columns:
-            if col != "VALUE":
-                df[col] = df[col].apply(lambda x: str(x) if x is not None else None)
+        str_cols = [c for c in df.columns if c != "VALUE"]
+        df[str_cols] = df[str_cols].astype(str).replace("nan", None).replace("None", None)
 
         # Add line breaks to long names if max_line_length is set.
         line_length = self.max_line_length
@@ -307,7 +301,7 @@ class TreemapTransformer:
             for col in df.columns:
                 if "NAME" in col:
                     df[col] = df[col].apply(
-                        lambda x: add_breaks(x, interval=line_length) if x else x
+                        lambda x: add_breaks(str(x), interval=line_length) if x else x
                     )
 
         # Normalize empty strings to None for Plotly compatibility.
@@ -319,7 +313,7 @@ class TreemapTransformer:
         self,
         df: pd.DataFrame,
     ) -> pd.DataFrame:
-        """Add classified expenses calculated from difference between TOTAL and LAW budgets."""
+        """Add Classified Spending calculated from difference between TOTAL and LAW budgets."""
         difference_rows, difference_budget_value = self._calculate_difference_for_classified(
             self.dimensions
         )
@@ -347,15 +341,15 @@ class TreemapTransformer:
             classified_entry["SUBCHAPTER_DIM_ID"] = CLASSIFIED_DIMENSION_ID_OFFSET + int(expense_id)
             classified_entry["SUBCHAPTER_ORIG_ID"] = f"CLASSIFIED_{chapter_orig_id}"
             classified_entry["SUBCHAPTER_NAME"] = "Classified Spending"
-            classified_entry["SUBCHAPTER_NAME_TRANSLATED"] = "Classified Expenses"
+            classified_entry["SUBCHAPTER_NAME_TRANSLATED"] = "Classified Spending"
             # PROGRAM levels
             for idx in range(0, 3):
                 classified_entry[f"PROGRAM_{idx}_DIM_ID"] = CLASSIFIED_DIMENSION_ID_OFFSET + int(
                     expense_id
                 )
                 classified_entry[f"PROGRAM_{idx}_ORIG_ID"] = f"CLASSIFIED_{chapter_orig_id}"
-                classified_entry[f"PROGRAM_{idx}_NAME"] = "Classified Expenses"
-                classified_entry[f"PROGRAM_{idx}_NAME_TRANSLATED"] = "Classified Expenses"
+                classified_entry[f"PROGRAM_{idx}_NAME"] = "Classified Spending"
+                classified_entry[f"PROGRAM_{idx}_NAME_TRANSLATED"] = "Classified Spending"
 
             # Append the new row via concat to avoid deprecated append and type issues.
             classified_entry_df = pd.DataFrame([classified_entry])
@@ -378,7 +372,21 @@ class TreemapTransformer:
                 "MINISTRY_ORIG_ID": "CLASSIFIED_PARENT",
                 "MINISTRY_NAME": "Classified Spending",
                 "MINISTRY_NAME_TRANSLATED": "Classified Spending",
+                "CHAPTER_DIM_ID": CLASSIFIED_DIMENSION_ID_OFFSET + 1,
+                "CHAPTER_ORIG_ID": "CLASSIFIED_CHAPTER",
+                "CHAPTER_NAME": "Classified Spending",
+                "CHAPTER_NAME_TRANSLATED": "Classified Spending",
+                "SUBCHAPTER_DIM_ID": CLASSIFIED_DIMENSION_ID_OFFSET + 2,
+                "SUBCHAPTER_ORIG_ID": "CLASSIFIED_SUBCHAPTER",
+                "SUBCHAPTER_NAME": "Classified Spending",
+                "SUBCHAPTER_NAME_TRANSLATED": "Classified Spending",
             }
+            # PROGRAM levels
+            for idx in range(0, 3):
+                root_row[f"PROGRAM_{idx}_DIM_ID"] = CLASSIFIED_DIMENSION_ID_OFFSET + 3 + idx
+                root_row[f"PROGRAM_{idx}_ORIG_ID"] = "CLASSIFIED_PROGRAM_" + str(idx)
+                root_row[f"PROGRAM_{idx}_NAME"] = "Classified Spending"
+                root_row[f"PROGRAM_{idx}_NAME_TRANSLATED"] = "Classified Spending"
             df = pd.concat([df, pd.DataFrame([root_row])], ignore_index=True)
 
         return df
@@ -415,7 +423,7 @@ class BarchartTransformer:
             return pd.DataFrame()
 
         # For every published_at, subtract the law value from the total value
-        # and set new value as classified expenses
+        # and set new value as Classified Spending
 
         expenses = [budget["total_value"] for budget in budgets if budget["type"] != "TOTAL"]
         dates = [budget["published_at"] for budget in budgets if budget["type"] != "TOTAL"]
