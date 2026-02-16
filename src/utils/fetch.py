@@ -318,7 +318,7 @@ class TreemapDataFetcher:
         # Fetch dimensions and calculate sums
         dimensions = self._fetch_treemap_dimensions(budget_id=budget_id)
 
-        # Fetch program hierarchy
+        # Fetch program hierarchy - extract program IDs inline to avoid extra iteration.
         program_ids = [r["dimension_id"] for r in dimensions if r["dimension_type"] == "PROGRAM"]
         programs = self._fetch_treemap_programs_recursive(program_ids)
 

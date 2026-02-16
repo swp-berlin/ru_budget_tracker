@@ -1,13 +1,14 @@
 from functools import lru_cache
 from re import Pattern
+import re
 from typing import Sequence
 import networkx as nx
 import pandas as pd
 from sqlalchemy import RowMapping
 from utils.definitions import (
     SpendingTypeLiteral,
-    MilitarySpendingDictionary,
-    ViewByDimensionTypeLiteral,
+    MilitarySpending,
+    Colors,
 )
 from utils.helper import add_breaks
 
@@ -72,7 +73,7 @@ class TreemapTransformer:
         """Calculate the difference between TOTAL and LAW budgets for classified expenses."""
         difference_rows: list[dict[str, str | float | int]] = []
         difference_value_budget = 0.0
-        totals: Sequence[RowMapping] = []
+        totals: list[RowMapping] = []
         chapter_expense_mapping: dict[str, dict[str, float | RowMapping]] = {}
         budget_sum_value: float = 0.0
         budget_type = None
@@ -99,7 +100,7 @@ class TreemapTransformer:
         # REPORT Totals only have 1 row, so we calculate the difference between the 1 TOTAL
         # and the sum of the chapters
         for row in totals:
-            multiplier = TOTAL_VALUE_MULTIPLIER
+            multiplier: float = TOTAL_VALUE_MULTIPLIER
             if budget_type == "REPORT":
                 multiplier = 1.0
             if row["dimension_type"] is None:
@@ -116,6 +117,40 @@ class TreemapTransformer:
                     difference_rows.append(difference_row)
 
         return difference_rows, difference_value_budget
+
+    def _check_if_military(
+        self,
+        dim_type: str,
+        dim_original_id: str,
+        hierarchy_dict_entry: dict[str, int | float | str],
+        is_classified: bool = False,
+    ) -> bool:
+        """Filter the hierarchy dictionary based on spending type (e.g., military only)."""
+        combination_patterns = MilitarySpending.combination_patterns
+        simple_patterns = MilitarySpending.simple_patterns
+        # Check single level patterns
+        for level_name, pattern in simple_patterns.items():
+            if dim_type.startswith(level_name) and pattern.match(str(dim_original_id)):
+                return True
+        # Check combination patterns
+        for combination in combination_patterns:
+            complete_match = True
+            # Check if all patterns in a combination match the corresponding dimension
+            # in the hierarchy entry
+            for dim, pattern in combination.items():
+                if not pattern.match(str(hierarchy_dict_entry.get(f"{dim}_ORIG_ID", ""))):
+                    complete_match = False
+            # If all patterns in a single combination match, classify as military spending
+            if complete_match is True:
+                return True
+
+        if is_classified:
+            custom_patterns = MilitarySpending.custom_patterns
+            for level_name, pattern in custom_patterns.items():
+                if dim_type.startswith(level_name) and pattern.match(str(dim_original_id)):
+                    return True
+
+        return False
 
     def _build_hierarchy_dict(
         self,
@@ -148,6 +183,8 @@ class TreemapTransformer:
             relevant_dims = [row for row in expense_dimensions if row["id"] in expenses]
             for row in relevant_dims:
                 expense_id = row["id"]
+                dim_type = row.get("dimension_type", "")
+                dim_original_id = row.get("dimension_original_identifier", "")
                 hierarchy_dict.setdefault(
                     expense_id,
                     {
@@ -155,18 +192,21 @@ class TreemapTransformer:
                         "BUDGET_TYPE": relevant_dims[0].get("budget_type", ""),
                     },
                 )
-                # Add MINISTRY
-                dim_type = row.get("dimension_type")
+                entry = hierarchy_dict[expense_id]
+                hierarchy_dict[expense_id]["IS_MILITARY"] = self._check_if_military(
+                    dim_type,
+                    dim_original_id,
+                    hierarchy_dict_entry=entry,
+                )
                 if dim_type in ["MINISTRY", "CHAPTER", "SUBCHAPTER"]:
                     hierarchy_dict[expense_id][f"{dim_type}_DIM_ID"] = row["dimension_id"]
-                    hierarchy_dict[expense_id][f"{dim_type}_ORIG_ID"] = row[
-                        "dimension_original_identifier"
-                    ]
+                    hierarchy_dict[expense_id][f"{dim_type}_ORIG_ID"] = dim_original_id
                     hierarchy_dict[expense_id][f"{dim_type}_NAME"] = row.get("dimension_name", None)
                     hierarchy_dict[expense_id][f"{dim_type}_NAME_TRANSLATED"] = row.get(
                         "dimension_name_translated", None
                     )
 
+                # Add MINISTRY
                 # Add PROGRAM levels by traversing the program path
                 program_path = program_paths.get(program_id, [])
                 program_rows = [row for row in programs if row["dimension_id"] in program_path][
@@ -254,70 +294,7 @@ class TreemapTransformer:
 
         return df
 
-    def _filter_hierarchy_dict_by_spending_type(
-        self,
-        hierarchy: dict[str, dict[str, int | float | str]],
-    ) -> dict[str, dict[str, int | float | str]]:
-        """Filter the hierarchy dictionary based on spending type (e.g., military only)."""
-        if self.spending_type == "ALL":
-            return hierarchy
-
-        filtered_hierarchy: dict[str, dict[str, int | float | str]] = {}
-        for expense_id, levels in hierarchy.items():
-            is_military = False
-            # Check single level patterns
-            combos: list[dict[str, Pattern]] = []
-            for level_name, pattern in MilitarySpendingDictionary.items():
-                if isinstance(pattern, list):
-                    combos = pattern
-                    continue
-                original_identifier = levels.get(f"{level_name}_ORIG_ID")
-                if original_identifier is not None and pattern.match(str(original_identifier)):
-                    is_military = True
-                    break
-            # Check combination patterns
-            for combo in combos:
-                match = True
-                for level_name, pattern in combo.items():
-                    original_identifier = levels.get(f"{level_name}_ORIG_ID")
-                    if original_identifier is None or not pattern.match(str(original_identifier)):
-                        match = False
-                        break
-                if match:
-                    is_military = True
-                    break
-            if is_military:
-                filtered_hierarchy[expense_id] = levels
-
-        return filtered_hierarchy
-
-    @lru_cache(maxsize=5)
-    def transform_data(
-        self,
-    ) -> pd.DataFrame:
-        """Transform DB rows into treemap lists expected by the figure creator."""
-        if not self.dimensions:
-            return pd.DataFrame()
-
-        # Extend sum mapping to include all hierarchy levels
-        program_paths = self._calculate_program_hierarchy(self.programs)
-        # Calculate max length of program paths for consistent PROGRAM_* columns
-        max_program_levels = max((len(path) for path in program_paths.values()), default=0)
-        # Calculate all paths between dimensions
-        hierarchy_dict = self._build_hierarchy_dict(
-            self.dimensions, self.programs, program_paths, max_program_levels
-        )
-        # Filter hierarchy based on spending type if needed
-        if self.spending_type != "ALL":
-            hierarchy_dict = self._filter_hierarchy_dict_by_spending_type(hierarchy_dict)
-        # Create dataframe from paths
-        df = self._create_dataframe(
-            hierarchy_dict,
-        )
-
-        return df
-
-    def add_classified_expenses(
+    def _add_classified_expenses(
         self,
         df: pd.DataFrame,
     ) -> pd.DataFrame:
@@ -382,6 +359,30 @@ class TreemapTransformer:
                 "MINISTRY_NAME_TRANSLATED": "Classified Spending",
             }
             df = pd.concat([df, pd.DataFrame([root_row])], ignore_index=True)
+
+        return df
+
+    @lru_cache(maxsize=5)
+    def transform_data(
+        self,
+    ) -> pd.DataFrame:
+        """Transform DB rows into treemap lists expected by the figure creator."""
+        if not self.dimensions:
+            return pd.DataFrame()
+
+        # Extend sum mapping to include all hierarchy levels
+        program_paths = self._calculate_program_hierarchy(self.programs)
+        # Calculate max length of program paths for consistent PROGRAM_* columns
+        max_program_levels = max((len(path) for path in program_paths.values()), default=0)
+        # Calculate all paths between dimensions
+        hierarchy_dict = self._build_hierarchy_dict(
+            self.dimensions, self.programs, program_paths, max_program_levels
+        )
+        # Create dataframe from paths
+        df = self._create_dataframe(
+            hierarchy_dict,
+        )
+        df = self._add_classified_expenses(df)
 
         return df
 

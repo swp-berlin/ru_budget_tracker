@@ -1,9 +1,7 @@
 from datetime import date
 from functools import lru_cache
-import hashlib
 import logging
 from typing import Any, Optional, Sequence  # Use typing.Sequence for type annotations
-import re
 
 import pandas as pd
 import plotly.express as px
@@ -23,12 +21,12 @@ from sqlalchemy import RowMapping
 from utils.fetch import TreemapDataFetcher
 from utils.transform import TreemapTransformer
 from utils.calculate import Calculator
+from utils.helper import create_treemap_colors, shape_for_spending_type, shape_for_viewby
 from utils.definitions import (
     UnitLiteral,
     unit_map,
     SpendingTypeLiteral,
     ViewByDimensionTypeLiteral,
-    MilitarySpendingDictionary,
 )
 
 logger = logging.getLogger(__name__)
@@ -77,86 +75,7 @@ def _compute_percentages(
     return parent_percentages, root_percentages
 
 
-def _build_treemap_colors(
-    df: pd.DataFrame,
-    fig: go.Figure,
-    spending_type: SpendingTypeLiteral,
-    translated: bool,
-) -> list[Optional[str]]:
-    """Return marker colors for treemap nodes with ministry/root rules applied."""
-    name_ending = "_NAME_TRANSLATED" if translated else "_NAME"
-    ministry_col = f"MINISTRY{name_ending}"
-    ministry_labels = (
-        set(df[ministry_col].dropna().astype(str)) if ministry_col in df.columns else set()
-    )
-    root_label = str(df["ROOT"].iloc[0]) if "ROOT" in df.columns and not df.empty else "ROOT"
-    labels = list(fig.data[0].labels)  # type: ignore
-    parents = list(fig.data[0].parents)  # type: ignore
-    # Prefer ids for unique ancestry traversal (labels can repeat).
-    raw_ids = fig.data[0].ids  # type: ignore
-    ids = list(raw_ids) if raw_ids is not None else list(labels)
-
-    # Use a deterministic palette so non-ministry tiles don't inherit gray.
-    palette = (
-        ["#7e8f5f", "#a3b18a", "#c7d0b8"]
-        if spending_type == "MILITARY"
-        else px.colors.qualitative.Set2
-    )
-
-    # Build quick lookups so we can trace ancestors by unique id.
-    parent_lookup = {str(node_id): str(parent) for node_id, parent in zip(ids, parents)}
-    id_to_label = {str(node_id): str(label) for node_id, label in zip(ids, labels)}
-
-    # Chapters are identified by labels starting with two digits and " - ".
-    chapter_label_pattern = re.compile(r"^\d{2}\s-\s")
-
-    def _has_classified_ancestor(node_id: str) -> bool:
-        """Return True if this node or any of its ancestors contains 'classified'."""
-        current = node_id
-        # Walk up the parent chain to detect classified tiles.
-        while current:
-            label = id_to_label.get(current, "")
-            if "classified" in label.lower():
-                return True
-            current = parent_lookup.get(current, "")
-        return False
-
-    def _get_chapter_ancestor(node_id: str) -> Optional[str]:
-        """Return the closest chapter ancestor label for a node, if any."""
-        current = node_id
-        # Walk up the parent chain and stop at the first chapter-pattern label.
-        while current:
-            label = id_to_label.get(current, "")
-            if chapter_label_pattern.match(label):
-                return label
-            current = parent_lookup.get(current, "")
-        return None
-
-    colors: list[Optional[str]] = []
-    for node_id, label, parent in zip(ids, labels, parents):
-        # Assign a base color for every tile based on its chapter ancestry.
-        chapter_key = _get_chapter_ancestor(str(node_id))
-        # Use a fixed blue for all chapter-based tiles for now.
-        if chapter_key:
-            color = "#4a90e2"
-        else:
-            # Fall back to the label if no chapter ancestor is present.
-            label_key = str(label)
-            color_index = int(hashlib.md5(label_key.encode("utf-8")).hexdigest(), 16) % len(palette)
-            color = palette[color_index]
-        # Apply special rules after the base color is chosen.
-        if _has_classified_ancestor(str(node_id)):
-            color = "#dddddd"
-        elif not parent and str(label) == root_label:
-            color = "#7e8f5f" if spending_type == "MILITARY" else "rgba(0,0,0,0)"
-        elif parent == root_label and str(label) in ministry_labels:
-            # Ministry tiles should be gray.
-            color = "#dddddd"
-        colors.append(color)
-
-    return colors
-
-
+@lru_cache(maxsize=5)
 def fetch_treemap_data(
     budget_id: int,
 ) -> tuple[Sequence[RowMapping], Sequence[RowMapping], date]:
@@ -180,7 +99,6 @@ def transform_treemap_data(
     dimensions, programs, published_at = fetch_treemap_data(budget_id)
     transformer = TreemapTransformer(dimensions, programs, max_line_lenght=character_limit)
     df = transformer.transform_data()
-    df = transformer.add_classified_expenses(df)
     # Calculate values based on unit, budget, and published_at
     calculator = Calculator(unit, budget_id, published_at)
     df["VALUE"] = df["VALUE"].apply(calculator.calculate)
@@ -189,85 +107,12 @@ def transform_treemap_data(
     return df
 
 
-def shape_for_viewby(
-    df: pd.DataFrame,
-    viewby: ViewByDimensionTypeLiteral,
-) -> pd.DataFrame:
-    """Return the shape configuration for the given viewby dimension."""
-
-    # create a copy to avoid modifying the original dataframe
-    df_copy = df.copy()
-
-    relevant_cols = []
-    if viewby == "MINISTRY":
-        # Remove Everything but Ministry, Chapter, lowest level and Value
-        relevant_cols = [
-            col for col in df_copy.columns if col.startswith(("MINISTRY", "CHAPTER", "PROGRAM_3"))
-        ] + ["VALUE", "ROOT", "BUDGET_TYPE"]
-
-    if viewby == "CHAPTER":
-        # Remove Everything but Chapter, lowest level and Value
-        relevant_cols = [
-            col for col in df_copy.columns if col.startswith(("CHAPTER", "SUBCHAPTER", "PROGRAM_3"))
-        ] + ["VALUE", "ROOT", "BUDGET_TYPE"]
-
-    if viewby == "PROGRAM":
-        # Remove Everything but lowest level and Value
-        classified_rows = df_copy["BUDGET_TYPE"] == "CLASSIFIED"
-        relevant_cols = [
-            col
-            for col in df_copy.columns
-            if col.startswith(("PROGRAM_0", "PROGRAM_1", "PROGRAM_3"))
-        ] + ["VALUE", "ROOT", "BUDGET_TYPE"]
-        # For classified rows, copy values from CHAPTER columns to PROGRAM_1 columns
-        # and set PROGRAM_3 columns to None
-        for col in df_copy.columns:
-            if col.startswith("CHAPTER") and "NAME" in col:
-                target_col = col.replace("CHAPTER", "PROGRAM_1")
-                df_copy.loc[classified_rows, target_col] = df_copy.loc[classified_rows, col].values
-            if col.startswith("PROGRAM_3") and "NAME" in col:
-                df_copy.loc[classified_rows, col] = None
-
-    df_copy = df_copy[relevant_cols]
-
-    return df_copy
-
-
-def shape_for_spending_type(
-    df: pd.DataFrame,
-    spending_type: SpendingTypeLiteral,
-) -> pd.DataFrame:
-    """Return the shape configuration for the given spending type."""
-    # For military spending, we might want to highlight certain ministries or chapters.
-    # This function can be expanded in the future if needed.
-    df_copy = df.copy()
-    if spending_type == "MILITARY":
-        # Filter the dataframe columns that begin the the keys in MilitarySpendingDictionary
-        # and end in ORIG_ID. Keep only those rows that match the patterns in the dictionary.
-        filter_conditions = []
-        for key, pattern in MilitarySpendingDictionary.items():
-            if key == "COMBINATION":
-                for combo in pattern:  # type: ignore
-                    condition = pd.Series([True] * len(df_copy))
-                    for combo_key, combo_pattern in combo.items():
-                        col_name = f"{combo_key}_ORIG_ID"
-                        condition &= df_copy[col_name].astype(str).str.match(combo_pattern)
-                    filter_conditions.append(condition)
-            else:
-                col_name = f"{key}_ORIG_ID"
-                condition = df_copy[col_name].astype(str).str.match(pattern)  # type: ignore
-                filter_conditions.append(condition)
-
-        df_copy["ROOT"] = "Military Spending"
-
-    return df_copy
-
-
 def generate_figure(
     df: pd.DataFrame,
     spending_type: SpendingTypeLiteral = "ALL",
     unit: UnitLiteral = "ABSOLUTE",
     translated: bool = False,
+    viewby: ViewByDimensionTypeLiteral = "MINISTRY",
 ) -> go.Figure:
     """Build a treemap with stable ids and clean hover info."""
     # If translated, use translated names
@@ -281,7 +126,7 @@ def generate_figure(
         path=name_cols,
         values="VALUE",
         hover_data=None,
-        custom_data=["VALUE"],
+        custom_data=["BUDGET_TYPE"],
     )
     # Layout adjustments
     # Change font to Source Sans 3 and make it wrapped
@@ -291,30 +136,34 @@ def generate_figure(
     )
 
     # Apply colors to all nodes.
-    colors = _build_treemap_colors(df, fig, spending_type, translated)
-    fig.update_traces(marker_colors=colors)
+    # colors = _build_treemap_colors(df, fig, spending_type, translated)
+    # fig.update_traces(marker_colors=colors)
 
-    # If spending type is military, adjust the color of the root tiles to #7e8f5f
-    # and then get lighter shades of #7e8f5f for the children the deeper they are in the hierarchy
-    if spending_type == "MILITARY":
-        colorscale = [[1, "#7e8f5f"], [0.5, "#a3b18a"], [0, "#c7d0b8"]]
-        fig.update_layout(
-            treemapcolorway=["#7e8f5f"],
-            coloraxis_colorscale=colorscale,
-        )
+    # Extract the necessary data from the treemap trace to compute percentages
+    # and apply coloring rules.
+    trace_data = fig.data[0]
+    node_ids: list[str] = list(trace_data["ids"])
+    parents: list[str] = list(trace_data["parents"])
+    values: list[float] = [float(v) if v is not None else 0.0 for v in trace_data["values"]]
+    budget_types: list[str] = [budget_type[0] for budget_type in trace_data["customdata"]]
+
     # Compute percentages for all nodes based on treemap aggregation.
-    parents = list(fig.data[0].parents)  # type: ignore
-    values = [float(v) if v is not None else 0.0 for v in fig.data[0].values]  # type: ignore
     parent_percentages, root_percentages = _compute_percentages(parents, values)
-    # Safely read Plotly ids/labels (may be numpy arrays).
-    raw_ids = fig.data[0].ids  # type: ignore
-    node_ids = [str(node_id) for node_id in (list(raw_ids) if raw_ids is not None else [])]
-    if not node_ids:
-        raw_labels = fig.data[0].labels  # type: ignore
-        node_ids = [str(label) for label in (list(raw_labels) if raw_labels is not None else [])]
 
+    # Safely read Plotly ids/labels (may be numpy arrays).
+    # Generate list of colors for each node based on classified status, node_id and spending type
+    colors = create_treemap_colors(
+        node_ids,
+        budget_types,
+        spending_type,
+        viewby,
+    )
+    fig.update_traces(marker_colors=colors)
+    # Combine existing customdata with new percentage data and node ids for hover and click interactions.
     # Attach custom data for hover to every node, including id for click selection.
-    fig.data[0].customdata = list(zip(values, parent_percentages, root_percentages, node_ids))
+    fig.data[0].customdata = list(
+        zip(values, parent_percentages, root_percentages, node_ids)  # type: ignore
+    )
 
     fig.data[0].hovertemplate = "<br>".join(
         [
@@ -382,9 +231,9 @@ def update_figure_from_filters(
     )
     df_shaped = shape_for_spending_type(df, spending_type=spending_type)
     df_shaped = shape_for_viewby(df_shaped, viewby=viewby)
-    return generate_figure(df_shaped, spending_type, unit=unit, translated=translated), {
-        "visibility": "visible"
-    }
+    return generate_figure(
+        df_shaped, spending_type, unit=unit, translated=translated, viewby=viewby
+    ), {"visibility": "visible"}
 
 
 @callback(

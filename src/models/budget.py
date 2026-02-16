@@ -2,6 +2,7 @@ from models.base import Base
 
 from sqlalchemy import (
     Column,
+    Index,
     Integer,
     String,
     Table,
@@ -36,11 +37,11 @@ class Budget(Base):  # type: ignore[misc]
     # Translated to english
     description_translated: Mapped[str] = mapped_column(Text, nullable=True)
     # Type of the budget entry (e.g., DRAFT, LAW, REPORT, TOTAL)
-    type: Mapped[BudgetTypeLiteral] = mapped_column(String, nullable=False)
+    type: Mapped[BudgetTypeLiteral] = mapped_column(String, nullable=False, index=True)
     # Time period scope of the budget (e.g., YEARLY, QUARTERLY, MONTHLY)
     scope: Mapped[BudgetTypeLiteral] = mapped_column(String, nullable=True)
     # First date of the relevant period the budget relates to
-    published_at: Mapped[date] = mapped_column(Date, nullable=False)
+    published_at: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     # First date of the relevant period the budget was planned in
     planned_at: Mapped[date | None] = mapped_column(Date, nullable=True)
     # Audit fields
@@ -60,8 +61,10 @@ class Budget(Base):  # type: ignore[misc]
 expense_dimension_association_table = Table(
     "association_table",
     Base.metadata,
-    Column("expense_id", ForeignKey("expenses.id")),
-    Column("dimension_id", ForeignKey("dimensions.id")),
+    Column("expense_id", ForeignKey("expenses.id"), index=True),
+    Column("dimension_id", ForeignKey("dimensions.id"), index=True),
+    # Composite index for efficient joins on both columns.
+    Index("ix_assoc_expense_dimension", "expense_id", "dimension_id"),
 )
 
 
@@ -78,6 +81,7 @@ class Expense(Base):  # type: ignore[misc]
         Integer,
         ForeignKey("budgets.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
     )
     # Float value of the expense
     value: Mapped[float] = mapped_column(Float, nullable=False)
@@ -121,11 +125,12 @@ class Dimension(Base):  # type: ignore[misc]
         Integer,
         ForeignKey("dimensions.id", ondelete="SET NULL"),
         nullable=True,
+        index=True,
     )
     # The original identifier from the data source
     original_identifier: Mapped[str] = mapped_column(String, nullable=False)
     # Type of the dimension (e.g., MINISTRY, CHAPTER, PROGRAMM, EXPENSE_TYPE)
-    type: Mapped[DimensionTypeLiteral] = mapped_column(String, nullable=False)
+    type: Mapped[DimensionTypeLiteral] = mapped_column(String, nullable=False, index=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
     # Translated to english
     name_translated: Mapped[str] = mapped_column(String, nullable=True)
