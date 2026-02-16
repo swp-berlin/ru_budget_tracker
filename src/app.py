@@ -86,6 +86,8 @@ layout = html.Div(
         dcc.Store(id="store-spending-type", data="ALL"),
         dcc.Store(id="store-unit", data="ABSOLUTE"),
         dcc.Store(id="store-language", data="RU"),
+        # Store for download status (used by clientside callback, not displayed)
+        dcc.Store(id="store-download-status"),
         # Location component to access URL parameters
         dcc.Location(id="url"),
         # This dummy div is the target for our clientside callback. It's required for the
@@ -309,6 +311,21 @@ clientside_callback(
     State("store-spending-type", "data"),
     State("store-unit", "data"),
     State("store-selected-id", "data"),
+    prevent_initial_call=True,
+)
+
+# Clientside callback for downloading the current graph as PNG image.
+# Uses Plotly's client-side export directly from the browser (no Kaleido required).
+# Handles both treemap and timeseries pages based on pathname.
+clientside_callback(
+    ClientsideFunction(namespace="clientside", function_name="downloadPlotImage"),
+    Output("store-download-status", "data"),
+    Input("btn-download-image", "n_clicks"),
+    State("url", "pathname"),
+    State("store-budget-id", "data"),
+    State("store-budget-options", "data"),
+    State("store-unit", "data"),
+    State("store-spending-type", "data"),
     prevent_initial_call=True,
 )
 
