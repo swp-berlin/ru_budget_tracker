@@ -46,19 +46,38 @@ class TreemapTransformer:
 
         Returns a mapping of leaf program id -> full path from root to leaf.
         """
-        program_edges = [(row["dimension_id"], row["dimension_parent_id"]) for row in programs]
-        deduped_edges = {edge for edge in program_edges if edge[1] is not None}
+        # Build edges more efficiently with set comprehension
+        deduped_edges = {
+            (row["dimension_id"], row["dimension_parent_id"])
+            for row in programs
+            if row["dimension_parent_id"] is not None
+        }
+
+        # Early return for empty graphs
+        if not deduped_edges:
+            return {}
+
         # Create a directed graph
         g = nx.DiGraph()
-        # Add edges to the graph
         g.add_edges_from(deduped_edges)  # pyright: ignore[reportArgumentType]
-        roots = (v for v, d in g.in_degree() if d == 0)
-        leaves = [v for v, d in g.out_degree() if d == 0]
+
+        # Get roots and leaves more efficiently
+        roots = [v for v, d in g.in_degree() if d == 0]
+        leaves = {v for v, d in g.out_degree() if d == 0}
+
+        # Early return if no valid structure
+        if not roots or not leaves:
+            return {}
+
+        # Calculate paths from all roots to all leaves
         program_paths: list[list[int]] = []
         for root in roots:
-            paths_raw = nx.all_simple_paths(g, root, leaves)
-            paths: list[list[int]] = [[int(elem) for elem in path] for path in paths_raw]
-            program_paths.extend(paths)
+            # Filter leaves reachable from this root for efficiency
+            reachable_leaves = [leaf for leaf in leaves if nx.has_path(g, root, leaf)]
+            if reachable_leaves:
+                paths_raw = nx.all_simple_paths(g, root, reachable_leaves)
+                paths = [[int(elem) for elem in path] for path in paths_raw]
+                program_paths.extend(paths)
 
         # Create a mapping for leaves to their full paths
         # Full path is used for root-to-leaf traversal, so we reverse the paths here
@@ -126,28 +145,31 @@ class TreemapTransformer:
         is_classified: bool = False,
     ) -> bool:
         """Filter the hierarchy dictionary based on spending type (e.g., military only)."""
-        combination_patterns = MilitarySpending.combination_patterns
+        # Cache class attributes locally for faster access in hot loop
         simple_patterns = MilitarySpending.simple_patterns
-        # Check single level patterns
+        combination_patterns = MilitarySpending.combination_patterns
+
+        # Convert dim_original_id once (avoid repeated str() calls)
+        dim_original_id_str = str(dim_original_id)
+
+        # Check single level patterns (most common case, check first)
         for level_name, pattern in simple_patterns.items():
-            if dim_type.startswith(level_name) and pattern.match(str(dim_original_id)):
-                return True
-        # Check combination patterns
-        for combination in combination_patterns:
-            complete_match = True
-            # Check if all patterns in a combination match the corresponding dimension
-            # in the hierarchy entry
-            for dim, pattern in combination.items():
-                if not pattern.match(str(hierarchy_dict_entry.get(f"{dim}_ORIG_ID", ""))):
-                    complete_match = False
-            # If all patterns in a single combination match, classify as military spending
-            if complete_match is True:
+            if dim_type.startswith(level_name) and pattern.match(dim_original_id_str):
                 return True
 
+        # Check combination patterns using all() for short-circuit evaluation
+        for combination in combination_patterns:
+            if all(
+                pattern.match(str(hierarchy_dict_entry.get(f"{dim}_ORIG_ID", "")))
+                for dim, pattern in combination.items()
+            ):
+                return True
+
+        # Check custom classified patterns only when is_classified=True
         if is_classified:
             custom_patterns = MilitarySpending.custom_patterns
             for level_name, pattern in custom_patterns.items():
-                if dim_type.startswith(level_name) and pattern.match(str(dim_original_id)):
+                if dim_type.startswith(level_name) and pattern.match(dim_original_id_str):
                     return True
 
         return False
@@ -166,9 +188,12 @@ class TreemapTransformer:
         """
 
         hierarchy_dict: dict[str, dict[str, int | float | str]] = {}
+        program_by_dim_id = {row["dimension_id"]: row for row in programs}
+        expense_by_id = {row["id"]: row for row in expense_dimensions}
 
         # Extract expense_ids from expense_dimensions and map to program path keys
-        leaf_expense_mapping: dict[tuple[str, int], set[str]] = {}
+        leaf_expense_mapping: dict[tuple[str, int], set[RowMapping]] = {}
+        validate_program_ids = set(program_paths.keys())
         for row in expense_dimensions:
             if row["dimension_id"] in program_paths.keys():
                 leaf_expense_mapping.setdefault(
@@ -179,20 +204,27 @@ class TreemapTransformer:
                 ].add(row["id"])
 
         for (_, program_id), expenses in leaf_expense_mapping.items():
-            # Initialize dict structure and expense value if not already present
-            relevant_dims = [row for row in expense_dimensions if row["id"] in expenses]
+            # Calculate ONCE per program_id, not per expense
+            program_path = program_paths.get(program_id, [])
+            program_rows = [
+                program_by_dim_id[d] for d in reversed(program_path) if d in program_by_dim_id
+            ]
+
+            relevant_dims = [
+                expense_by_id[exp_id] for exp_id in expenses if exp_id in expense_by_id
+            ]
             for row in relevant_dims:
                 expense_id = row["id"]
                 dim_type = row.get("dimension_type", "")
                 dim_original_id = row.get("dimension_original_identifier", "")
-                hierarchy_dict.setdefault(
+                # Initialize dict structure and expense value if not already present
+                entry = hierarchy_dict.setdefault(
                     expense_id,
                     {
                         "VALUE": row.get("value", 0.0),
                         "BUDGET_TYPE": relevant_dims[0].get("budget_type", ""),
                     },
                 )
-                entry = hierarchy_dict[expense_id]
                 hierarchy_dict[expense_id]["IS_MILITARY"] = self._check_if_military(
                     dim_type,
                     dim_original_id,
@@ -206,17 +238,6 @@ class TreemapTransformer:
                         "dimension_name_translated", None
                     )
 
-                # Add MINISTRY
-                # Add PROGRAM levels by traversing the program path
-                program_path = program_paths.get(program_id, [])
-                program_rows = [row for row in programs if row["dimension_id"] in program_path][
-                    ::-1
-                ]
-                if len(program_rows) == 0:
-                    raise ValueError(
-                        f"No program rows found for program_id {program_id}"
-                        f" in program_path {program_path} for budget expense_id {expense_id}"
-                    )
                 # Sort program rows according to their position in the path
                 last_row = program_rows[0]
                 for idx in range(0, max_program_levels):

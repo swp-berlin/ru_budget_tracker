@@ -334,5 +334,210 @@ window.dash_clientside.clientside = {
       console.debug('[Share] Failed to copy link', e);
       return 'Failed to copy link';
     }
+  },
+
+  /**
+   * Download the currently rendered Plotly graph as a PNG image.
+   * Clientside callback that handles both treemap and timeseries pages.
+   * Embeds Google Font for correct rendering in exported image.
+   *
+   * @param {number} n_clicks - Button clicks (triggers download)
+   * @param {string} pathname - Current page pathname
+   * @param {number|null} budgetId - Budget ID
+   * @param {Array|null} budgetOptions - Budget options array
+   * @param {string} unit - Unit label to include in filename
+   * @param {string} spendingType - Spending type (for military suffix)
+   * @returns {string} Timestamp string for store output
+   */
+  downloadPlotImage: function (n_clicks, pathname, budgetId, budgetOptions, unit, spendingType) {
+    try {
+      // If no click, do nothing
+      if (!n_clicks) {
+        return window.dash_clientside.no_update;
+      }
+
+      // Determine which graph to download based on pathname
+      var graphId, filenamePrefix;
+      if (!pathname || pathname === '/') {
+        graphId = 'treemap-graph';
+        filenamePrefix = 'treemap';
+      } else if (pathname === '/timeseries') {
+        graphId = 'timeseries-graph';
+        filenamePrefix = 'timeseries';
+      } else {
+        return window.dash_clientside.no_update;
+      }
+
+      // Get the Dash Graph container
+      var container = document.getElementById(graphId);
+      if (!container) {
+        console.warn('[Download] Graph container not found:', graphId);
+        return window.dash_clientside.no_update;
+      }
+
+      // Find the actual Plotly plot div
+      var graphDiv = container.querySelector('.js-plotly-plot');
+      if (!graphDiv) {
+        graphDiv = container;
+      }
+
+      // Verify Plotly data exists
+      if (!graphDiv.data || !graphDiv.layout) {
+        console.warn('[Download] No Plotly data found on element');
+        return window.dash_clientside.no_update;
+      }
+
+      // Get budget name from options
+      var budgetName = 'unknown';
+      if (budgetOptions && budgetId != null) {
+        for (var i = 0; i < budgetOptions.length; i++) {
+          if (budgetOptions[i].value === budgetId) {
+            budgetName = budgetOptions[i].label || 'unknown';
+            break;
+          }
+        }
+      }
+
+      // Build filename
+      var now = new Date();
+      var currentYear = now.getFullYear();
+      var timestamp = now.toISOString().replace(/[-:]/g, '').replace('T', '_').slice(0, 15);
+      var sanitizedBudget = (budgetName || 'unknown').replace(/\s+/g, '_').replace(/\//g, '-');
+      var unitLabel = (unit || 'ABSOLUTE').toLowerCase();
+      var militarySuffix = spendingType === 'MILITARY' ? '_military' : '';
+      var filename = filenamePrefix + '_' + timestamp + '_' + sanitizedBudget + '_' + unitLabel + militarySuffix;
+
+      // Get dimensions
+      var width = graphDiv.offsetWidth || 800;
+      var height = graphDiv.offsetHeight || 600;
+      var scale = 2;
+
+      // Get the SVG from the current plot
+      var svgElement = graphDiv.querySelector('svg.main-svg');
+      if (!svgElement) {
+        console.warn('[Download] SVG element not found, falling back to Plotly.downloadImage');
+        window.Plotly.downloadImage(graphDiv, {
+          format: 'png',
+          width: width * scale,
+          height: height * scale,
+          filename: filename
+        });
+        return now.toISOString();
+      }
+
+      // Clone the SVG
+      var svgClone = svgElement.cloneNode(true);
+      var svgWidth = parseInt(svgElement.getAttribute('width')) || width;
+      var svgHeight = parseInt(svgElement.getAttribute('height')) || height;
+
+      // Add a style element with embedded Google Font
+      var styleEl = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+      styleEl.textContent = '@import url("https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap"); text, tspan { font-family: "Source Sans 3", sans-serif !important; }';
+      svgClone.insertBefore(styleEl, svgClone.firstChild);
+
+      // Update all text elements to use Source Sans 3
+      var textElements = svgClone.querySelectorAll('text, tspan');
+      textElements.forEach(function (el) {
+        el.setAttribute('font-family', '"Source Sans 3", sans-serif');
+      });
+
+      // Add watermark text element to the SVG
+      var watermarkText = 'Stiftung Wissenschaft und Politik (SWP), ' + currentYear + ' | CC BY 4.0';
+      var textNS = 'http://www.w3.org/2000/svg';
+      var watermark = document.createElementNS(textNS, 'text');
+      watermark.setAttribute('x', svgWidth - 10);
+      watermark.setAttribute('y', svgHeight - 8);
+      watermark.setAttribute('text-anchor', 'end');
+      watermark.setAttribute('font-family', '"Source Sans 3", sans-serif');
+      watermark.setAttribute('font-size', '12');
+      watermark.setAttribute('fill', '#333333');
+      watermark.textContent = watermarkText;
+      svgClone.appendChild(watermark);
+
+      // Set explicit dimensions
+      svgClone.setAttribute('width', svgWidth);
+      svgClone.setAttribute('height', svgHeight);
+      svgClone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+
+      // Serialize SVG
+      var serializer = new XMLSerializer();
+      var svgString = serializer.serializeToString(svgClone);
+
+      // Load the Google Font before drawing
+      var fontUrl = 'https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap';
+
+      // Create a hidden element to trigger font loading
+      var fontLoader = document.createElement('div');
+      fontLoader.style.cssText = 'position:absolute;left:-9999px;font-family:"Source Sans 3",sans-serif;';
+      fontLoader.textContent = 'Font loader';
+      document.body.appendChild(fontLoader);
+
+      // Wait for font to load, then render
+      var fontLoadPromise;
+      if (document.fonts && document.fonts.load) {
+        fontLoadPromise = document.fonts.load('400 12px "Source Sans 3"').then(function () {
+          return document.fonts.load('600 12px "Source Sans 3"');
+        });
+      } else {
+        fontLoadPromise = new Promise(function (resolve) { setTimeout(resolve, 500); });
+      }
+
+      fontLoadPromise.then(function () {
+        // Create canvas for PNG conversion
+        var canvas = document.createElement('canvas');
+        canvas.width = svgWidth * scale;
+        canvas.height = svgHeight * scale;
+        var ctx = canvas.getContext('2d');
+        ctx.scale(scale, scale);
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, svgWidth, svgHeight);
+
+        // Create image from SVG
+        var img = new Image();
+        // Use data URL to avoid CORS issues
+        var svgBase64 = btoa(unescape(encodeURIComponent(svgString)));
+        var dataUrl = 'data:image/svg+xml;base64,' + svgBase64;
+
+        img.onload = function () {
+          ctx.drawImage(img, 0, 0);
+          document.body.removeChild(fontLoader);
+
+          // Convert to PNG and download
+          canvas.toBlob(function (pngBlob) {
+            var downloadUrl = URL.createObjectURL(pngBlob);
+            var link = document.createElement('a');
+            link.href = downloadUrl;
+            link.download = filename + '.png';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(downloadUrl);
+            console.debug('[Download] PNG downloaded:', filename);
+          }, 'image/png');
+        };
+
+        img.onerror = function (err) {
+          console.error('[Download] SVG to image failed:', err);
+          document.body.removeChild(fontLoader);
+          // Fallback to Plotly's built-in export
+          window.Plotly.downloadImage(graphDiv, {
+            format: 'png',
+            width: width * scale,
+            height: height * scale,
+            filename: filename
+          });
+        };
+
+        img.src = dataUrl;
+      }).catch(function (err) {
+        console.error('[Download] Font loading failed:', err);
+        document.body.removeChild(fontLoader);
+      });
+
+      return now.toISOString();
+    } catch (e) {
+      console.error('[Download] Error:', e);
+      return window.dash_clientside.no_update;
+    }
   }
 };
