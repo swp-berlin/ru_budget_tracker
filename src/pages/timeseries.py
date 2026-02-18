@@ -20,11 +20,13 @@ from utils.fetch import BarChartDataFetcher
 from utils.transform import BarchartTransformer
 from utils.calculate import Calculator
 from utils.definitions import (
+    BudgetTypeLiteral,
     LanguageTypeLiteral,
     UnitLiteral,
     SpendingTypeLiteral,
-    ViewByDimensionTypeLiteral,
     UNIT_OPTIONS,
+    PERIOD_OPTIONS,
+    PeriodLiteral,
 )
 
 logger = logging.getLogger(__name__)
@@ -40,12 +42,6 @@ TIMESERIES_CONFIG = dcc.Graph.Config(
 )
 
 # Menu option definitions to avoid duplication and keep layout concise
-VIEWBY_OPTIONS: list[tuple[str, str]] = [
-    ("Ministry", "MINISTRY"),
-    ("Chapter", "CHAPTER"),
-    ("Program", "PROGRAM"),
-]
-
 SPENDING_TYPE_OPTIONS: list[tuple[str, str]] = [
     ("All", "ALL"),
     ("Military Only", "MILITARY"),
@@ -62,28 +58,49 @@ unit_labels = {
 }
 
 
-def fetch_timeseries_data(
-    budget_id: int,
-    spending_type: SpendingTypeLiteral = "ALL",
-    unit: UnitLiteral = "ABSOLUTE",
-) -> tuple[pd.DataFrame, str]:
-    """Fetch and transform treemap data for the current filters."""
-    data_fetcher = BarChartDataFetcher(spending_type)
-    published_at = data_fetcher.get_published_at_date(budget_id=budget_id)
-    budgets, type = data_fetcher.fetch_data(
-        budget_id=budget_id,
-    )
-    transformer = BarchartTransformer()
-    df = transformer.transform_data(budgets)
-    # Use apply to calculate expenses for each row in a vectorized way
+def _calculate_values(
+    df: pd.DataFrame, budget_id: int, unit: UnitLiteral, budget_type: BudgetTypeLiteral
+) -> pd.DataFrame:
     for index, row in df.iterrows():
         calculator = Calculator(
             budget_id=budget_id,
             unit=unit,
             date=row["dates"],
+            budget_type=budget_type,
         )
-        df.at[index, "expenses"] = calculator.calculate(row["expenses"])  # type: ignore
-    # Add line breaks for better label rendering
+        try:
+            df.at[index, "expenses"] = calculator.calculate(row["expenses"])  # type: ignore
+        except ValueError:
+            # drop rows with calculation errors (e.g., missing data for the date/unit)
+            df = df.drop(index)
+
+    return df
+
+
+def fetch_timeseries_data(
+    budget_id: int,
+    spending_type: SpendingTypeLiteral = "ALL",
+    unit: UnitLiteral = "ABSOLUTE",
+    period: PeriodLiteral = "ALL",
+) -> tuple[pd.DataFrame, str]:
+    """Fetch and transform treemap data for the current filters."""
+    data_fetcher = BarChartDataFetcher(spending_type)
+    budgets, type = data_fetcher.fetch_data(
+        budget_id=budget_id,
+    )
+    transformer = BarchartTransformer()
+    if unit in [
+        "PERCENT_YEAR_TO_DATE_SPENDING",
+        "PERCENT_YEAR_TO_DATE_REVENUE",
+    ]:
+        df = transformer.transform_data(budgets, normalize=True)
+    else:
+        df = transformer.transform_data(budgets, normalize=False)
+    # Use apply to calculate expenses for each row in a vectorized way
+    budget_type: BudgetTypeLiteral = next(
+        (row["type"] for row in budgets if row["type"] in ["LAW", "REPORT"]), "LAW"
+    )
+    df = _calculate_values(df, budget_id, unit, budget_type)
     return df, type
 
 
@@ -117,12 +134,35 @@ def generate_figure(
     fig.update_layout(
         margin=dict(t=15, l=60, r=30, b=50),
         font=dict(family="Source Sans 3"),
-        showlegend=False,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=-0.15,
+            xanchor="center",
+            x=0.5,
+            maxheight=0.1,  # Comment maxheight to see legend take up 0.5 of plotting area
+            title_text="",
+        ),
         yaxis_title=f"{unit_label}",
-        xaxis_title="",
-        # Force a full redraw when unit changes so the chart reloads reliably.
+        xaxis_title="",  # Format x-axis to show quarter labels (e.g., "2018-Q1")
         uirevision=f"unit:{unit}",
     )
+    # Set x-axis tick labels to show quarters if budget_type is REPORT
+    if "REPORT" in df["types"].values:
+        fig.update_layout(
+            xaxis=dict(
+                tickformat="%Y-Q%q",  # Plotly quarter format: year-quarter
+                tickangle=-45,  # Angle text to prevent overlap
+                dtick="M3",  # Show tick every 3 months (quarterly)
+                tick0=df["dates"].min()
+                if not df.empty
+                else None,  # Anchor ticks to first data point
+                range=[
+                    df["dates"].min() - pd.DateOffset(days=15) if not df.empty else None,
+                    df["dates"].max() + pd.DateOffset(days=15) if not df.empty else None,
+                ],  # Constrain range to actual data with small padding
+            ),  # Force a full redraw when unit changes so the chart reloads reliably
+        )
 
     # Set custom hover templates for each trace
     # First trace is regular budget data (LAW or REPORT)
@@ -157,12 +197,12 @@ def layout(**other_kwargs) -> html.Div:
         html.Div: The Dash component tree for the page layout.
     """
 
-    viewby_items = [
+    period_items = [
         dbc.DropdownMenuItem(
             html.Span(label, title=label),
-            id={"type": "viewby-item", "value": value},
+            id={"type": "period-item", "value": value},
         )
-        for label, value in VIEWBY_OPTIONS
+        for label, value in PERIOD_OPTIONS
     ]
 
     spending_type_items = [
@@ -198,21 +238,26 @@ def layout(**other_kwargs) -> html.Div:
     Output("timeseries-graph", "figure"),
     Output("timeseries-graph", "style"),
     Input("store-budget-id", "data"),
-    Input("store-viewby", "data"),
+    Input("store-period", "data"),
     Input("store-spending-type", "data"),
     Input("store-unit", "data"),
 )
 def update_figure_from_filters(
     budget_id: int,
-    viewby: ViewByDimensionTypeLiteral = "MINISTRY",
+    period: PeriodLiteral = "ALL",
     spending_type: SpendingTypeLiteral = "ALL",
     unit: UnitLiteral = "ABSOLUTE",
 ) -> tuple[go.Figure, dict[str, str]]:
+    # Guard: wait until a budget is selected
+    if budget_id is None:
+        raise PreventUpdate
+
     # Fetch and render using the selected values from stores
     df, _ = fetch_timeseries_data(
         budget_id=budget_id,
         spending_type=spending_type,
         unit=unit,
+        period=period,
     )
     return generate_figure(df, [], unit, spending_type, language="EN"), {"visibility": "visible"}
 
@@ -221,7 +266,7 @@ def update_figure_from_filters(
     Output("download-timeseries-data", "data"),
     Input("btn-download-csv", "n_clicks"),
     State("store-budget-id", "data"),
-    State("store-viewby", "data"),
+    State("store-period", "data"),
     State("store-spending-type", "data"),
     State("store-unit", "data"),
     prevent_initial_call=True,
@@ -230,7 +275,7 @@ def update_figure_from_filters(
 def download_timeseries_data(
     n_clicks,
     budget_id: int | None = None,
-    viewby: ViewByDimensionTypeLiteral = "MINISTRY",
+    period: PeriodLiteral = "ALL",
     spending_type: SpendingTypeLiteral = "ALL",
     unit: UnitLiteral = "ABSOLUTE",
 ) -> dict[str, Any]:

@@ -1,6 +1,7 @@
 /* Dropdown toggle base layout (text-specific rules moved to typography.css) */
 #menu-budget .dropdown-toggle,
 #menu-viewby .dropdown-toggle,
+#menu-period .dropdown-toggle,
 #menu-spending-type .dropdown-toggle,
 #menu-unit .dropdown-toggle {
   height: 40px;
@@ -14,6 +15,7 @@
 
 #menu-budget .dropdown-toggle>*,
 #menu-viewby .dropdown-toggle>*,
+#menu-period .dropdown-toggle>*,
 #menu-spending-type .dropdown-toggle>*,
 #menu-unit .dropdown-toggle>* {
   min-width: 0;
@@ -23,6 +25,7 @@
 /* Keep the dropdown list scrollable and compact */
 #menu-budget .dropdown-menu,
 #menu-viewby .dropdown-menu,
+#menu-period .dropdown-menu,
 #menu-spending-type .dropdown-menu,
 #menu-unit .dropdown-menu {
   max-height: 300px;
@@ -72,6 +75,24 @@
 }
 
 #menu-viewby .dropdown-toggle::after {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-left: 0;
+}
+
+/* Period toggle: ellipsize + fixed caret */
+#menu-period .dropdown-toggle {
+  display: inline-block;
+  position: relative;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding-right: 28px;
+}
+
+#menu-period .dropdown-toggle::after {
   position: absolute;
   right: 10px;
   top: 50%;
@@ -182,10 +203,12 @@
 
   #menu-budget .dropdown-toggle,
   #menu-viewby .dropdown-toggle,
+  #menu-period .dropdown-toggle,
   #menu-spending-type .dropdown-toggle,
   #menu-unit .dropdown-toggle,
   #menu-budget .dropdown-menu,
   #menu-viewby .dropdown-menu,
+  #menu-period .dropdown-menu,
   #menu-spending-type .dropdown-menu,
   #menu-unit .dropdown-menu {
     max-width: 180px;

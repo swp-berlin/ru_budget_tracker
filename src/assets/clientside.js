@@ -57,6 +57,38 @@ window.dash_clientside.clientside = {
 
       // Simulate a click on the corresponding DOM slice by index
       const plotDiv = hostDiv.querySelector('.js-plotly-plot');
+      // Prefer Plotly's internal restyle API to zoom without relying on DOM events.
+      // This matches manual click behavior more closely and avoids missing labels.
+      try {
+        if (plotDiv && window.Plotly && typeof window.Plotly.restyle === 'function') {
+          const plotData = Array.isArray(plotDiv.data) ? plotDiv.data : [];
+          let traceIndex = -1;
+          for (let i = 0; i < plotData.length; i += 1) {
+            const tr = plotData[i];
+            if (tr && tr.type === 'treemap' && Array.isArray(tr.ids)) {
+              if (tr.ids.includes(targetId)) {
+                traceIndex = i;
+                break;
+              }
+            }
+          }
+          if (traceIndex >= 0) {
+            // Use the stable id first; fall back to label if needed.
+            const labelFromFig = (figJson && figJson.data && figJson.data[0] && figJson.data[0].labels)
+              ? figJson.data[0].labels[idx]
+              : null;
+            console.debug('[Treemap Focus] Plotly.restyle level', { traceIndex, targetId, labelFromFig });
+            window.Plotly.restyle(plotDiv, { level: targetId }, [traceIndex]);
+            if (labelFromFig) {
+              // Plotly tolerates redundant restyle; this helps if level expects label.
+              window.Plotly.restyle(plotDiv, { level: labelFromFig }, [traceIndex]);
+            }
+            return true;
+          }
+        }
+      } catch (e) {
+        console.debug('[Treemap Focus] Plotly.restyle failed', e);
+      }
       // Prefer Plotly's internal click API when available to ensure deep-node focus.
       try {
         if (plotDiv && window.Plotly && typeof window.Plotly.Fx?.click === 'function') {
@@ -228,20 +260,186 @@ window.dash_clientside.clientside = {
     }
 
     /**
+     * Check if the treemap is fully rendered by verifying text elements exist.
+     * @returns {boolean} True if text elements are present in treemap slices.
+     */
+    function isTreemapTextRendered() {
+      const hostDiv = document.getElementById('treemap-graph');
+      if (!hostDiv) return false;
+      const plotDiv = hostDiv.querySelector('.js-plotly-plot');
+      if (!plotDiv) return false;
+      const treemapLayer = plotDiv.querySelector('.treemaplayer');
+      if (!treemapLayer) return false;
+      // Check for text elements inside slices - these indicate full render
+      const textElements = treemapLayer.querySelectorAll('g.slice g.slicetext text');
+      const sliceCount = treemapLayer.querySelectorAll('g.slice.cursor-pointer').length;
+      // Consider rendered if we have text elements and they're not empty
+      if (textElements.length === 0 || sliceCount === 0) return false;
+      // Verify at least some text content exists
+      let hasText = false;
+      textElements.forEach((t) => {
+        if (t.textContent && t.textContent.trim().length > 0) hasText = true;
+      });
+      console.debug('[Treemap Focus] Render check', { textElements: textElements.length, sliceCount, hasText });
+      return hasText;
+    }
+
+    /**
+     * Build an ordered ancestor path from root to target id using trace parents.
+     * @param {string} targetId
+     * @param {object} figJson
+     * @returns {string[]}
+     */
+    function buildAncestorPath(targetId, figJson) {
+      const ids = (figJson && figJson.data && figJson.data[0] && figJson.data[0].ids) || [];
+      const parents = (figJson && figJson.data && figJson.data[0] && figJson.data[0].parents) || [];
+      const parentMap = new Map();
+      for (let i = 0; i < ids.length; i += 1) {
+        parentMap.set(ids[i], parents[i]);
+      }
+      const path = [];
+      let current = targetId;
+      let guard = 0;
+      while (current && guard < 50) {
+        path.push(current);
+        const next = parentMap.get(current);
+        if (!next || next === current) break;
+        current = next;
+        guard += 1;
+      }
+      return path.reverse();
+    }
+
+
+    /**
+     * Wait for Plotly's plotly_afterplot event to ensure treemap is fully rendered.
+     * Falls back to polling if event doesn't fire within timeout.
+     * @param {function} callback - Function to call when render is confirmed.
+     * @param {number} timeout - Max time to wait in ms (default 5000).
+     */
+    function waitForPlotlyRender(callback, timeout) {
+      timeout = timeout || 5000;
+      const hostDiv = document.getElementById('treemap-graph');
+      const plotDiv = hostDiv && hostDiv.querySelector('.js-plotly-plot');
+
+      let resolved = false;
+      let pollCount = 0;
+      const maxPolls = 20; // 20 polls at 250ms = 5s max
+      const pollDelay = 250;
+
+      const tryCallback = () => {
+        if (resolved) return;
+        if (isTreemapTextRendered()) {
+          resolved = true;
+          console.debug('[Treemap Focus] Treemap fully rendered, proceeding with click');
+          // Add small delay after render detection for any final layout adjustments
+          setTimeout(callback, 100);
+        }
+      };
+
+      // Listen for plotly_afterplot event as primary signal
+      if (plotDiv) {
+        const afterPlotHandler = () => {
+          console.debug('[Treemap Focus] plotly_afterplot event received');
+          plotDiv.removeEventListener('plotly_afterplot', afterPlotHandler);
+          // Check if text is rendered after the event
+          setTimeout(tryCallback, 50);
+        };
+        plotDiv.addEventListener('plotly_afterplot', afterPlotHandler);
+        // Clean up listener after timeout
+        setTimeout(() => {
+          plotDiv.removeEventListener('plotly_afterplot', afterPlotHandler);
+        }, timeout);
+      }
+
+      // Poll as fallback in case event already fired or doesn't fire
+      const poll = () => {
+        if (resolved) return;
+        pollCount++;
+        console.debug('[Treemap Focus] Polling for render completion', pollCount);
+        if (isTreemapTextRendered()) {
+          tryCallback();
+          return;
+        }
+        if (pollCount < maxPolls) {
+          setTimeout(poll, pollDelay);
+        } else {
+          // Give up and try anyway after max polls
+          console.debug('[Treemap Focus] Max polls reached, proceeding anyway');
+          resolved = true;
+          callback();
+        }
+      };
+
+      // Start polling after initial delay
+      setTimeout(poll, 300);
+    }
+
+    /**
      * Click through the ancestor path to ensure the final node is visible at maxdepth.
      * This is important when Plotly treemap requires expanding parents to reach deep nodes.
+     * Waits for treemap to be fully rendered before clicking.
      * @param {string} targetId
      * @param {object} figJson
      * @returns {boolean}
      */
     function focusSliceByIdSequential(targetId, figJson) {
-      // Single delayed click: wait ~2s for render and then click the target.
       if (!figJson || !figJson.data || !figJson.data[0]) return false;
-      console.debug('[Treemap Focus] Single delayed focus for id', targetId);
-      setTimeout(() => {
-        const ok = focusSliceById(targetId, figJson);
-        console.debug('[Treemap Focus] Delayed click result', { id: targetId, ok });
-      }, 2000);
+      const hostDiv = document.getElementById('treemap-graph');
+      const plotDiv = hostDiv && hostDiv.querySelector('.js-plotly-plot');
+      const path = buildAncestorPath(targetId, figJson);
+      console.debug('[Treemap Focus] Focusing path', path);
+
+      const stepFocus = (idx) => {
+        if (idx >= path.length) return;
+        const id = path[idx];
+        let didRestyle = false;
+
+        // Prefer Plotly restyle to match manual click behavior per step.
+        try {
+          if (plotDiv && window.Plotly && typeof window.Plotly.restyle === 'function') {
+            const plotData = Array.isArray(plotDiv.data) ? plotDiv.data : [];
+            let traceIndex = -1;
+            for (let i = 0; i < plotData.length; i += 1) {
+              const tr = plotData[i];
+              if (tr && tr.type === 'treemap' && Array.isArray(tr.ids) && tr.ids.includes(id)) {
+                traceIndex = i;
+                break;
+              }
+            }
+            if (traceIndex >= 0) {
+              console.debug('[Treemap Focus] Step restyle level', { id, traceIndex, idx });
+              window.Plotly.restyle(plotDiv, { level: id }, [traceIndex]);
+              didRestyle = true;
+            }
+          }
+        } catch (e) {
+          console.debug('[Treemap Focus] Step restyle failed', e);
+        }
+
+        if (!didRestyle) {
+          const ok = focusSliceById(id, figJson);
+          console.debug('[Treemap Focus] Step click result', { id, ok, idx });
+        }
+
+        // Wait for Plotly to finish before the next step.
+        if (plotDiv) {
+          const afterPlotHandler = () => {
+            plotDiv.removeEventListener('plotly_afterplot', afterPlotHandler);
+            setTimeout(() => stepFocus(idx + 1), 30);
+          };
+          plotDiv.addEventListener('plotly_afterplot', afterPlotHandler);
+          setTimeout(() => {
+            plotDiv.removeEventListener('plotly_afterplot', afterPlotHandler);
+            stepFocus(idx + 1);
+          }, 10);
+        } else {
+          setTimeout(() => stepFocus(idx + 1), 50);
+        }
+      };
+
+      // Ensure the base treemap is fully rendered before stepping into the path.
+      waitForPlotlyRender(() => stepFocus(0));
       return true;
     }
 

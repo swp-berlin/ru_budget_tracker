@@ -1,6 +1,4 @@
 from functools import lru_cache
-from re import Pattern
-import re
 from typing import Sequence
 import networkx as nx
 import pandas as pd
@@ -8,7 +6,6 @@ from sqlalchemy import RowMapping
 from utils.definitions import (
     SpendingTypeLiteral,
     MilitarySpending,
-    Colors,
 )
 from utils.helper import add_breaks
 
@@ -417,59 +414,117 @@ class TreemapTransformer:
 
 
 class BarchartTransformer:
-    def _transform_budget_totals(self, budgets: Sequence[RowMapping]) -> pd.DataFrame:
+    def _normalize_cumulative_expenses(
+        self, budgets: Sequence[RowMapping]
+    ) -> list[dict[str, str | float | int]]:
+        """Normalize cumulative quarterly expenses by subtracting the previous quarter's value.
+
+        Budgets are quarterly and cumulative, so Q4 includes Q1+Q2+Q3+Q4.
+        This method calculates the actual quarterly value by subtracting the previous quarter.
+        Q1 is the base (no subtraction), Q2 = Q2_cumulative - Q1_cumulative, etc.
+        Normalization is done separately for each year and budget type (LAW, REPORT).
+        """
+        normalized_budgets: list[dict[str, str | float | int]] = []
+
+        # Group budgets by year and type for independent normalization
+        grouped: dict[tuple[int, str], list[RowMapping]] = {}
+        for budget in budgets:
+            key = (budget["published_at"].year, budget["type"])
+            grouped.setdefault(key, []).append(budget)
+
+        # Process each year-type group
+        for (_, _), group_budgets in grouped.items():
+            # Sort by date ascending to process in chronological order
+            sorted_budgets = sorted(group_budgets, key=lambda b: b["published_at"])
+
+            # Track previous quarter's cumulative value for subtraction
+            prev_cumulative_value: float = 0.0
+
+            for budget in sorted_budgets:
+                # Convert RowMapping to mutable dict
+                normalized = dict(budget)
+                current_cumulative = budget.get("total_value", 0.0) or 0.0
+
+                # Calculate quarterly value by subtracting previous quarter
+                quarterly_value = current_cumulative - prev_cumulative_value
+                normalized["total_value"] = quarterly_value
+
+                normalized_budgets.append(normalized)
+
+                # Update previous value for next iteration
+                prev_cumulative_value = current_cumulative
+
+        return normalized_budgets
+
+    def _transform_budget_totals(
+        self,
+        budgets: Sequence[RowMapping],
+        normalize: bool,
+    ) -> pd.DataFrame:
         """Transform law budget rows into a dataframe suitable for barchart visualization."""
         if not budgets:
             return pd.DataFrame()
 
         # For every published_at, subtract the law value from the total value
         # and set new value as Classified Spending
+        budgets_corrected: Sequence[RowMapping] | list[dict[str, str | float | int]] = budgets
+        if normalize:
+            budgets_corrected = self._normalize_cumulative_expenses(budgets)
 
-        expenses = [budget["total_value"] for budget in budgets if budget["type"] != "TOTAL"]
-        dates = [budget["published_at"] for budget in budgets if budget["type"] != "TOTAL"]
-        types = [budget["type"] for budget in budgets if budget["type"] != "TOTAL"]
+        expenses = [
+            budget["total_value"] for budget in budgets_corrected if budget["type"] != "TOTAL"
+        ]
+        dates = [
+            budget["published_at"] for budget in budgets_corrected if budget["type"] != "TOTAL"
+        ]
+        types = [budget["type"] for budget in budgets_corrected if budget["type"] != "TOTAL"]
+        ids = [budget["id"] for budget in budgets_corrected if budget["type"] != "TOTAL"]
 
-        df = pd.DataFrame({"expenses": expenses, "dates": dates, "types": types})
+        df = pd.DataFrame({"expenses": expenses, "dates": dates, "types": types, "budget_id": ids})
 
-        # For every TOTAL-LAW budget, find the corresponding LAW budget and subtract its value
-        for budget in budgets:
-            if budget["type"] == "TOTAL":
-                corresponding_law = next(
-                    (
-                        b
-                        for b in budgets
-                        if b["published_at"] == budget["published_at"] and b["type"] != "TOTAL"
+        # For every TOTAL budget, find the corresponding non-TOTAL budget and subtract its value
+        for budget in [budget for budget in budgets_corrected if budget["type"] == "TOTAL"]:
+            corresponding_budget = next(
+                (
+                    b
+                    for b in budgets_corrected
+                    if b["published_at"] == budget["published_at"] and b["type"] != "TOTAL"
+                ),
+                None,
+            )
+            if corresponding_budget is None:
+                continue
+
+            multiplicator: float = 1.0
+            if corresponding_budget["type"] == "LAW":
+                multiplicator = TOTAL_VALUE_MULTIPLIER
+
+            total_value: float = budget["total_value"] * multiplicator  # type: ignore
+
+            value: float = corresponding_budget["total_value"] if corresponding_budget else 0.0  # type: ignore
+            classified_expense = total_value - value
+            budget_id = budget["id"]
+            df = pd.concat(
+                [
+                    df,
+                    pd.DataFrame(
+                        {
+                            "expenses": [classified_expense],
+                            "dates": [budget["published_at"]],
+                            "types": ["CLASSIFIED"],
+                            "budget_id": [budget_id],
+                        }
                     ),
-                    None,
-                )
-                if corresponding_law is None:
-                    continue
-                law_value = corresponding_law["total_value"] if corresponding_law else 0.0
-                classified_expense = budget["total_value"] - law_value
-                budget_id = budget["id"]
-
-                df = pd.concat(
-                    [
-                        df,
-                        pd.DataFrame(
-                            {
-                                "expenses": [classified_expense],
-                                "dates": [budget["published_at"]],
-                                "types": ["CLASSIFIED"],
-                                "budget_id": [budget_id],
-                            }
-                        ),
-                    ],
-                    ignore_index=True,
-                )
+                ],
+                ignore_index=True,
+            )
 
         return df
 
-    def transform_data(self, budgets: Sequence[RowMapping]) -> pd.DataFrame:
+    def transform_data(self, budgets: Sequence[RowMapping], normalize: bool = True) -> pd.DataFrame:
         """Transform raw rows into a dataframe suitable for barchart visualization."""
         if not budgets:
             return pd.DataFrame()
-
-        df = self._transform_budget_totals(budgets)
+        df = self._transform_budget_totals(budgets, normalize)
 
         return df

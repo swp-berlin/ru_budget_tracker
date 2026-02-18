@@ -14,9 +14,7 @@ from sqlalchemy.orm import aliased
 
 from database import get_sync_session
 from models import Budget, Dimension, Expense
-from utils.definitions import (
-    SpendingTypeLiteral,
-)
+from utils.definitions import SpendingTypeLiteral, QUARTERLY_MONTHS
 
 # =============================================================================
 # Constants
@@ -382,7 +380,7 @@ class BarChartDataFetcher:
             Budget.type,
         ]
 
-    def _fetch_budget_expenses(self) -> Sequence[RowMapping]:
+    def _fetch_law_budget_expenses(self) -> Sequence[RowMapping]:
         """
         Fetch LAW budgets and their corresponding TOTAL budgets.
 
@@ -424,6 +422,7 @@ class BarChartDataFetcher:
             .join(Dimension, assoc_table.c.dimension_id == Dimension.id, isouter=True)
             .where(Budget.type == "TOTAL")
             .where(Budget.original_identifier.like("%LAW%"))
+            .where(Dimension.type == "CHAPTER")
             .group_by(Budget.id, Budget.original_identifier, Budget.type)
         )
 
@@ -473,7 +472,9 @@ class BarChartDataFetcher:
         )
 
         with get_sync_session() as session:
-            return session.execute(stmt).mappings().all()
+            results = session.execute(stmt).mappings().all()
+
+        return results
 
     def fetch_budgets_by_type(self, budget_id: int) -> tuple[Sequence[RowMapping], str]:
         """
@@ -493,7 +494,7 @@ class BarChartDataFetcher:
         if initial_budget.type == "REPORT":
             return self._fetch_execution_budget_expenses(), "EXECUTION"
         elif initial_budget.type == "LAW":
-            return self._fetch_budget_expenses(), "LAW"
+            return self._fetch_law_budget_expenses(), "LAW"
         else:
             raise ValueError(f"Unsupported budget type: {initial_budget.type} for ID {budget_id}")
 

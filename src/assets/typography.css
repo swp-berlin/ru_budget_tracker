@@ -11,14 +11,17 @@
 /* Dark text color for dropdown toggles and items */
 #menu-budget .dropdown-toggle,
 #menu-viewby .dropdown-toggle,
+#menu-period .dropdown-toggle,
 #menu-spending-type .dropdown-toggle,
 #menu-unit .dropdown-toggle,
 #menu-budget .dropdown-menu,
 #menu-viewby .dropdown-menu,
+#menu-period .dropdown-menu,
 #menu-spending-type .dropdown-menu,
 #menu-unit .dropdown-menu,
 #menu-budget .dropdown-item,
 #menu-viewby .dropdown-item,
+#menu-period .dropdown-item,
 #menu-spending-type .dropdown-item,
 #menu-unit .dropdown-item {
     color: #333333 !important;
@@ -30,6 +33,7 @@
 /* Truncation for toggle labels and dropdown items */
 #menu-budget .dropdown-toggle,
 #menu-viewby .dropdown-toggle,
+#menu-period .dropdown-toggle,
 #menu-spending-type .dropdown-toggle,
 #menu-unit .dropdown-toggle {
     white-space: nowrap;
@@ -39,6 +43,7 @@
 
 #menu-budget .dropdown-item,
 #menu-viewby .dropdown-item,
+#menu-period .dropdown-item,
 #menu-spending-type .dropdown-item,
 #menu-unit .dropdown-item {
     white-space: nowrap;
@@ -49,10 +54,12 @@
 /* Ensure inner spans (used for tooltips) inherit the dark text color */
 #menu-budget .dropdown-item span,
 #menu-viewby .dropdown-item span,
+#menu-period .dropdown-item span,
 #menu-spending-type .dropdown-item span,
 #menu-unit .dropdown-item span,
 #menu-budget .dropdown-toggle span,
 #menu-viewby .dropdown-toggle span,
+#menu-period .dropdown-toggle span,
 #menu-spending-type .dropdown-toggle span,
 #menu-unit .dropdown-toggle span {
     color: #333333 !important;
@@ -89,10 +96,12 @@
 /* Ensure inner spans (used for tooltips) inherit the dark text color */
 #menu-budget .dropdown-item span,
 #menu-viewby .dropdown-item span,
+#menu-period .dropdown-item span,
 #menu-spending-type .dropdown-item span,
 #menu-unit .dropdown-item span,
 #menu-budget .dropdown-toggle span,
 #menu-viewby .dropdown-toggle span,
+#menu-period .dropdown-toggle span,
 #menu-spending-type .dropdown-toggle span,
 #menu-unit .dropdown-toggle span {
     color: #333333 !important;

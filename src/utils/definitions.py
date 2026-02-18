@@ -3,6 +3,8 @@ from re import Pattern, compile
 
 
 HIERARCHY_OBJECTS = ("MINISTRY", "CHAPTER", "SUBCHAPTER", "PROGRAMM")
+# Quarterly months for execution budget filtering
+QUARTERLY_MONTHS = [3, 6, 9, 12]
 
 BudgetTypeLiteral = Literal["DRAFT", "LAW", "REPORT", "TOTAL"]
 BudgetScopeLiteral = Literal["YEARLY", "QUARTERLY", "MONTHLY"]
@@ -11,6 +13,7 @@ ViewByDimensionTypeLiteral = Literal["MINISTRY", "CHAPTER", "PROGRAMM"]
 
 LanguageTypeLiteral = Literal["EN", "ORIGINAL"]
 SpendingTypeLiteral = Literal["ALL", "MILITARY"]
+PeriodLiteral = Literal["ALL", "Q1", "Q2", "Q3", "Q4"]
 UnitLiteral = Literal[
     "ABSOLUTE",
     "DOLLARS",
@@ -53,6 +56,22 @@ class MilitarySpending:
         "CHAPTER": compile(r"^10$"),
     }
 
+
+PERIOD_OPTIONS: list[tuple[str, str]] = [
+    ("All", "ALL"),
+    ("Q1", "Q1"),
+    ("Q1-Q2", "Q2"),
+    ("Q1-Q3", "Q3"),
+    ("Q1-Q4", "Q4"),
+]
+
+period_map = {
+    "ALL": "All",
+    "Q1": "Q1",
+    "Q2": "Q1-Q2",
+    "Q3": "Q1-Q3",
+    "Q4": "Q1-Q4",
+}
 
 UNIT_OPTIONS: list[tuple[str, UnitLiteral]] = [
     ("Billion RUB", "ABSOLUTE"),

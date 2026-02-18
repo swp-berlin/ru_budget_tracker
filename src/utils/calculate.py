@@ -1,23 +1,43 @@
 from datetime import date
 from functools import lru_cache
+from typing import ClassVar, Sequence
 
-from sqlalchemy import and_, extract, func, or_, select
+from sqlalchemy import RowMapping, and_, extract, func, or_, select
 from models import ConversionRate, Budget, Expense, Dimension
 from database import get_sync_session
-from utils.definitions import UnitLiteral, unit_map, BudgetScopeLiteral
+from utils.definitions import (
+    UnitLiteral,
+    unit_map,
+    BudgetTypeLiteral,
+    BudgetScopeLiteral,
+    QUARTERLY_MONTHS,
+)
 
 
 class Calculator:
+    # Class-level caches to persist across instances
+    _conversion_rate_cache: ClassVar[dict[tuple[str, date], float]] = {}
+    _gdp_cache: ClassVar[dict[tuple[str, date], float]] = {}
+    _spending_cache: ClassVar[dict[tuple[str, BudgetTypeLiteral, date], float]] = {}
+    _revenue_cache: ClassVar[dict[tuple[BudgetTypeLiteral, date], float]] = {}
     """A collection of methods for various budget calculations."""
 
-    def __init__(self, unit: UnitLiteral, budget_id: int, date: date) -> None:
+    def __init__(
+        self, unit: UnitLiteral, budget_id: int, date: date, budget_type: BudgetTypeLiteral
+    ) -> None:
         self.unit: UnitLiteral = unit
         self.budget_id: int = budget_id
+        self.budget_type: BudgetTypeLiteral = budget_type
         self.date = date
 
     def _load_conversion_rate(self) -> float:
-        """Load conversion rate based on from/to currencies. Placeholder implementation."""
+        """Load conversion rate based on from/to currencies. Cached at class level."""
         conversion_target: str = "ppp"
+        # Use year as cache key since rates typically don't change within a year
+        cache_key = (conversion_target, self.date)
+        if cache_key in Calculator._conversion_rate_cache:
+            return Calculator._conversion_rate_cache[cache_key]
+
         select_stmt = select(ConversionRate).where(
             ConversionRate.name.like(f"{conversion_target.lower()}_%"),
             ConversionRate.started_at <= self.date,
@@ -29,14 +49,19 @@ class Calculator:
         if not result:
             raise ValueError(f"No conversion rate found for {conversion_target} on {self.date}")
 
+        Calculator._conversion_rate_cache[cache_key] = result.value
         return result.value
 
-    @lru_cache(maxsize=32)
     def _fetch_gdp_data(
         self,
         period_start_date: date,
     ) -> float:
-        """Fetch GDP data for a given date."""
+        """Fetch GDP data for a given date. Cached at class level."""
+        # Cache key includes unit type and year
+        cache_key = (self.unit, period_start_date)
+        if cache_key in Calculator._gdp_cache:
+            return Calculator._gdp_cache[cache_key]
+
         conversion_target: str = "gdp"
         select_stmt = select(func.sum(ConversionRate.value)).where(
             ConversionRate.name.like(f"{conversion_target.lower()}%"),
@@ -88,120 +113,154 @@ class Calculator:
                 f"No GDP data found for {period_start_date.year} in {unit_map[self.unit]}"
             )
 
+        Calculator._gdp_cache[cache_key] = value
         return value
 
-    @lru_cache(maxsize=32)
+    @lru_cache(maxsize=10)
+    def _fetch_spending_budgets(
+        self,
+        year: int,
+        budget_scope: BudgetScopeLiteral,
+    ) -> Sequence[RowMapping]:
+        """Fetch relevant total budgets for spending calculations."""
+        select_stmt = (
+            select(Budget.id, Expense.value, Budget.published_at)
+            .select_from(Budget)
+            .join(Expense, Expense.budget_id == Budget.id, isouter=True)
+            .join(Dimension, Expense.dimensions, isouter=True)
+            .where(
+                Budget.type == "TOTAL",
+                Budget.original_identifier.like("%-EXPENSE-%"),
+                extract("year", Budget.published_at) == year,
+                Dimension.type.is_(None),  # Exclude expenses with dimensions
+                Budget.scope == budget_scope,
+            )
+        )
+        if budget_scope == "MONTHLY":
+            select_stmt = select_stmt.where(
+                extract("month", Budget.published_at).in_(QUARTERLY_MONTHS)
+            )
+        with get_sync_session() as session:
+            budgets = session.execute(select_stmt).mappings().all()
+        return budgets
+
     def _fetch_spending_value(
         self,
         period_start_date: date,
     ) -> float:
-        """Fetch spending value for a given date."""
-        # Fetch target budget
-        with get_sync_session() as session:
-            budget = session.get(Budget, self.budget_id)
+        """Fetch spending value for a given date. Cached at class level."""
+        # Cache key includes unit, budget_type, and year
+        cache_key = (self.unit, self.budget_type, period_start_date)
+        if cache_key in Calculator._spending_cache:
+            return Calculator._spending_cache[cache_key]
 
-        if not budget:
-            raise ValueError(f"No budget found with ID {self.budget_id}")
-
-        # Fetch the relevant total budget
-        select_stmt = select(Budget).where(
-            Budget.type == "TOTAL",
-            Budget.original_identifier.like("%-EXPENSE-%"),
-            extract("year", Budget.published_at) == period_start_date.year,
+        # Use single session for all queries
+        scope: BudgetScopeLiteral = "YEARLY" if self.budget_type == "LAW" else "MONTHLY"
+        relevant_total_budgets = self._fetch_spending_budgets(period_start_date.year, scope)
+        spending_cumulative = 0.0
+        previous_spending_value = 0.0
+        max_date = max([b.published_at for b in relevant_total_budgets], default=1)
+        spending_cumulative = next(
+            (b.value for b in relevant_total_budgets if b.published_at == max_date), 0.0
         )
-        with get_sync_session() as session:
-            relevant_total_budgets = session.scalars(select_stmt).all()
-
-        base_spending_stmt = (
-            select(func.sum(Expense.value))
-            .outerjoin(Dimension, Expense.dimensions)
-            .where(Dimension.type.is_(None))
-        )
-
-        relevant_month = 1
-        relevant_scope: BudgetScopeLiteral = "YEARLY"
-        if self.unit == "PERCENT_FULL_YEAR_SPENDING":
-            # Filter by relevant total budgets for full-year spending
-            if budget.type == "REPORT":
-                relevant_scope = "MONTHLY"
-                month = max(
-                    [
-                        b.published_at.month
-                        for b in relevant_total_budgets
-                        if b.scope == relevant_scope
-                    ]
-                )
-                relevant_month = month
-
-        if self.unit == "PERCENT_YEAR_TO_DATE_SPENDING":
-            # Filter by relevant total budgets for full-year spending
-            if budget.type == "REPORT":
-                relevant_month = budget.published_at.month
-                relevant_scope = "MONTHLY"
-
-        relevant_total_budget_id = next(
-            (
-                b.id
-                for b in relevant_total_budgets
-                if (b.published_at.month == relevant_month and b.scope == relevant_scope)
+        if self.unit == "PERCENT_FULL_YEAR_SPENDING" and self.budget_type == "REPORT":
+            # For REPORT and full-year spending, we want the latest monthly total budget available in the report
+            latest_budget = max(relevant_total_budgets, key=lambda b: b.published_at, default=None)
+            spending_cumulative = latest_budget.value if latest_budget else 0.0
+        if self.unit == "PERCENT_YEAR_TO_DATE_SPENDING" and self.budget_type == "REPORT":
+            # For REPORT and year-to-date spending, we want the latest monthly total budget available in the report that matches the month of
+            # the period start date
+            spending_cumulative = next(
+                (b.value for b in relevant_total_budgets if b.published_at == period_start_date),
+                0.0,
             )
-        )
-        spending_stmt = base_spending_stmt.where(Expense.budget_id == relevant_total_budget_id)
+            if period_start_date.month > 3:
+                previous_spending_date = period_start_date.replace(
+                    month=period_start_date.month - 3
+                )
+                previous_spending_value = next(
+                    (
+                        b.value
+                        for b in relevant_total_budgets
+                        if b.published_at == previous_spending_date
+                    ),
+                    0.0,
+                )
 
-        with get_sync_session() as session:
-            spending_value = session.scalar(spending_stmt)
-        if not spending_value:
+        if not spending_cumulative:
             raise ValueError(
                 f"No spending data found for {period_start_date.year} in {unit_map[self.unit]}"
             )
+
+        spending_value = spending_cumulative - previous_spending_value
+        Calculator._spending_cache[cache_key] = spending_value
         return spending_value
 
-    @lru_cache(maxsize=32)
+    @lru_cache(maxsize=10)
+    def _fetch_revenue_budgets(
+        self,
+        year: int,
+    ) -> Sequence[RowMapping]:
+        """Fetch relevant total budgets for spending calculations."""
+        select_stmt = (
+            select(Budget.id, Expense.value, Budget.published_at)
+            .select_from(Budget)
+            .join(Expense, Expense.budget_id == Budget.id, isouter=True)
+            .join(Dimension, Expense.dimensions, isouter=True)
+            .where(
+                Budget.type == "TOTAL",
+                Budget.original_identifier.like("%-REVENUE-%"),
+                extract("year", Budget.published_at) == year,
+                Dimension.type.is_(None),  # Exclude expenses with dimensions
+                extract("month", Budget.published_at).in_(QUARTERLY_MONTHS),
+            )
+        )
+        with get_sync_session() as session:
+            budgets = session.execute(select_stmt).mappings().all()
+        return budgets
+
     def _fetch_revenue_value(
         self,
         period_start_date: date,
     ) -> float:
-        """Fetch revenue value for a given date."""
-        # Fetch target budget
-        with get_sync_session() as session:
-            budget = session.get(Budget, self.budget_id)
+        """Fetch revenue value for a given date. Cached at class level."""
+        # Cache key includes budget_id and year
+        cache_key = (self.budget_type, period_start_date)
+        if cache_key in Calculator._revenue_cache:
+            return Calculator._revenue_cache[cache_key]
 
-        if not budget:
-            raise ValueError(f"No budget found with ID {self.budget_id}")
+        relevant_total_budgets = self._fetch_revenue_budgets(period_start_date.year)
+        if not relevant_total_budgets:
+            return 0.0  # If no revenue budgets found, return 0 to avoid division errors later
+        relevant_date = period_start_date
+        if self.budget_type == "LAW":
+            relevant_date = max([b.published_at for b in relevant_total_budgets])
 
-        # Fetch the relevant total budget
-        select_stmt = select(Budget).where(
-            Budget.type == "TOTAL",
-            Budget.original_identifier.like("%-REVENUE-%"),
-            extract("year", Budget.published_at) == period_start_date.year,
+        revenue_value = next(
+            (b.value for b in relevant_total_budgets if b.published_at == relevant_date), 0.0
         )
-        with get_sync_session() as session:
-            relevant_total_budgets = session.scalars(select_stmt).all()
-
-        base_renevue_stmt = (
-            select(func.sum(Expense.value))
-            .outerjoin(Dimension, Expense.dimensions)
-            .where(Dimension.type.is_(None))
-        )
-
-        relevant_month = period_start_date.month
-        if budget.type == "LAW":
-            month = max([b.published_at.month for b in relevant_total_budgets])
-            relevant_month = month
-
-        relevant_total_budget_id = next(
-            (b.id for b in relevant_total_budgets if (b.published_at.month == relevant_month))
-        )
-
-        revenue_stmt = base_renevue_stmt.where(Expense.budget_id == relevant_total_budget_id)
-
-        with get_sync_session() as session:
-            revenue_value = session.scalar(revenue_stmt)
-        if not revenue_value:
-            raise ValueError(
-                f"No revenue data found for {period_start_date.year} in {unit_map[self.unit]}"
+        if self.budget_type == "REPORT" and period_start_date.month > 3:
+            previous_revenue_date = period_start_date.replace(month=period_start_date.month - 3)
+            previous_revenue_value = next(
+                (
+                    b.value
+                    for b in relevant_total_budgets
+                    if b.published_at == previous_revenue_date
+                ),
+                0.0,
             )
+            revenue_value -= previous_revenue_value
+
+        Calculator._revenue_cache[cache_key] = revenue_value
         return revenue_value
+
+    @classmethod
+    def clear_caches(cls) -> None:
+        """Clear all class-level caches. Useful for testing or when data changes."""
+        cls._conversion_rate_cache.clear()
+        cls._gdp_cache.clear()
+        cls._spending_cache.clear()
+        cls._revenue_cache.clear()
 
     def _absolute(self, value: float) -> float:
         """Calculate absolute value in billions."""

@@ -20,7 +20,14 @@ from dash import (
 from dash.exceptions import PreventUpdate
 
 from utils.fetch import fetch_budgets_for_dropdown
-from utils.definitions import UNIT_OPTIONS, unit_map, spending_type_map, viewby_map
+from utils.definitions import (
+    UNIT_OPTIONS,
+    PERIOD_OPTIONS,
+    unit_map,
+    spending_type_map,
+    viewby_map,
+    period_map,
+)
 
 external_stylesheets = [
     dbc.themes.BOOTSTRAP,
@@ -30,6 +37,7 @@ app = Dash(
     __name__,
     use_pages=True,
     external_stylesheets=external_stylesheets,
+    suppress_callback_exceptions=True,  # Required for pages with callbacks referencing shared stores
 )
 
 
@@ -77,12 +85,21 @@ unit_items = [
     for label, value in UNIT_OPTIONS
 ]
 
+period_items = [
+    dbc.DropdownMenuItem(
+        html.Span(label, title=label),
+        id={"type": "period-item", "value": value},
+    )
+    for label, value in PERIOD_OPTIONS
+]
+
 layout = html.Div(
     [
         # Store currently selected filter values (these replace dcc.Dropdown.value)
         dcc.Store(id="store-budget-options"),
         dcc.Store(id="store-budget-id"),
         dcc.Store(id="store-viewby", data="CHAPTER"),
+        dcc.Store(id="store-period", data="ALL"),
         dcc.Store(id="store-spending-type", data="ALL"),
         dcc.Store(id="store-unit", data="ABSOLUTE"),
         dcc.Store(id="store-language", data="RU"),
@@ -119,13 +136,23 @@ layout = html.Div(
                             class_name="me-2 scroll-menu",
                             # Make the dropdown list scrollable to handle many budgets
                         ),
-                        # View-by menu
+                        # View-by menu (shown on treemap, hidden on timeseries)
                         dbc.DropdownMenu(
                             label="View by",
                             children=viewby_items,
                             id="menu-viewby",
                             direction="down",
                             class_name="me-2",
+                            style={},  # controlled by callback
+                        ),
+                        # Period menu (for timeseries, hidden on treemap)
+                        dbc.DropdownMenu(
+                            label="Period",
+                            children=period_items,
+                            id="menu-period",
+                            direction="down",
+                            class_name="me-2",
+                            style={"display": "none"},  # controlled by callback
                         ),
                         # Spending type menu
                         dbc.DropdownMenu(
@@ -246,10 +273,32 @@ layout = html.Div(
 )
 
 
-app.layout = html.Div(
+def serve_layout():
+    """Serve the layout as a function to defer component evaluation.
+
+    This ensures callbacks in pages can reference stores defined here.
+    """
+    return html.Div(
+        children=[
+            layout,
+            page_container,
+        ]
+    )
+
+
+app.layout = serve_layout
+
+# Validation layout includes all components that callbacks might reference.
+# This prevents "component not found" warnings during callback validation.
+app.validation_layout = html.Div(
     children=[
         layout,
         page_container,
+        # Include page-specific components for callback validation
+        dcc.Store(id="store-selected-id"),
+        dcc.Graph(id="timeseries-graph"),
+        dcc.Graph(id="treemap-graph"),
+        dcc.Download(id="download-timeseries-data"),
     ]
 )
 
@@ -289,6 +338,22 @@ def switch_graphs(pathname: str | None, budget_id: int | None):
         ],
         "Switch to Time Series View",
     )
+
+
+@callback(
+    Output("menu-viewby", "style"),
+    Output("menu-period", "style"),
+    Input("url", "pathname"),
+)
+def toggle_viewby_period_menu(pathname: str | None):
+    """Toggle visibility of View By and Period menus based on current page.
+
+    - On /timeseries: hide viewby, show period
+    - On other pages: show viewby, hide period
+    """
+    if pathname == "/timeseries":
+        return {"display": "none"}, {}
+    return {}, {"display": "none"}
 
 
 # Clientside callback to handle URL focus parameter and click simulation
@@ -373,6 +438,22 @@ def select_viewby(_clicks):
         raise PreventUpdate
     trig = getattr(ctx, "triggered_id", None)
     if isinstance(trig, dict) and trig.get("type") == "viewby-item":
+        return trig.get("value")
+    raise PreventUpdate
+
+
+# Period selection (pattern-matched, for timeseries page)
+@callback(
+    Output("store-period", "data"),
+    Input({"type": "period-item", "value": ALL}, "n_clicks"),
+    prevent_initial_call=True,
+)
+def select_period(_clicks):
+    ctx = callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+    trig = getattr(ctx, "triggered_id", None)
+    if isinstance(trig, dict) and trig.get("type") == "period-item":
         return trig.get("value")
     raise PreventUpdate
 
@@ -560,19 +641,22 @@ def show_selected_budget_label(budget_id: int | None, options: list[dict[str, An
     Output("menu-viewby", "label"),
     Output("menu-spending-type", "label"),
     Output("menu-unit", "label"),
+    Output("menu-period", "label"),
     Input("store-viewby", "data"),
     Input("store-spending-type", "data"),
     Input("store-unit", "data"),
+    Input("store-period", "data"),
 )
-def update_menu_labels(viewby: str | None, spending_type: str | None, unit: str | None):
+def update_menu_labels(
+    viewby: str | None, spending_type: str | None, unit: str | None, period: str | None
+):
     return (
         viewby_map.get(viewby or "", "View by"),
         spending_type_map.get(spending_type or "", "Spending type"),
-        unit_map.get(unit or "", "Unit"),
+        unit_map.get(unit or "", "Unit"),  # type: ignore
+        period_map.get(period or "", "Period"),
     )
 
 
 if __name__ == "__main__":
-    # Run the server without the Werkzeug reloader to avoid Python 3.13 DummyThread __del__ shutdown errors
-    # Debug can stay on; use_reloader=False prevents the extra thread that triggers the exception
     app.run(debug=True, use_reloader=False)

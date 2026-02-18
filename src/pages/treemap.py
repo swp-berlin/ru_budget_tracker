@@ -27,6 +27,7 @@ from utils.definitions import (
     unit_map,
     SpendingTypeLiteral,
     ViewByDimensionTypeLiteral,
+    BudgetTypeLiteral,
 )
 
 logger = logging.getLogger(__name__)
@@ -97,10 +98,13 @@ def transform_treemap_data(
     character_limit: int = 25,
 ) -> pd.DataFrame:
     dimensions, programs, published_at = fetch_treemap_data(budget_id)
+    budget_type: BudgetTypeLiteral = next(
+        (row["budget_type"] for row in dimensions if row["budget_type"] in ["LAW", "REPORT"]), "LAW"
+    )
     transformer = TreemapTransformer(dimensions, programs, max_line_lenght=character_limit)
     df = transformer.transform_data()
     # Calculate values based on unit, budget, and published_at
-    calculator = Calculator(unit, budget_id, published_at)
+    calculator = Calculator(unit, budget_id, published_at, budget_type)
     df["VALUE"] = df["VALUE"].apply(calculator.calculate)
     # Keep the base dataframe clean; percentages are computed from the treemap trace.
 
@@ -221,6 +225,10 @@ def update_figure_from_filters(
     unit: UnitLiteral = "ABSOLUTE",
     language: str = "RU",
 ) -> tuple[go.Figure, dict[str, str]]:
+    # Guard: wait until a budget is selected
+    if budget_id is None:
+        raise PreventUpdate
+
     # Fetch and render using the selected values from stores
     # Use translated names when language is ENG (English)
     translated = language == "ENG"
