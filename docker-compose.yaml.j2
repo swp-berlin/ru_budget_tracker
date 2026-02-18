@@ -72,7 +72,8 @@ services:
     restart: always
     pull_policy: always
     ports:
-      - 8000:8000
+      # Map host port 8001 to container port 8000 to avoid host conflicts.
+      - 8001:8000
     user: 1000:1000
     networks:
       - proxy
