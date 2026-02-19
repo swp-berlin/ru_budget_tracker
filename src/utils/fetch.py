@@ -106,7 +106,7 @@ class TreemapDataFetcher:
             raise ValueError(f"Budget with ID {budget_id} not found.")
         return date
 
-    def fetch_relevant_budgets(self, budget_id: int) -> list[Budget]:
+    def fetch_relevant_budgets(self, budget_id: int) -> tuple[Budget, Budget]:
         """
         Fetch the initial budget and any corresponding TOTAL budgets.
 
@@ -144,10 +144,14 @@ class TreemapDataFetcher:
             )
 
         with get_sync_session() as session:
-            total_budgets = session.execute(total_budgets_stmt).scalars().all()
+            total_budget = session.execute(total_budgets_stmt).scalar_one_or_none()
+        if total_budget is None:
+            raise ValueError(
+                f"No corresponding TOTAL budget found for budget ID {budget_id} with published_at {initial_budget.published_at}."
+            )
 
         # Return initial budget first, then related TOTAL budgets (excluding duplicates)
-        return [initial_budget] + [b for b in total_budgets if b.id != initial_budget.id]
+        return initial_budget, total_budget
 
     def _fetch_treemap_dimensions(self, budget_id: int) -> Sequence[RowMapping]:
         """
@@ -162,11 +166,7 @@ class TreemapDataFetcher:
         Raises:
             ValueError: If no relevant budgets are found.
         """
-        relevant_budgets = self.fetch_relevant_budgets(budget_id=budget_id)
-        if not relevant_budgets:
-            raise ValueError(f"No relevant budgets found for budget ID {budget_id}.")
-
-        budget_ids = [budget.id for budget in relevant_budgets]
+        initial_budget, totals_budget = self.fetch_relevant_budgets(budget_id=budget_id)
 
         parent_dimension = aliased(Dimension)
         stmt = (
@@ -186,61 +186,35 @@ class TreemapDataFetcher:
                 _build_dimension_name_column(translated=False).label("dimension_name"),
                 _build_dimension_name_column(translated=True).label("dimension_name_translated"),
             )
-            .where(or_(Dimension.type.in_(TREEMAP_DIMENSION_TYPES), Dimension.type.is_(None)))
             .join(Expense.dimensions, isouter=True)
             .join(Expense.budget, isouter=True)
             .join(parent_dimension, Dimension.parent_id == parent_dimension.id, isouter=True)
-            .where(Expense.budget_id.in_(budget_ids))
         )
 
-        return _execute_query(stmt)
-
-    def _create_treemap_value_sums_mapping(
-        self, budget_id: int, is_total: bool = False, dimension_type: str | None = None
-    ) -> dict[int, float]:
-        """
-        Create a mapping of dimension IDs to their summed expense values.
-
-        Args:
-            budget_id: The budget ID to sum expenses for.
-            is_total: If True, only include TOTAL budget types; otherwise exclude them.
-
-        Returns:
-            Dictionary mapping dimension_id to total expense value.
-        """
-        stmt = (
-            select(
-                Dimension.id.label("dimension_id"),
-                func.sum(Expense.value).label("total_expense_value"),
-            )
-            .where(Expense.budget_id == budget_id)
-            .outerjoin(Dimension, Expense.dimensions)
-            .join(Expense.budget)
-            .group_by(Dimension.id)
-        )
-        if dimension_type:
-            stmt = stmt.where(Dimension.type == dimension_type)
-
-        # Filter by budget type
-        if is_total:
+        if initial_budget.type == "LAW":
             stmt = stmt.where(
-                Budget.type == "TOTAL",
                 or_(
                     and_(
-                        Dimension.type.in_(TREEMAP_DIMENSION_TYPES),
-                        Budget.original_identifier.like("%LAW-EXPENSE%"),
+                        Budget.id == initial_budget.id, Dimension.type.in_(TREEMAP_DIMENSION_TYPES)
                     ),
                     and_(
-                        Dimension.type.is_(None),
-                        Budget.original_identifier.like("%REPORT-EXPENSE%"),
+                        Budget.id == totals_budget.id,
+                        Dimension.type.in_("CHAPTER"),
                     ),
-                ),
+                )
             )
-        else:
-            stmt = stmt.where(Budget.type != "TOTAL", Dimension.type.in_(TREEMAP_DIMENSION_TYPES))
 
-        sums = _execute_query(stmt, unique=False)
-        return {row["dimension_id"]: row["total_expense_value"] for row in sums}
+        elif initial_budget.type == "REPORT":
+            stmt = stmt.where(
+                or_(
+                    and_(
+                        Budget.id == initial_budget.id, Dimension.type.in_(TREEMAP_DIMENSION_TYPES)
+                    ),
+                    and_(Budget.id == totals_budget.id, Dimension.type.is_(None)),
+                )
+            )
+
+        return _execute_query(stmt)
 
     def _fetch_treemap_programs_recursive(
         self, leaf_program_ids: list[int]
@@ -380,6 +354,62 @@ class BarChartDataFetcher:
             Budget.type,
         ]
 
+    def _fetch_descendant_dimension_ids(self, dimension_id: int) -> list[int]:
+        """Return the selected dimension id plus all descendant ids."""
+        base_stmt = select(
+            Dimension.id.label("dimension_id"),
+            Dimension.parent_id.label("parent_id"),
+        ).where(Dimension.id == dimension_id)
+        dim_cte = base_stmt.cte("dimension_tree", recursive=True)
+        recursive_stmt = select(
+            Dimension.id.label("dimension_id"),
+            Dimension.parent_id.label("parent_id"),
+        ).where(Dimension.parent_id == dim_cte.c.dimension_id)
+        full_cte = dim_cte.union_all(recursive_stmt)
+        stmt = select(full_cte.c.dimension_id)
+        rows = _execute_query(stmt, unique=False)
+        return [row["dimension_id"] for row in rows]
+
+    def _fetch_budget_expenses_for_dimensions(
+        self,
+        budget_types: list[str],
+        dimension_ids: list[int],
+        quarterly_only: bool,
+    ) -> Sequence[RowMapping]:
+        """Fetch summed expenses for budgets filtered by dimension ids."""
+        from models.budget import expense_dimension_association_table as assoc_table
+
+        base_columns = self._get_budget_expense_columns()
+
+        # Select distinct expenses to avoid double counting across multiple dimensions.
+        expenses_subquery = (
+            select(
+                Expense.id.label("expense_id"),
+                Expense.budget_id.label("budget_id"),
+                Expense.value.label("value"),
+            )
+            .select_from(Expense)
+            .join(assoc_table, Expense.id == assoc_table.c.expense_id)
+            .join(Dimension, assoc_table.c.dimension_id == Dimension.id)
+            .where(Dimension.id.in_(dimension_ids))
+            .distinct(Expense.id)
+            .subquery()
+        )
+
+        stmt = (
+            select(*base_columns, func.sum(expenses_subquery.c.value).label("total_value"))
+            .select_from(Budget)
+            .join(expenses_subquery, Budget.id == expenses_subquery.c.budget_id)
+            .where(Budget.type.in_(budget_types))
+            .group_by(*base_columns)
+        )
+
+        if quarterly_only:
+            stmt = stmt.where(extract("month", Budget.published_at).in_(QUARTERLY_MONTHS))
+
+        with get_sync_session() as session:
+            return session.execute(stmt).mappings().all()
+
     def _fetch_law_budget_expenses(self) -> Sequence[RowMapping]:
         """
         Fetch LAW budgets and their corresponding TOTAL budgets.
@@ -458,7 +488,7 @@ class BarChartDataFetcher:
             .where(
                 or_(
                     # REPORT budgets with MINISTRY dimension
-                    Dimension.type == "MINISTRY",
+                    and_(Dimension.type == "MINISTRY", Budget.type == "REPORT"),
                     # TOTAL expense budgets (no dimension association)
                     and_(
                         Dimension.type.is_(None),
@@ -476,7 +506,7 @@ class BarChartDataFetcher:
 
         return results
 
-    def fetch_budgets_by_type(self, budget_id: int) -> tuple[Sequence[RowMapping], str]:
+    def fetch_budgets(self, budget_id: int) -> tuple[Sequence[RowMapping], str]:
         """
         Fetch budget expenses based on the budget type.
 
@@ -498,9 +528,38 @@ class BarChartDataFetcher:
         else:
             raise ValueError(f"Unsupported budget type: {initial_budget.type} for ID {budget_id}")
 
+    def fetch_budgets_filtered(
+        self, budget_id: int, dimension_id: int
+    ) -> tuple[Sequence[RowMapping], str]:
+        """Fetch budget expenses filtered by a selected dimension and its descendants."""
+        initial_budget = self._fetch_budget(budget_id)
+        dimension_ids = self._fetch_descendant_dimension_ids(dimension_id)
+
+        if initial_budget.type == "REPORT":
+            return (
+                self._fetch_budget_expenses_for_dimensions(
+                    ["REPORT"],
+                    dimension_ids,
+                    quarterly_only=True,
+                ),
+                "EXECUTION",
+            )
+        elif initial_budget.type == "LAW":
+            return (
+                self._fetch_budget_expenses_for_dimensions(
+                    ["LAW"],
+                    dimension_ids,
+                    quarterly_only=False,
+                ),
+                "LAW",
+            )
+        else:
+            raise ValueError(f"Unsupported budget type: {initial_budget.type} for ID {budget_id}")
+
     def fetch_data(
         self,
         budget_id: int | None = None,
+        dimension_id: int | None = None,
     ) -> tuple[Sequence[RowMapping], str]:
         """
         Fetch budget and expense data for bar chart visualization.
@@ -517,5 +576,8 @@ class BarChartDataFetcher:
         """
         if budget_id is None:
             raise ValueError("budget_id must be provided to fetch data.")
+        # Filter to the selected dimension when provided.
+        if dimension_id is not None:
+            return self.fetch_budgets_filtered(budget_id=budget_id, dimension_id=dimension_id)
 
-        return self.fetch_budgets_by_type(budget_id=budget_id)
+        return self.fetch_budgets(budget_id=budget_id)

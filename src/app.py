@@ -98,11 +98,15 @@ layout = html.Div(
         # Store currently selected filter values (these replace dcc.Dropdown.value)
         dcc.Store(id="store-budget-options"),
         dcc.Store(id="store-budget-id"),
+        # Store the treemap selection for cross-page filtering.
+        dcc.Store(id="store-selected-id"),
         dcc.Store(id="store-viewby", data="CHAPTER"),
         dcc.Store(id="store-period", data="ALL"),
         dcc.Store(id="store-spending-type", data="ALL"),
         dcc.Store(id="store-unit", data="ABSOLUTE"),
         dcc.Store(id="store-language", data="RU"),
+        # Store treemap node metadata for cross-page selection context.
+        dcc.Store(id="store-treemap-node-map"),
         # Store for download status (used by clientside callback, not displayed)
         dcc.Store(id="store-download-status"),
         # Location component to access URL parameters
@@ -296,6 +300,7 @@ app.validation_layout = html.Div(
         page_container,
         # Include page-specific components for callback validation
         dcc.Store(id="store-selected-id"),
+        dcc.Store(id="store-treemap-node-map"),
         dcc.Graph(id="timeseries-graph"),
         dcc.Graph(id="treemap-graph"),
         dcc.Download(id="download-timeseries-data"),
@@ -344,16 +349,45 @@ def switch_graphs(pathname: str | None, budget_id: int | None):
     Output("menu-viewby", "style"),
     Output("menu-period", "style"),
     Input("url", "pathname"),
+    Input("store-budget-id", "data"),
+    State("store-budget-options", "data"),
 )
-def toggle_viewby_period_menu(pathname: str | None):
+def toggle_viewby_period_menu(
+    pathname: str | None, budget_id: int | None, options: list[dict[str, Any]] | None
+):
     """Toggle visibility of View By and Period menus based on current page.
 
     - On /timeseries: hide viewby, show period
     - On other pages: show viewby, hide period
     """
     if pathname == "/timeseries":
-        return {"display": "none"}, {}
+        period_style: dict[str, Any] = {}
+        if budget_id and options:
+            budget_type = next(
+                (opt.get("type") for opt in options if opt.get("value") == budget_id),
+                None,
+            )
+            if budget_type == "LAW":
+                period_style = {
+                    "cursor": "not-allowed",
+                }
+        return {"display": "none"}, period_style
     return {}, {"display": "none"}
+
+
+@callback(
+    Output("menu-period", "disabled"),
+    Input("store-budget-id", "data"),
+    State("store-budget-options", "data"),
+)
+def toggle_period_menu_disabled(
+    budget_id: int | None, options: list[dict[str, Any]] | None
+) -> bool:
+    # Disable the period menu for LAW budgets where quarter selection does not apply.
+    if not budget_id or not options:
+        return False
+    budget_type = next((opt.get("type") for opt in options if opt.get("value") == budget_id), None)
+    return budget_type == "LAW"
 
 
 # Clientside callback to handle URL focus parameter and click simulation
@@ -499,9 +533,10 @@ def select_unit(_clicks):
     prevent_initial_call=False,
 )
 def init_budgets(_, url_search: str | None):
-    # Fetch once and share everywhere via Store
+    # Fetch once and include budget type for downstream UI logic.
     options = [
-        {"label": b["original_identifier"], "value": b["id"]} for b in fetch_budgets_for_dropdown()
+        {"label": b["original_identifier"], "value": b["id"], "type": b["type"]}
+        for b in fetch_budgets_for_dropdown()
     ]
     # Build menu items with pattern ids
     items = [

@@ -178,10 +178,18 @@ class TreemapTransformer:
         program_paths: dict[int, list[int]],
         max_program_levels: int,
     ) -> dict[str, dict[str, int | float | str]]:
-        """Build a hierarchy dictionary mapping each row ID to its hierarchy levels.
+        """
+        Build a hierarchy dictionary mapping each expense dimension to its full path in the program hierarchy.
+            Each entry in the hierarchy dictionary will contain:
+            - VALUE: The expense value for this dimension.
+            - BUDGET_TYPE: The budget type (e.g., LAW, REPORT) for this dimension.
+            - IS_MILITARY: A boolean indicating if this dimension is classified as military spending based on its type and original identifier.
+            - For each hierarchy level (MINISTRY, CHAPTER, SUBCHAPTER, PROGRAM_0, PROGRAM_1, PROGRAM_2):
+                - {LEVEL}_DIM_ID: The dimension_id of the corresponding hierarchy level.
+                - {LEVEL}_ORIG_ID: The dimension_original_identifier of the corresponding hierarchy level.
+                - {LEVEL}_NAME: The dimension_name of the corresponding hierarchy level.
+                - {LEVEL}_NAME_TRANSLATED: The dimension_name_translated of the corresponding hierarchy level.
 
-        Classified Spending (from TOTAL budgets) are placed as siblings to SUBCHAPTERs
-        (under CHAPTER) and are terminal nodes (no children).
         """
 
         hierarchy_dict: dict[str, dict[str, int | float | str]] = {}
@@ -201,9 +209,7 @@ class TreemapTransformer:
         for program_id, expenses in leaf_expense_mapping.items():
             # Calculate ONCE per program_id, not per expense
             program_path = program_paths.get(program_id, [])
-            program_rows = [
-                program_by_dim_id[d] for d in reversed(program_path) if d in program_by_dim_id
-            ]
+            program_rows = [program_by_dim_id[d] for d in program_path if d in program_by_dim_id]
 
             relevant_dims = []
             # Extract the id from each expense row mapping before using it as a dictionary key
@@ -278,7 +284,7 @@ class TreemapTransformer:
         df["ROOT"] = root_name
 
         # Reorder columns to have a consistent order
-        ordered_columns = ["VALUE", "BUDGET_TYPE", "ROOT"]
+        ordered_columns = ["VALUE", "BUDGET_TYPE", "IS_MILITARY", "ROOT"]
         for level in sorted(df.columns, key=self._get_level_sort_key):
             if level not in ordered_columns:
                 ordered_columns.append(level)
@@ -287,7 +293,7 @@ class TreemapTransformer:
         # Set type for value as float
         df["VALUE"] = df["VALUE"].astype(float)
         # Preserve nulls before any string conversion for Plotly path handling.
-        df = df.where(pd.notnull(df), None)
+        df = df.where(pd.notnull(df), None)  # type: ignore
         # Normalize non-null entries to strings for id/name columns.
         str_cols = [c for c in df.columns if c != "VALUE"]
         df[str_cols] = df[str_cols].astype(str).replace("nan", None).replace("None", None)
@@ -322,10 +328,11 @@ class TreemapTransformer:
 
             expense_id = row["id"]
             expense_value = row.get("value", 0.0)
-            classified_entry: dict[str, int | float | str] = {
+            classified_entry: dict[str, int | float | str | None] = {
                 "VALUE": expense_value,
                 "BUDGET_TYPE": "CLASSIFIED",
                 "ROOT": "Federal Budget",
+                "IS_MILITARY": None,
             }
             classified_entry["MINISTRY_DIM_ID"] = CLASSIFIED_PARENT_ID
             classified_entry["MINISTRY_ORIG_ID"] = "CLASSIFIED_PARENT"
@@ -481,6 +488,7 @@ class BarchartTransformer:
         ids = [budget["id"] for budget in budgets_corrected if budget["type"] != "TOTAL"]
 
         df = pd.DataFrame({"expenses": expenses, "dates": dates, "types": types, "budget_id": ids})
+        df["dates"] = pd.to_datetime(df["dates"], errors="coerce")
 
         # For every TOTAL budget, find the corresponding non-TOTAL budget and subtract its value
         for budget in [budget for budget in budgets_corrected if budget["type"] == "TOTAL"]:
@@ -510,7 +518,12 @@ class BarchartTransformer:
                     pd.DataFrame(
                         {
                             "expenses": [classified_expense],
-                            "dates": [budget["published_at"]],
+                            # Keep dates as datetime by converting appended values.
+                            "dates": [
+                                pd.to_datetime(
+                                    budget["published_at"], errors="coerce", format="%Y-%m-%d"
+                                )
+                            ],
                             "types": ["CLASSIFIED"],
                             "budget_id": [budget_id],
                         }

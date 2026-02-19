@@ -58,7 +58,7 @@ class MilitarySpending:
 
 
 PERIOD_OPTIONS: list[tuple[str, str]] = [
-    ("All", "ALL"),
+    ("All Periods", "ALL"),
     ("Q1", "Q1"),
     ("Q1-Q2", "Q2"),
     ("Q1-Q3", "Q3"),
@@ -66,7 +66,7 @@ PERIOD_OPTIONS: list[tuple[str, str]] = [
 ]
 
 period_map = {
-    "ALL": "All",
+    "ALL": "All Periods",
     "Q1": "Q1",
     "Q2": "Q1-Q2",
     "Q3": "Q1-Q3",

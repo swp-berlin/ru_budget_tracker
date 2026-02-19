@@ -106,8 +106,6 @@ def transform_treemap_data(
     # Calculate values based on unit, budget, and published_at
     calculator = Calculator(unit, budget_id, published_at, budget_type)
     df["VALUE"] = df["VALUE"].apply(calculator.calculate)
-    # Keep the base dataframe clean; percentages are computed from the treemap trace.
-
     return df
 
 
@@ -138,10 +136,6 @@ def generate_figure(
         margin=dict(t=15, l=10, r=10, b=10),
         font=dict(family="Source Sans 3"),
     )
-
-    # Apply colors to all nodes.
-    # colors = _build_treemap_colors(df, fig, spending_type, translated)
-    # fig.update_traces(marker_colors=colors)
 
     # Extract the necessary data from the treemap trace to compute percentages
     # and apply coloring rules.
@@ -182,6 +176,37 @@ def generate_figure(
     return fig
 
 
+def _build_treemap_node_map(df: pd.DataFrame, translated: bool) -> dict[str, dict[str, int | str]]:
+    """Build a node-id map (Plotly treemap ids) to dimension metadata."""
+    name_ending = "_NAME_TRANSLATED" if translated else "_NAME"
+    name_cols = ["ROOT"] + [col for col in df.columns if col.endswith(name_ending)]
+    node_map: dict[str, dict[str, int | str]] = {}
+
+    for _, row in df.iterrows():
+        labels: list[str] = []
+        for col in name_cols:
+            label = row.get(col)
+            if not label:
+                break
+            labels.append(str(label))
+            if col == "ROOT":
+                continue
+            base = col.replace(name_ending, "")
+            dim_id = row.get(f"{base}_DIM_ID")
+            dim_orig_id = row.get(f"{base}_ORIG_ID")
+            dim_type = "PROGRAM" if base.startswith("PROGRAM_") else base
+            path = "/".join(labels)
+            # Skip null/NaN ids that can appear for root/placeholder nodes.
+            if pd.notnull(dim_id) and pd.notnull(dim_orig_id):
+                node_map[path] = {
+                    "dimension_id": int(dim_id),
+                    "dimension_original_identifier": str(dim_orig_id),
+                    "dimension_type": str(dim_type),
+                }
+
+    return node_map
+
+
 def layout(**other_kwargs) -> html.Div:
     """
     Defines the static layout of the page. The graph is empty initially and
@@ -198,7 +223,8 @@ def layout(**other_kwargs) -> html.Div:
     return html.Div(
         # Graph to display the treemap
         [
-            dcc.Store(id="store-selected-id"),
+            # Hidden timeseries graph keeps cross-page callbacks satisfied.
+            dcc.Graph(id="timeseries-graph", style={"display": "none"}),
             dcc.Graph(
                 id="treemap-graph",
                 config=TREEMAP_CONFIG,
@@ -212,6 +238,8 @@ def layout(**other_kwargs) -> html.Div:
 @callback(
     Output("treemap-graph", "figure"),
     Output("treemap-graph", "style"),
+    Output("store-treemap-node-map", "data"),
+    Input("url", "pathname"),
     Input("store-budget-id", "data"),
     Input("store-viewby", "data"),
     Input("store-spending-type", "data"),
@@ -219,12 +247,16 @@ def layout(**other_kwargs) -> html.Div:
     Input("store-language", "data"),
 )
 def update_figure_from_filters(
+    pathname: str | None,
     budget_id: int,
     viewby: ViewByDimensionTypeLiteral = "MINISTRY",
     spending_type: SpendingTypeLiteral = "ALL",
     unit: UnitLiteral = "ABSOLUTE",
     language: str = "RU",
-) -> tuple[go.Figure, dict[str, str]]:
+) -> tuple[go.Figure, dict[str, str], dict[str, dict[str, int | str]]]:
+    # Guard: only run when the treemap page is active.
+    if pathname != "/":
+        raise PreventUpdate
     # Guard: wait until a budget is selected
     if budget_id is None:
         raise PreventUpdate
@@ -239,9 +271,13 @@ def update_figure_from_filters(
     )
     df_shaped = shape_for_spending_type(df, spending_type=spending_type)
     df_shaped = shape_for_viewby(df_shaped, viewby=viewby)
-    return generate_figure(
-        df_shaped, spending_type, unit=unit, translated=translated, viewby=viewby
-    ), {"visibility": "visible"}
+    # Build a lookup map for treemap node selection across pages.
+    node_map = _build_treemap_node_map(df_shaped, translated=translated)
+    return (
+        generate_figure(df_shaped, spending_type, unit=unit, translated=translated, viewby=viewby),
+        {"visibility": "visible"},
+        node_map,
+    )
 
 
 @callback(
