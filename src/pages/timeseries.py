@@ -145,6 +145,8 @@ def fetch_timeseries_data(
     if budget_type == "REPORT":
         df = _shape_for_period(df, period)
     df = _calculate_values(df, budget_id, unit, budget_type)
+    # Rename LAW and REPORT to OPEN for clearer legend labeling in the timeseries view.
+    df["types"] = df["types"].apply(lambda x: "OPEN" if x != "CLASSIFIED" else x)
     return df, type
 
 
@@ -165,8 +167,7 @@ def generate_figure(
         color="types",
         barmode="stack",
         color_discrete_map={
-            "REPORT": "#1f77b4",
-            "LAW": "#1f77b4",
+            "OPEN": "#1f77b4",
             "CLASSIFIED": "#cccccc",
         },
         template="none",
@@ -223,7 +224,6 @@ def generate_figure(
         ].hovertemplate = (
             "<b>%{x}</b><br>Value: %{y:,.1f} %{customdata[0]} (classified)<br><extra></extra>"
         )
-
     return fig
 
 
@@ -242,7 +242,7 @@ def _format_timeseries_title(
             node_label = node_label.replace("<br>", " ")
         title = f"Russian Budget: {node_label}"
     else:
-        title = "Russion Budget Spending"
+        title = "Russian Budget Spending"
 
     # Append a military suffix when that filter is active.
     if spending_type == "MILITARY":

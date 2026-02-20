@@ -123,7 +123,7 @@ class Calculator:
     ) -> Sequence[RowMapping]:
         """Fetch relevant total budgets for spending calculations."""
         select_stmt = (
-            select(Budget.id, Expense.value, Budget.published_at)
+            select(Budget.id, Expense.value, Budget.published_at, Budget.scope)
             .select_from(Budget)
             .join(Expense, Expense.budget_id == Budget.id, isouter=True)
             .join(Dimension, Expense.dimensions, isouter=True)
@@ -131,13 +131,8 @@ class Calculator:
                 Budget.type == "TOTAL",
                 Budget.original_identifier.like("%-EXPENSE-%"),
                 Dimension.type.is_(None),  # Exclude expenses with dimensions
-                Budget.scope == budget_scope,
             )
         )
-        if budget_scope == "MONTHLY":
-            select_stmt = select_stmt.where(
-                extract("month", Budget.published_at).in_(QUARTERLY_MONTHS)
-            )
         with get_sync_session() as session:
             budgets = session.execute(select_stmt).mappings().all()
         return budgets
@@ -156,8 +151,15 @@ class Calculator:
         scope: BudgetScopeLiteral = "YEARLY" if self.budget_type == "LAW" else "MONTHLY"
         total_budgets = self._fetch_spending_budgets(scope)
         relevant_total_budgets = [
-            b for b in total_budgets if b.published_at.year == period_start_date.year
+            b
+            for b in total_budgets
+            if b.published_at.year == period_start_date.year and b.scope == scope
         ]
+        # For monthly budgets, we need to consider the latest available month up to the period start date
+        if scope == "MONTHLY":
+            relevant_total_budgets = [
+                b for b in relevant_total_budgets if b.published_at.month in QUARTERLY_MONTHS
+            ]
         spending_cumulative = 0.0
         previous_spending_value = 0.0
         max_date = max([b.published_at for b in relevant_total_budgets], default=1)
