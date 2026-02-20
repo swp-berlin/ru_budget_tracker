@@ -119,7 +119,6 @@ class Calculator:
     @lru_cache(maxsize=10)
     def _fetch_spending_budgets(
         self,
-        year: int,
         budget_scope: BudgetScopeLiteral,
     ) -> Sequence[RowMapping]:
         """Fetch relevant total budgets for spending calculations."""
@@ -131,7 +130,6 @@ class Calculator:
             .where(
                 Budget.type == "TOTAL",
                 Budget.original_identifier.like("%-EXPENSE-%"),
-                extract("year", Budget.published_at) == year,
                 Dimension.type.is_(None),  # Exclude expenses with dimensions
                 Budget.scope == budget_scope,
             )
@@ -156,7 +154,10 @@ class Calculator:
 
         # Use single session for all queries
         scope: BudgetScopeLiteral = "YEARLY" if self.budget_type == "LAW" else "MONTHLY"
-        relevant_total_budgets = self._fetch_spending_budgets(period_start_date.year, scope)
+        total_budgets = self._fetch_spending_budgets(scope)
+        relevant_total_budgets = [
+            b for b in total_budgets if b.published_at.year == period_start_date.year
+        ]
         spending_cumulative = 0.0
         previous_spending_value = 0.0
         max_date = max([b.published_at for b in relevant_total_budgets], default=1)
@@ -199,7 +200,6 @@ class Calculator:
     @lru_cache(maxsize=10)
     def _fetch_revenue_budgets(
         self,
-        year: int,
     ) -> Sequence[RowMapping]:
         """Fetch relevant total budgets for spending calculations."""
         select_stmt = (
@@ -210,7 +210,6 @@ class Calculator:
             .where(
                 Budget.type == "TOTAL",
                 Budget.original_identifier.like("%-REVENUE-%"),
-                extract("year", Budget.published_at) == year,
                 Dimension.type.is_(None),  # Exclude expenses with dimensions
                 extract("month", Budget.published_at).in_(QUARTERLY_MONTHS),
             )
@@ -229,7 +228,10 @@ class Calculator:
         if cache_key in Calculator._revenue_cache:
             return Calculator._revenue_cache[cache_key]
 
-        relevant_total_budgets = self._fetch_revenue_budgets(period_start_date.year)
+        total_budgets = self._fetch_revenue_budgets()
+        relevant_total_budgets = [
+            b for b in total_budgets if b.published_at.year == period_start_date.year
+        ]
         if not relevant_total_budgets:
             return 0.0  # If no revenue budgets found, return 0 to avoid division errors later
         relevant_date = period_start_date

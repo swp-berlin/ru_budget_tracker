@@ -386,7 +386,7 @@ class BarChartDataFetcher:
             select(
                 Expense.id.label("expense_id"),
                 Expense.budget_id.label("budget_id"),
-                Expense.value.label("value"),
+                func.abs(Expense.value).label("value"),  # Ensure no negative values in sums.
             )
             .select_from(Expense)
             .join(assoc_table, Expense.id == assoc_table.c.expense_id)
@@ -427,7 +427,7 @@ class BarChartDataFetcher:
 
         # LAW budgets with MINISTRY dimensions
         law_ministry_stmt = (
-            select(*base_columns, func.sum(Expense.value).label("total_value"))
+            select(*base_columns, func.sum(func.abs(Expense.value)).label("total_value"))
             .select_from(Budget)
             .join(Expense, Budget.id == Expense.budget_id, isouter=True)
             .join(assoc_table, Expense.id == assoc_table.c.expense_id, isouter=True)
@@ -444,7 +444,7 @@ class BarChartDataFetcher:
         total_chapter_stmt = (
             select(
                 *base_columns,
-                (func.sum(Expense.value)).label("total_value"),
+                (func.sum(func.abs(Expense.value))).label("total_value"),
             )
             .select_from(Budget)
             .join(Expense, Budget.id == Expense.budget_id, isouter=True)
@@ -480,7 +480,7 @@ class BarChartDataFetcher:
         base_columns = self._get_budget_expense_columns()
 
         stmt = (
-            select(*base_columns, func.sum(Expense.value).label("total_value"))
+            select(*base_columns, func.sum(func.abs(Expense.value)).label("total_value"))
             .select_from(Budget)
             .join(Expense, Budget.id == Expense.budget_id, isouter=True)
             .join(Expense.dimensions, isouter=True)

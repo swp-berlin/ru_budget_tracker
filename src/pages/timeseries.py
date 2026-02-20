@@ -1,5 +1,6 @@
 import logging
 from typing import Any
+from datetime import date
 
 import dash_bootstrap_components as dbc
 import pandas as pd
@@ -62,10 +63,11 @@ def _calculate_values(
     df: pd.DataFrame, budget_id: int, unit: UnitLiteral, budget_type: BudgetTypeLiteral
 ) -> pd.DataFrame:
     for index, row in df.iterrows():
+        budget_date = date.fromisoformat(row["dates"].date().isoformat())
         calculator = Calculator(
             budget_id=budget_id,
             unit=unit,
-            date=row["dates"],
+            date=budget_date,
             budget_type=budget_type,
         )
         try:
@@ -152,6 +154,7 @@ def generate_figure(
     unit: UnitLiteral = "ABSOLUTE",
     spending_type: SpendingTypeLiteral = "ALL",
     language: LanguageTypeLiteral = "EN",
+    title: str | None = None,
 ) -> go.Figure:
     """Build a treemap with stable ids and clean hover info."""
     # Build figure
@@ -174,8 +177,9 @@ def generate_figure(
     # Layout adjustments
     # Change font to Source Sans 3 and make it wrapped
     fig.update_layout(
-        margin=dict(t=15, l=60, r=30, b=50),
+        margin=dict(t=25, l=60, r=30, b=50),
         font=dict(family="Source Sans 3"),
+        title=title,  # Ensure the title reflects treemap selections and filters.
         legend=dict(
             orientation="h",
             yanchor="bottom",
@@ -199,9 +203,7 @@ def generate_figure(
                 tickangle=-45,  # Angle text to prevent overlap
                 tickmode="array",
                 tickvals=tick_values,
-                tick0=df["dates"].min()
-                if not df.empty
-                else None,  # Anchor ticks to first data point
+                tick0=df["dates"].min() if not df.empty else None,
             ),  # Force a full redraw when unit changes so the chart reloads reliably
         )
 
@@ -223,6 +225,34 @@ def generate_figure(
         )
 
     return fig
+
+
+def _format_timeseries_title(
+    selected_node_id: str | None,
+    spending_type: SpendingTypeLiteral,
+) -> str:
+    max_length = 60
+    # Use the last path segment as the node label to keep titles readable.
+    if selected_node_id:
+        node_label = selected_node_id.split("/")[-1]
+        # Strip the leading original identifier prefix like "123 - " for cleaner titles.
+        if " - " in node_label:
+            node_label = node_label.split(" - ", 1)[1]
+        if "<br>" in node_label:
+            node_label = node_label.replace("<br>", " ")
+        title = f"Russian Budget: {node_label}"
+    else:
+        title = "Russion Budget Spending"
+
+    # Append a military suffix when that filter is active.
+    if spending_type == "MILITARY":
+        title = f"{title} (military)"
+
+    # Truncate long titles with an ellipsis suffix for visual consistency.
+    if len(title) > max_length:
+        title = f"{title[:max_length]}..."
+
+    return title
 
 
 def layout(**other_kwargs) -> html.Div:
@@ -312,7 +342,12 @@ def update_figure_from_filters(
         period=period,
         selected_dimension=selected_dimension,
     )
-    return generate_figure(df, [], unit, spending_type, language="EN"), {"visibility": "visible"}
+    # Build a title based on the treemap selection and spending-type filter.
+    title = _format_timeseries_title(selected_node_id, spending_type)
+    return (
+        generate_figure(df, [], unit, spending_type, language="EN", title=title),
+        {"visibility": "visible"},
+    )
 
 
 @callback(

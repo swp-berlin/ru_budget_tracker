@@ -223,7 +223,8 @@ class TreemapTransformer:
                 entry = hierarchy_dict.setdefault(
                     expense_id,
                     {
-                        "VALUE": row.get("value", 0.0),
+                        # take absolute value to avoid negative values in treemap
+                        "VALUE": abs(row.get("value", 0.0)),
                         "BUDGET_TYPE": relevant_dims[0].get("budget_type", ""),
                     },
                 )

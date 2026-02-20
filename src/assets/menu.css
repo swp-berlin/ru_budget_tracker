@@ -246,6 +246,8 @@
     flex-wrap: wrap;
     /* allow wrapping to next line */
     align-items: center;
+    justify-content: center;
+    /* center action buttons on narrow screens */
     gap: 6px;
     /* tight spacing for compactness */
     width: 100%;
@@ -257,6 +259,7 @@
   */
   #menu-budget,
   #menu-viewby,
+  #menu-period,
   #menu-spending-type,
   #menu-unit {
     display: block;
@@ -270,9 +273,12 @@
   /* Ensure dropdown triggers stretch to full width and ignore prior max-width */
   #menu-budget .dropdown-toggle,
   #menu-viewby .dropdown-toggle,
+  #menu-period .dropdown-toggle,
   #menu-spending-type .dropdown-toggle,
   #menu-unit .dropdown-toggle {
     width: 100%;
+    min-width: 100%;
+    /* keep all toggles full width in stacked layout */
     max-width: none;
     /* override earlier max-width constraints */
     justify-content: space-between;
@@ -282,6 +288,7 @@
   /* Match dropdown list width to its trigger for consistency on mobile */
   #menu-budget .dropdown-menu,
   #menu-viewby .dropdown-menu,
+  #menu-period .dropdown-menu,
   #menu-spending-type .dropdown-menu,
   #menu-unit .dropdown-menu {
     min-width: 100%;
