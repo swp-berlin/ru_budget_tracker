@@ -199,7 +199,7 @@ class TreemapDataFetcher:
                     ),
                     and_(
                         Budget.id == totals_budget.id,
-                        Dimension.type.in_("CHAPTER"),
+                        Dimension.type.in_(["CHAPTER"]),
                     ),
                 )
             )

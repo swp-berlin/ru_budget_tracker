@@ -14,6 +14,7 @@ from dash import (
     dcc,
     html,
     register_page,
+    get_relative_path,
 )
 from dash.exceptions import PreventUpdate
 from sqlalchemy import RowMapping
@@ -255,7 +256,7 @@ def update_figure_from_filters(
     language: str = "RU",
 ) -> tuple[go.Figure, dict[str, str], dict[str, dict[str, int | str]]]:
     # Guard: only run when the treemap page is active.
-    if pathname != "/":
+    if pathname != get_relative_path("/"):
         raise PreventUpdate
     # Guard: wait until a budget is selected
     if budget_id is None:

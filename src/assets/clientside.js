@@ -556,10 +556,10 @@ window.dash_clientside.clientside = {
 
       // Determine which graph to download based on pathname
       var graphId, filenamePrefix;
-      if (!pathname || pathname === '/') {
+      if (pathname.endsWith('/') && !pathname.endsWith('/timeseries')) {
         graphId = 'treemap-graph';
         filenamePrefix = 'treemap';
-      } else if (pathname === '/timeseries') {
+      } else if (pathname.endsWith('/timeseries')) {
         graphId = 'timeseries-graph';
         filenamePrefix = 'timeseries';
       } else {

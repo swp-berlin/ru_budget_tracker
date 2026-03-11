@@ -1,6 +1,6 @@
 """About page for the Russian budget tracker."""
 
-from dash import html, register_page
+from dash import html, register_page, get_asset_url, get_relative_path
 
 # Register this page with Dash
 register_page(__name__, path="/about")
@@ -15,13 +15,13 @@ layout = html.Div(
                 html.A(
                     [
                         html.Img(
-                            src="/assets/logo/logo.svg",
+                            src=get_asset_url("logo/logo.svg"),
                             style={"height": "2em"},
                             alt="Logo of Stiftung Wissenschaft und Politik",
                         ),
                     ],
                     style={"margin-right": "20px", "align-self": "center"},
-                    href="/",
+                    href=get_relative_path("/"),
                     title="Go to Home Page",
                 ),
                 html.Div(className="spacer"),

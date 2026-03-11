@@ -16,6 +16,8 @@ from dash import (
     html,
     no_update,
     page_container,
+    get_asset_url,
+    get_relative_path
 )
 from dash.exceptions import PreventUpdate
 
@@ -38,6 +40,7 @@ app = Dash(
     use_pages=True,
     external_stylesheets=external_stylesheets,
     suppress_callback_exceptions=True,  # Required for pages with callbacks referencing shared stores
+    #url_base_pathname="/proxy-test/"
 )
 
 
@@ -120,13 +123,13 @@ layout = html.Div(
                 html.A(
                     [
                         html.Img(
-                            src="/assets/logo/logo.svg",
+                            src=get_asset_url("logo/logo.svg"),
                             style={"height": "2em"},
                             alt="Logo of Stiftung Wissenschaft und Politik",
                         ),
                     ],
                     style={"margin-right": "20px", "align-self": "center"},
-                    href="/",
+                    href=get_relative_path("/"),
                     title="Go to Home Page",
                 ),
                 dbc.Stack(
@@ -186,19 +189,19 @@ layout = html.Div(
                             [
                                 # Icon for the button
                                 html.Img(
-                                    src="/assets/icons/stacked_bar_chart.svg",
+                                    src=get_asset_url("icons/stacked_bar_chart.svg"),
                                 ),
                                 # Text for the button
                                 html.Span("Timeseries", className="btn-label"),
                             ],
                             id="btn-switch-graphs",
                             title="Switch to Time Series View",
-                            href="/timeseries",
+                            href=get_relative_path("/timeseries"),
                         ),
                         # Share button
                         dbc.Button(
                             html.Img(
-                                src="/assets/icons/share.svg",
+                                src=get_asset_url("icons/share.svg"),
                             ),
                             id="btn-share-link",
                             title="Copy shareable link to clipboard",
@@ -222,7 +225,7 @@ layout = html.Div(
                         # Download image button
                         dbc.Button(
                             html.Img(
-                                src="/assets/icons/photo_camera.svg",
+                                src=get_asset_url("icons/photo_camera.svg"),
                             ),
                             id="btn-download-image",
                             title="Download Plot as PNG",
@@ -232,7 +235,7 @@ layout = html.Div(
                         # Download data button
                         dbc.Button(
                             html.Img(
-                                src="/assets/icons/download.svg",
+                                src=get_asset_url("icons/download.svg"),
                             ),
                             id="btn-download-csv",
                             title="Download Data as CSV",
@@ -251,11 +254,11 @@ layout = html.Div(
                         # Info/About button
                         dbc.Button(
                             html.Img(
-                                src="/assets/icons/info.svg",
+                                src=get_asset_url("icons/info.svg"),
                             ),
                             id="btn-about",
                             title="About This Project",
-                            href="/about",
+                            href=get_relative_path("/about"),
                         ),
                     ],
                     direction="horizontal",
@@ -325,20 +328,20 @@ def switch_graphs(pathname: str | None, budget_id: int | None):
     # Build query string with budget_id if available
     query_string = f"?budget_id={budget_id}" if budget_id is not None else ""
 
-    if pathname == "/timeseries":
+    if pathname == get_relative_path("/timeseries"):
         return (
-            f"/{query_string}",
+            f"{get_relative_path('/')}{query_string}",
             [
-                html.Img(src="/assets/icons/dashboard.svg", alt="Treemap icon"),
+                html.Img(src=get_asset_url("icons/dashboard.svg"), alt="Treemap icon"),
                 html.Span("Treemap", className="btn-label"),
             ],
             "Switch to Treemap View",
         )
     # Default: treat anything else as root
     return (
-        f"/timeseries{query_string}",
+        f"{get_relative_path('/timeseries')}{query_string}",
         [
-            html.Img(src="/assets/icons/stacked_bar_chart.svg", alt="Timeseries icon"),
+            html.Img(src=get_asset_url("icons/stacked_bar_chart.svg"), alt="Timeseries icon"),
             html.Span("Timeseries", className="btn-label"),
         ],
         "Switch to Time Series View",
@@ -360,7 +363,7 @@ def toggle_viewby_period_menu(
     - On /timeseries: hide viewby, show period
     - On other pages: show viewby, hide period
     """
-    if pathname == "/timeseries":
+    if pathname == get_relative_path("/timeseries"):
         period_style: dict[str, Any] = {}
         if budget_id and options:
             budget_type = next(
