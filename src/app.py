@@ -23,6 +23,8 @@ from utils.fetch import fetch_budgets_for_dropdown
 from utils.definitions import (
     UNIT_OPTIONS,
     PERIOD_OPTIONS,
+    SPENDING_TYPE_OPTIONS,
+    VIEWBY_OPTIONS,
     unit_map,
     spending_type_map,
     viewby_map,
@@ -48,18 +50,6 @@ server = app.server
 def healthz():
     return {"status": "ok"}
 
-
-# Menu option definitions to avoid duplication and keep layout concise
-VIEWBY_OPTIONS: list[tuple[str, str]] = [
-    ("Ministry", "MINISTRY"),
-    ("Chapter", "CHAPTER"),
-    ("Program", "PROGRAM"),
-]
-
-SPENDING_TYPE_OPTIONS: list[tuple[str, str]] = [
-    ("All", "ALL"),
-    ("Military Only", "MILITARY"),
-]
 
 viewby_items = [
     dbc.DropdownMenuItem(

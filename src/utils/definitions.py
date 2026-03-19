@@ -10,9 +10,20 @@ BudgetTypeLiteral = Literal["DRAFT", "LAW", "REPORT", "TOTAL"]
 BudgetScopeLiteral = Literal["YEARLY", "QUARTERLY", "MONTHLY"]
 DimensionTypeLiteral = Literal["MINISTRY", "CHAPTER", "SUBCHAPTER", "PROGRAMM", "EXPENSE_TYPE"]
 ViewByDimensionTypeLiteral = Literal["MINISTRY", "CHAPTER", "PROGRAMM"]
+# Menu option definitions to avoid duplication and keep layout concise
+VIEWBY_OPTIONS: list[tuple[str, str]] = [
+    ("Ministry", "MINISTRY"),
+    ("Chapter", "CHAPTER"),
+    ("Program", "PROGRAM"),
+]
 
 LanguageTypeLiteral = Literal["EN", "ORIGINAL"]
 SpendingTypeLiteral = Literal["ALL", "MILITARY"]
+# Menu option definitions to avoid duplication and keep layout concise
+SPENDING_TYPE_OPTIONS: list[tuple[str, str]] = [
+    ("All", "ALL"),
+    ("Military Only", "MILITARY"),
+]
 PeriodLiteral = Literal["ALL", "Q1", "Q2", "Q3", "Q4"]
 UnitLiteral = Literal[
     "ABSOLUTE",
@@ -45,10 +56,22 @@ class MilitarySpending:
         "PROGRAM_4": compile(r"^31.*"),
         "MINISTRY": compile(r"^187$"),
     }
+
+    simple_patterns_sql: dict[str, str] = {
+        "CHAPTER": "^02$",
+        "PROGRAM": "^31.*",
+        "MINISTRY": "^187$",
+    }
     combination_patterns: list[dict[str, Pattern]] = [
         {
             "MINISTRY": compile(r"^180$"),
             "CHAPTER": compile(r"^03$"),
+        }
+    ]
+    combination_patterns_sql: list[dict[str, str]] = [
+        {
+            "MINISTRY": "^180$",
+            "CHAPTER": "^03$",
         }
     ]
 

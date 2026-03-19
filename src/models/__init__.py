@@ -2,7 +2,7 @@ from models.budget import (
     Budget,
     Expense,
     Dimension,
-    expense_dimension_association_table,
+    expense_dimension_association_table as assoc_table,
 )
 from models.conversion_rate import ConversionRate
 from models.base import Base
@@ -13,5 +13,5 @@ __all__ = [
     "Expense",
     "Dimension",
     "ConversionRate",
-    "expense_dimension_association_table",
+    "assoc_table",
 ]

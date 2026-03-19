@@ -1,8 +1,7 @@
 from datetime import date
 from functools import lru_cache
 import logging
-from typing import Any, Optional, Sequence  # Use typing.Sequence for type annotations
-
+from typing import Any, Optional, Sequence
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
