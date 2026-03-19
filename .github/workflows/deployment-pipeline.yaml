@@ -46,55 +46,55 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-  deploy:
-    runs-on: ubuntu-latest
+  # deploy:
+  #   runs-on: ubuntu-latest
 
-    environment: staging
+  #   environment: staging
 
-    needs: build-and-push-image
+  #   needs: build-and-push-image
 
-    permissions:
-      contents: read
-      packages: read
+  #   permissions:
+  #     contents: read
+  #     packages: read
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3
 
-      - name: Extract short SHA
-        id: sha_short
-        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+  #     - name: Extract short SHA
+  #       id: sha_short
+  #       run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
-      - name: Create Docker compose for staging
-        uses: cuchi/jinja2-action@8bd801365a8d36a0b20f45ee969161685de7785a
-        with:
-          template: docker-compose.yaml.j2
-          output_file: docker-compose.staging.yml
-          strict: true
-          variables: |
-            image_tag=${{ steps.sha_short.outputs.sha_short }}
+  #     - name: Create Docker compose for staging
+  #       uses: cuchi/jinja2-action@8bd801365a8d36a0b20f45ee969161685de7785a
+  #       with:
+  #         template: docker-compose.yaml.j2
+  #         output_file: docker-compose.staging.yml
+  #         strict: true
+  #         variables: |
+  #           image_tag=${{ steps.sha_short.outputs.sha_short }}
 
-      - name: Configure SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          cat >>~/.ssh/config <<END
-          Host staging
-            HostName ${{ vars.SSH_HOST }}
-            Port ${{ vars.SSH_PORT }}
-            User ${{ vars.SSH_USER }}
-            IdentityFile ~/.ssh/id_rsa
-            StrictHostKeyChecking no
-          END
+  #     - name: Configure SSH
+  #       run: |
+  #         mkdir -p ~/.ssh
+  #         echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+  #         chmod 600 ~/.ssh/id_rsa
+  #         cat >>~/.ssh/config <<END
+  #         Host staging
+  #           HostName ${{ vars.SSH_HOST }}
+  #           Port ${{ vars.SSH_PORT }}
+  #           User ${{ vars.SSH_USER }}
+  #           IdentityFile ~/.ssh/id_rsa
+  #           StrictHostKeyChecking no
+  #         END
 
-      - name: Copy Docker compose
-        run: |
-          ssh staging 'mkdir -p /home/jan/ru_budget_tracker'
-          scp -o StrictHostKeyChecking=no docker-compose.staging.yml staging:/home/jan/ru_budget_tracker/docker-compose.yml
+  #     - name: Copy Docker compose
+  #       run: |
+  #         ssh staging 'mkdir -p /home/jan/ru_budget_tracker'
+  #         scp -o StrictHostKeyChecking=no docker-compose.staging.yml staging:/home/jan/ru_budget_tracker/docker-compose.yml
 
-      - name: Start services
-        run: |
-          ssh staging 'echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin'
-          ssh staging "docker compose -f /home/jan/ru_budget_tracker/docker-compose.yml pull"
-          ssh staging "docker compose -f /home/jan/ru_budget_tracker/docker-compose.yml up -d"
+  #     - name: Start services
+  #       run: |
+  #         ssh staging 'echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin'
+  #         ssh staging "docker compose -f /home/jan/ru_budget_tracker/docker-compose.yml pull"
+  #         ssh staging "docker compose -f /home/jan/ru_budget_tracker/docker-compose.yml up -d"
