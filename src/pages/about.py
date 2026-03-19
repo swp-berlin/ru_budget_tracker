@@ -20,7 +20,7 @@ layout = html.Div(
                             alt="Logo of Stiftung Wissenschaft und Politik",
                         ),
                     ],
-                    style={"margin-right": "20px", "align-self": "center"},
+                    style={"marginRight": "20px", "alignSelf": "center"},
                     href=get_relative_path("/"),
                     title="Go to Home Page",
                 ),

@@ -25,6 +25,8 @@ from utils.fetch import fetch_budgets_for_dropdown
 from utils.definitions import (
     UNIT_OPTIONS,
     PERIOD_OPTIONS,
+    SPENDING_TYPE_OPTIONS,
+    VIEWBY_OPTIONS,
     unit_map,
     spending_type_map,
     viewby_map,
@@ -53,18 +55,6 @@ server = app.server
 def healthz():
     return {"status": "ok"}
 
-
-# Menu option definitions to avoid duplication and keep layout concise
-VIEWBY_OPTIONS: list[tuple[str, str]] = [
-    ("Ministry", "MINISTRY"),
-    ("Chapter", "CHAPTER"),
-    ("Program", "PROGRAM"),
-]
-
-SPENDING_TYPE_OPTIONS: list[tuple[str, str]] = [
-    ("All", "ALL"),
-    ("Military Only", "MILITARY"),
-]
 
 viewby_items = [
     dbc.DropdownMenuItem(
@@ -130,7 +120,7 @@ layout = html.Div(
                             alt="Logo of Stiftung Wissenschaft und Politik",
                         ),
                     ],
-                    style={"margin-right": "20px", "align-self": "center"},
+                    style={"marginRight": "20px", "alignSelf": "center"},
                     href=get_relative_path("/"),
                     title="Go to Home Page",
                 ),
@@ -270,10 +260,10 @@ layout = html.Div(
             ],
             direction="horizontal",
             style={
-                "margin-bottom": "10px",
-                "margin-top": "10px",
-                "margin-left": "15px",
-                "margin-right": "15px",
+                "marginBottom": "10px",
+                "marginTop": "10px",
+                "marginLeft": "15px",
+                "marginRight": "15px",
             },
             class_name="toolbar",
         ),

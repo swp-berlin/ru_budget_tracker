@@ -17,15 +17,11 @@ from utils.definitions import (
 from plotly import graph_objects as go
 
 
-def add_breaks(string: str, interval: int = 30, tolerance: int = 5) -> str:
+def add_breaks(string: str, interval: int = 25) -> str:
     """
-    Insert <br> into a string at specified intervals, for better readability.
-    Breaks are added at the next after the end of the interval.
-    Args:
-        string (str): The input string to modify.
-        interval (int): The interval at which to insert line breaks.
-    Returns:
-        str: The modified string with <br> inserted.
+    Insert <br> into a string so every part is at most `interval` characters.
+    Splits at the whitespace closest to (and at or before) the interval boundary.
+    Falls back to a hard break at the boundary if no whitespace is found.
     """
     if len(string) <= interval:
         return string
@@ -37,17 +33,16 @@ def add_breaks(string: str, interval: int = 30, tolerance: int = 5) -> str:
         if end >= len(string):
             parts.append(string[start:])
             break
-        # Find the next best space to break
-        # If there is a space in a 10 character window centered at end, break there
-        # otherwise break at next space after end
-        space_index = string.rfind(" ", end - tolerance, end + tolerance)
-        if space_index == -1 or space_index <= start:
-            space_index = string.find(" ", end)
-            if space_index == -1:
-                parts.append(string[start:])
-                break
-        parts.append(string[start:space_index])
-        start = space_index + 1
+        # Last whitespace at or before the interval boundary
+        matches = list(re.compile(r"\s").finditer(string, start, end + 1))
+        space_index = matches[-1].start() if matches else -1
+        if space_index > start:
+            parts.append(string[start:space_index])
+            start = space_index + 1
+        else:
+            # No whitespace in range — hard break at the boundary
+            parts.append(string[start:end])
+            start = end
     return "<br>".join(parts)
 
 

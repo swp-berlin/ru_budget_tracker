@@ -9,12 +9,28 @@ from typing import Any, Sequence
 from datetime import date
 from functools import lru_cache
 
-from sqlalchemy import RowMapping, Select, and_, extract, func, or_, select
+from sqlalchemy import (
+    ColumnElement,
+    RowMapping,
+    Select,
+    Subquery,
+    and_,
+    extract,
+    func,
+    or_,
+    select,
+    case,
+)
 from sqlalchemy.orm import aliased
 
 from database import get_sync_session
-from models import Budget, Dimension, Expense
-from utils.definitions import SpendingTypeLiteral, QUARTERLY_MONTHS
+from models import Budget, Dimension, Expense, assoc_table
+from utils.definitions import (
+    SpendingTypeLiteral,
+    QUARTERLY_MONTHS,
+    BudgetTypeLiteral,
+    MilitarySpending,
+)
 
 # =============================================================================
 # Constants
@@ -199,7 +215,7 @@ class TreemapDataFetcher:
                     ),
                     and_(
                         Budget.id == totals_budget.id,
-                        Dimension.type.in_(["CHAPTER"]),
+                        Dimension.type == "CHAPTER",
                     ),
                 )
             )
@@ -370,6 +386,81 @@ class BarChartDataFetcher:
         rows = _execute_query(stmt, unique=False)
         return [row["dimension_id"] for row in rows]
 
+    def _build_military_spending_condition(self) -> list[ColumnElement[bool]]:
+        """
+        Build the SQLAlchemy condition for filtering military spending based on the defined patterns.
+        """
+        military_conditions: list[ColumnElement[bool]] = []
+        for dim, pattern in MilitarySpending.simple_patterns_sql.items():
+            military_conditions.append(
+                and_(
+                    Dimension.type == dim,
+                    Dimension.original_identifier.op("REGEXP")(pattern),
+                )
+            )
+        for combination in MilitarySpending.combination_patterns_sql:
+            combination_conditions = []
+            for dim, pattern in combination.items():
+                combination_conditions.append(
+                    and_(
+                        Dimension.type == dim,
+                        Dimension.original_identifier.op("REGEXP")(pattern),
+                    )
+                )
+            military_conditions.append(and_(*combination_conditions))
+
+        return military_conditions
+
+    def _build_expense_subquery(
+        self,
+        military_conditions: list[ColumnElement[bool]],
+        budget_type: BudgetTypeLiteral | None = None,
+        dimension_ids: list[int] | None = None,
+    ) -> Subquery:
+        """
+        Build the subquery for expenses with military spending classification.
+
+        This subquery selects distinct expenses associated with the given dimension IDs,
+        calculates the absolute value of the expense, and classifies it as military
+        based on the defined patterns.
+        """
+        # Select distinct expenses to avoid double counting across multiple dimensions.
+        expenses_subquery = (
+            select(
+                Expense.id.label("expense_id"),
+                Expense.budget_id.label("budget_id"),
+                func.abs(Expense.value).label("value"),  # Ensure no negative values in sums.
+                # Include case when statment to categorize expense as military or non-military based on dimension patterns.
+                case(
+                    (
+                        or_(
+                            *military_conditions,
+                        ),
+                        func.abs(Expense.value).label("value"),
+                    ),
+                    else_=0,
+                ).label("military_value"),
+            )
+            .select_from(Expense)
+            .join(assoc_table, Expense.id == assoc_table.c.expense_id)
+            .join(Dimension, assoc_table.c.dimension_id == Dimension.id)
+        )
+        if dimension_ids:
+            expenses_subquery = expenses_subquery.where(Dimension.id.in_(dimension_ids))
+
+        if budget_type == "REPORT":
+            expenses_subquery = expenses_subquery.join(
+                Budget, and_(Expense.budget_id == Budget.id, Budget.type == "REPORT")
+            )
+        if budget_type == "LAW":
+            expenses_subquery = expenses_subquery.join(
+                Budget, and_(Expense.budget_id == Budget.id, Budget.type == "LAW")
+            )
+
+        expenses_subquery = expenses_subquery.group_by(Expense.id).subquery()
+
+        return expenses_subquery
+
     def _fetch_budget_expenses_for_dimensions(
         self,
         budget_types: list[str],
@@ -381,23 +472,18 @@ class BarChartDataFetcher:
 
         base_columns = self._get_budget_expense_columns()
 
-        # Select distinct expenses to avoid double counting across multiple dimensions.
-        expenses_subquery = (
-            select(
-                Expense.id.label("expense_id"),
-                Expense.budget_id.label("budget_id"),
-                func.abs(Expense.value).label("value"),  # Ensure no negative values in sums.
-            )
-            .select_from(Expense)
-            .join(assoc_table, Expense.id == assoc_table.c.expense_id)
-            .join(Dimension, assoc_table.c.dimension_id == Dimension.id)
-            .where(Dimension.id.in_(dimension_ids))
-            .distinct(Expense.id)
-            .subquery()
+        military_conditions = self._build_military_spending_condition()
+
+        expenses_subquery = self._build_expense_subquery(
+            military_conditions, dimension_ids=dimension_ids
         )
 
         stmt = (
-            select(*base_columns, func.sum(expenses_subquery.c.value).label("total_value"))
+            select(
+                *base_columns,
+                func.sum(expenses_subquery.c.value).label("total_value"),
+                func.sum(expenses_subquery.c.military_value).label("military_value"),
+            )
             .select_from(Budget)
             .join(expenses_subquery, Budget.id == expenses_subquery.c.budget_id)
             .where(Budget.type.in_(budget_types))
@@ -421,30 +507,53 @@ class BarChartDataFetcher:
         Returns:
             Sequence of budget expense row mappings.
         """
-        from models.budget import expense_dimension_association_table as assoc_table
 
         base_columns = self._get_budget_expense_columns()
 
+        military_conditions = self._build_military_spending_condition()
+
+        expenses_subquery = self._build_expense_subquery(military_conditions, budget_type="LAW")
+
         # LAW budgets with MINISTRY dimensions
         law_ministry_stmt = (
-            select(*base_columns, func.sum(func.abs(Expense.value)).label("total_value"))
+            select(
+                *base_columns,
+                func.sum(func.abs(expenses_subquery.c.value)).label("total_value"),
+                func.sum(func.abs(expenses_subquery.c.military_value)).label("military_value"),
+            )
             .select_from(Budget)
-            .join(Expense, Budget.id == Expense.budget_id, isouter=True)
-            .join(assoc_table, Expense.id == assoc_table.c.expense_id, isouter=True)
+            .join(expenses_subquery, Budget.id == expenses_subquery.c.budget_id)
+            .join(
+                assoc_table,
+                expenses_subquery.c.expense_id == assoc_table.c.expense_id,
+                isouter=True,
+            )
             .join(Dimension, assoc_table.c.dimension_id == Dimension.id, isouter=True)
             .where(Budget.type == "LAW")
             .where(Dimension.type == "MINISTRY")
             .group_by(Budget.id, Budget.original_identifier, Budget.type)
         )
 
-        if self.spending_type == "MILITARY":
-            law_ministry_stmt = law_ministry_stmt.where(Dimension.original_identifier.like("187%"))
-
         # TOTAL budgets with CHAPTER dimensions (values stored in thousands)
         total_chapter_stmt = (
             select(
                 *base_columns,
                 (func.sum(func.abs(Expense.value))).label("total_value"),
+                (
+                    func.sum(
+                        func.abs(
+                            case(
+                                (
+                                    or_(
+                                        *military_conditions,
+                                    ),
+                                    Expense.value,
+                                ),
+                                else_=0,
+                            )
+                        )
+                    )
+                ).label("military_value"),
             )
             .select_from(Budget)
             .join(Expense, Budget.id == Expense.budget_id, isouter=True)
@@ -479,6 +588,10 @@ class BarChartDataFetcher:
         """
         base_columns = self._get_budget_expense_columns()
 
+        military_conditions = self._build_military_spending_condition()
+
+        expenses_subquery = self._build_expense_subquery(military_conditions)
+
         stmt = (
             select(*base_columns, func.sum(func.abs(Expense.value)).label("total_value"))
             .select_from(Budget)
@@ -506,7 +619,7 @@ class BarChartDataFetcher:
 
         return results
 
-    def fetch_budgets(self, budget_id: int) -> tuple[Sequence[RowMapping], str]:
+    def fetch_budgets(self, budget_id: int) -> tuple[Sequence[RowMapping], BudgetTypeLiteral]:
         """
         Fetch budget expenses based on the budget type.
 
@@ -520,17 +633,23 @@ class BarChartDataFetcher:
             ValueError: If the budget type is not supported.
         """
         initial_budget = self._fetch_budget(budget_id)
+        budget_type: BudgetTypeLiteral = initial_budget.type
 
-        if initial_budget.type == "REPORT":
-            return self._fetch_execution_budget_expenses(), "EXECUTION"
-        elif initial_budget.type == "LAW":
-            return self._fetch_law_budget_expenses(), "LAW"
-        else:
-            raise ValueError(f"Unsupported budget type: {initial_budget.type} for ID {budget_id}")
+        result: Sequence[RowMapping] = []
+        if budget_type == "REPORT":
+            result = self._fetch_execution_budget_expenses()
+        elif budget_type == "LAW":
+            result = self._fetch_law_budget_expenses()
+
+        if not result:
+            raise ValueError(
+                f"No expenses found for budget ID {budget_id} with type {budget_type}."
+            )
+        return result, budget_type
 
     def fetch_budgets_filtered(
         self, budget_id: int, dimension_id: int
-    ) -> tuple[Sequence[RowMapping], str]:
+    ) -> tuple[Sequence[RowMapping], BudgetTypeLiteral]:
         """Fetch budget expenses filtered by a selected dimension and its descendants."""
         initial_budget = self._fetch_budget(budget_id)
         dimension_ids = self._fetch_descendant_dimension_ids(dimension_id)
@@ -542,7 +661,7 @@ class BarChartDataFetcher:
                     dimension_ids,
                     quarterly_only=True,
                 ),
-                "EXECUTION",
+                "REPORT",
             )
         elif initial_budget.type == "LAW":
             return (
@@ -560,7 +679,7 @@ class BarChartDataFetcher:
         self,
         budget_id: int | None = None,
         dimension_id: int | None = None,
-    ) -> tuple[Sequence[RowMapping], str]:
+    ) -> tuple[Sequence[RowMapping], BudgetTypeLiteral]:
         """
         Fetch budget and expense data for bar chart visualization.
 
@@ -578,6 +697,8 @@ class BarChartDataFetcher:
             raise ValueError("budget_id must be provided to fetch data.")
         # Filter to the selected dimension when provided.
         if dimension_id is not None:
-            return self.fetch_budgets_filtered(budget_id=budget_id, dimension_id=dimension_id)
+            result = self.fetch_budgets_filtered(budget_id=budget_id, dimension_id=dimension_id)
+        else:
+            result = self.fetch_budgets(budget_id=budget_id)
 
-        return self.fetch_budgets(budget_id=budget_id)
+        return result
