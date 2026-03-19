@@ -17,7 +17,7 @@ from dash import (
     no_update,
     page_container,
     get_asset_url,
-    get_relative_path
+    get_relative_path,
 )
 from dash.exceptions import PreventUpdate
 
@@ -31,6 +31,8 @@ from utils.definitions import (
     period_map,
 )
 
+from settings import settings
+
 external_stylesheets = [
     dbc.themes.BOOTSTRAP,
 ]
@@ -40,7 +42,7 @@ app = Dash(
     use_pages=True,
     external_stylesheets=external_stylesheets,
     suppress_callback_exceptions=True,  # Required for pages with callbacks referencing shared stores
-    #url_base_pathname="/proxy-test/"
+    url_base_pathname=settings.app.url_base_pathname,  # Set base pathname from settings
 )
 
 

@@ -36,7 +36,24 @@ class Database(BaseModel):
         return f"sqlite+aiosqlite:///{str(self._file_path)}"
 
 
+class AppSettings(BaseModel):
+    """Application settings."""
+
+    url_base_pathname: str = "/ru-budget-tracker"
+
+
 class Settings(BaseSettings):
+    """
+    Settings for the application, including database and app settings.
+    Reads from environment variables and .env file, with support for nested settings
+    using double underscores as delimiters.
+
+    Example environment variable for nested settings:
+    DATABASE__DIRECTORY=/path/to/database
+    DATABASE__FILE_NAME=budget.db
+    APP__URL_BASE_PATHNAME=/ru-budget-tracker
+    """
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -45,6 +62,7 @@ class Settings(BaseSettings):
     # OpenAI API key for translation scripts (optional)
     openai_api_key: str | None = None
     database: Database = Field(default_factory=lambda: Database())
+    app: AppSettings = Field(default_factory=lambda: AppSettings())
 
 
 settings = Settings()
