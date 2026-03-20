@@ -35,6 +35,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from models import Budget, Dimension, Expense, ConversionRate
+from sqlalchemy.orm import noload
 from database.sessions import get_sync_session
 from parsers import (
     parse_law_file,
@@ -91,6 +92,7 @@ def upsert_dimension(
     # First: check for exact match (same parent_id) → skip
     exact_match = (
         session.query(Dimension)
+        .options(noload(Dimension.expenses))
         .filter_by(
             original_identifier=original_identifier,
             type=dim_type,
@@ -108,6 +110,7 @@ def upsert_dimension(
     if parent_db_id is not None:
         null_parent = (
             session.query(Dimension)
+            .options(noload(Dimension.expenses))
             .filter_by(
                 original_identifier=original_identifier,
                 type=dim_type,
@@ -257,6 +260,7 @@ def get_chapter_dimensions(session: Session, chapter_codes: List[str]) -> List[D
     """
     all_chapters = (
         session.query(Dimension)
+        .options(noload(Dimension.expenses))
         .filter(
             Dimension.type == "CHAPTER",
             Dimension.original_identifier.in_(chapter_codes),
