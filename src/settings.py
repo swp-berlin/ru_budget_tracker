@@ -39,7 +39,7 @@ class Database(BaseModel):
 class AppSettings(BaseModel):
     """Application settings."""
 
-    url_base_pathname: str = "/ru-budget-tracker"
+    url_base_pathname: str = "/ru-budget-tracker/"
 
 
 class Settings(BaseSettings):
