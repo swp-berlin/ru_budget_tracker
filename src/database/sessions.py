@@ -2,7 +2,7 @@
 
 from contextlib import contextmanager
 from typing import Iterator
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.exc import SQLAlchemyError
 from settings import settings
@@ -19,6 +19,19 @@ engine = create_engine(
     pool_recycle=1_800,
     connect_args={"timeout": 60},
 )
+
+
+# SQLite performance pragmas: WAL mode for concurrent reads, larger cache.
+@event.listens_for(engine, "connect")
+def _set_sqlite_pragma(dbapi_connection, connection_record):
+    """Configure SQLite pragmas for better performance."""
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA synchronous=NORMAL")
+    cursor.execute("PRAGMA cache_size=-64000")  # 64MB cache
+    cursor.execute("PRAGMA temp_store=MEMORY")
+    cursor.close()
+
 
 LocalSyncSession = sessionmaker(
     bind=engine,

@@ -1,8 +1,8 @@
-from typing import Literal
 from models.base import Base
 
 from sqlalchemy import (
     Column,
+    Index,
     Integer,
     String,
     Table,
@@ -14,15 +14,13 @@ from sqlalchemy import (
     func,
     UniqueConstraint,
 )
+
+from utils.definitions import BudgetTypeLiteral, DimensionTypeLiteral
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import date, datetime
 
-BudgetTypeLiteral = Literal["DRAFT", "LAW", "REPORT", "TOTAL"]
-BudgetScopeLiteral = Literal["YEARLY", "QUARTERLY", "MONTHLY"]
-DimensionTypeLiteral = Literal["MINISTRY", "CHAPTER", "PROGRAMM", "EXPENSE_TYPE"]
 
-
-class Budget(Base):
+class Budget(Base):  # type: ignore[misc]
     """
     Represents a budget entry in the budget system.
     """
@@ -39,11 +37,11 @@ class Budget(Base):
     # Translated to english
     description_translated: Mapped[str] = mapped_column(Text, nullable=True)
     # Type of the budget entry (e.g., DRAFT, LAW, REPORT, TOTAL)
-    type: Mapped[BudgetTypeLiteral] = mapped_column(String, nullable=False)
+    type: Mapped[BudgetTypeLiteral] = mapped_column(String, nullable=False, index=True)
     # Time period scope of the budget (e.g., YEARLY, QUARTERLY, MONTHLY)
     scope: Mapped[BudgetTypeLiteral] = mapped_column(String, nullable=True)
     # First date of the relevant period the budget relates to
-    published_at: Mapped[date] = mapped_column(Date, nullable=False)
+    published_at: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     # First date of the relevant period the budget was planned in
     planned_at: Mapped[date | None] = mapped_column(Date, nullable=True)
     # Audit fields
@@ -57,20 +55,20 @@ class Budget(Base):
         nullable=True,
     )
     # Relationship to expenses
-    expenses: Mapped[list["Expense"]] = relationship(
-        "Expense", back_populates="budget", lazy="noload"
-    )
+    expenses: Mapped[list["Expense"]] = relationship("Expense", lazy="noload")
 
 
 expense_dimension_association_table = Table(
     "association_table",
     Base.metadata,
-    Column("expense_id", ForeignKey("expenses.id")),
-    Column("dimension_id", ForeignKey("dimensions.id")),
+    Column("expense_id", ForeignKey("expenses.id"), index=True),
+    Column("dimension_id", ForeignKey("dimensions.id"), index=True),
+    # Composite index for efficient joins on both columns.
+    Index("ix_assoc_expense_dimension", "expense_id", "dimension_id"),
 )
 
 
-class Expense(Base):
+class Expense(Base):  # type: ignore[misc]
     """
     Represents an expense entry in the budget system. Expenses will be in russion rubles.
     """
@@ -83,6 +81,7 @@ class Expense(Base):
         Integer,
         ForeignKey("budgets.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
     )
     # Float value of the expense
     value: Mapped[float] = mapped_column(Float, nullable=False)
@@ -100,13 +99,20 @@ class Expense(Base):
     dimensions: Mapped[list["Dimension"]] = relationship(
         secondary=expense_dimension_association_table,
         back_populates="expenses",
-        lazy="selectin",
+        lazy="noload",
     )
-    # Relationship to the associated budget
-    budget: Mapped["Budget"] = relationship("Budget", back_populates="expenses", lazy="noload")
+    budget: Mapped["Budget"] = relationship("Budget", lazy="selectin", viewonly=True)
+
+    @property
+    def expense_type(self) -> str | None:
+        """Get the expense type dimension name if available."""
+        for dimension in self.dimensions:
+            if dimension.type == "EXPENSE_TYPE":
+                return dimension.name
+        return None
 
 
-class Dimension(Base):
+class Dimension(Base):  # type: ignore[misc]
     """
     Represents a dimension of an expense (e.g., ministry, chapter, expense_type, ...)
     """
@@ -119,19 +125,33 @@ class Dimension(Base):
         Integer,
         ForeignKey("dimensions.id", ondelete="SET NULL"),
         nullable=True,
+        index=True,
     )
     # The original identifier from the data source
     original_identifier: Mapped[str] = mapped_column(String, nullable=False)
     # Type of the dimension (e.g., MINISTRY, CHAPTER, PROGRAMM, EXPENSE_TYPE)
-    type: Mapped[DimensionTypeLiteral] = mapped_column(String, nullable=False)
+    type: Mapped[DimensionTypeLiteral] = mapped_column(String, nullable=False, index=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
     # Translated to english
     name_translated: Mapped[str] = mapped_column(String, nullable=True)
-    # Relationship to Expense entries
+    # Self-referential relationship to parent dimension
+    parent: Mapped["Dimension | None"] = relationship("Dimension", remote_side=[id], lazy="noload")
+    # Relationship to expenses
     expenses: Mapped[list["Expense"]] = relationship(
         secondary=expense_dimension_association_table,
         back_populates="dimensions",
-        lazy="noload",
+        lazy="joined",
+    )
+
+    # for a given budget, the combination of budget_id, type and original_identifier should be unique
+    __table_args__ = (
+        UniqueConstraint(
+            "name",
+            "type",
+            "original_identifier",
+            "parent_id",
+            name="uix_dimensions_name_type_original_parent",
+        ),
     )
 
     # for a given budget, the combination of budget_id, type and original_identifier should be unique

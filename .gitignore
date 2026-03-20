@@ -17,11 +17,18 @@ wheels/
 .venv
 
 # database files
-*.db
+*_mock.db
 
 # data-files
 *.xlsx
 *.xls
+*.pdf
+
+# Notebooks
+**/*.ipynb
+
+# Notebooks
+**/*.ipynb
 *.pdf
 
 sanity_check*.json
