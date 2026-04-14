@@ -1,4 +1,5 @@
 from functools import lru_cache
+from textwrap import wrap
 from typing import Sequence
 import networkx as nx
 import pandas as pd
@@ -7,7 +8,6 @@ from utils.definitions import (
     SpendingTypeLiteral,
     MilitarySpending,
 )
-from utils.helper import add_breaks
 
 # Classified spending dimension IDs
 CLASSIFIED_DIMENSION_ID_OFFSET = 1_000_000  # Offset to avoid ID conflicts with real dimensions
@@ -305,7 +305,7 @@ class TreemapTransformer:
             for col in df.columns:
                 if "NAME" in col:
                     df[col] = df[col].apply(
-                        lambda x: add_breaks(str(x), interval=line_length) if x else x
+                        lambda x, w=line_length: "<br>".join(wrap(str(x), width=w)) if x else x
                     )
 
         # Normalize empty strings to None for Plotly compatibility.
@@ -364,7 +364,7 @@ class TreemapTransformer:
                 for col in classified_entry_df.columns:
                     if "NAME" in col:
                         classified_entry_df[col] = classified_entry_df[col].apply(
-                            lambda x: add_breaks(x, interval=line_length) if x else x  # type: ignore
+                            lambda x, w=line_length: "<br>".join(wrap(x, width=w)) if x else x
                         )
             df = pd.concat([df, classified_entry_df], ignore_index=True)
 

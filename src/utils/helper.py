@@ -17,35 +17,6 @@ from utils.definitions import (
 from plotly import graph_objects as go
 
 
-def add_breaks(string: str, interval: int = 25) -> str:
-    """
-    Insert <br> into a string so every part is at most `interval` characters.
-    Splits at the whitespace closest to (and at or before) the interval boundary.
-    Falls back to a hard break at the boundary if no whitespace is found.
-    """
-    if len(string) <= interval:
-        return string
-
-    parts = []
-    start = 0
-    while start < len(string):
-        end = start + interval
-        if end >= len(string):
-            parts.append(string[start:])
-            break
-        # Last whitespace at or before the interval boundary
-        matches = list(re.compile(r"\s").finditer(string, start, end + 1))
-        space_index = matches[-1].start() if matches else -1
-        if space_index > start:
-            parts.append(string[start:space_index])
-            start = space_index + 1
-        else:
-            # No whitespace in range — hard break at the boundary
-            parts.append(string[start:end])
-            start = end
-    return "<br>".join(parts)
-
-
 def create_treemap_colors(
     node_ids: list[str],
     budget_types: list[str],
