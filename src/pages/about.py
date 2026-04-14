@@ -1,6 +1,6 @@
 """About page for the Russian budget tracker."""
 
-from dash import html, register_page
+from dash import dcc, html, register_page
 
 # Register this page with Dash
 register_page(__name__, path="/about")
@@ -8,6 +8,9 @@ register_page(__name__, path="/about")
 # Define the layout of the about page using Dash HTML components
 layout = html.Div(
     [
+        # Hidden graph stubs keep cross-page callbacks satisfied when on this page.
+        dcc.Graph(id="treemap-graph", style={"display": "none"}),
+        dcc.Graph(id="timeseries-graph", style={"display": "none"}),
         # Header section
         html.Header(
             [

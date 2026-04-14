@@ -244,6 +244,7 @@ def layout(**other_kwargs) -> html.Div:
     Input("store-spending-type", "data"),
     Input("store-unit", "data"),
     Input("store-language", "data"),
+    prevent_initial_call=True,
 )
 def update_figure_from_filters(
     pathname: str | None,
