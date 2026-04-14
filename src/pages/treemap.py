@@ -1,5 +1,6 @@
 from datetime import date
 from functools import lru_cache
+import io
 import logging
 from typing import Any, Optional, Sequence
 import pandas as pd
@@ -23,6 +24,7 @@ from utils.calculate import Calculator
 from utils.helper import create_treemap_colors, shape_for_spending_type, shape_for_viewby
 from utils.definitions import (
     UnitLiteral,
+    UNIT_OPTIONS,
     unit_map,
     SpendingTypeLiteral,
     ViewByDimensionTypeLiteral,
@@ -306,6 +308,93 @@ def update_selected_id(click_data: dict | None) -> Optional[str]:
         raise PreventUpdate
 
 
+def _build_download_df(
+    df: pd.DataFrame,
+    spending_type: SpendingTypeLiteral,
+    viewby: ViewByDimensionTypeLiteral,
+    translated: bool,
+    unit: UnitLiteral = "ABSOLUTE",
+) -> pd.DataFrame:
+    """Build a flat aggregated DataFrame for CSV download with root, Level 1, Level 2, value columns."""
+    df_shaped = shape_for_spending_type(df, spending_type=spending_type)
+    df_shaped = shape_for_viewby(df_shaped, viewby=viewby)
+
+    name_ending = "_NAME_TRANSLATED" if translated else "_NAME"
+    name_cols = [col for col in df_shaped.columns if col.endswith(name_ending)]
+
+    leaf1_col = name_cols[0] if len(name_cols) > 0 else None
+    leaf2_col = name_cols[1] if len(name_cols) > 1 else None
+
+    root_name = df_shaped["ROOT"].iloc[0] if len(df_shaped) > 0 else "Federal Budget"
+    value_col = next(label for label, u in UNIT_OPTIONS if u == unit)
+
+    def clean(val: Any) -> str | None:
+        if val is None or (isinstance(val, float) and pd.isna(val)):
+            return None
+        return str(val).replace("<br>", " ")
+
+    rows: list[dict[str, Any]] = []
+
+    # Root aggregate across all rows
+    rows.append(
+        {
+            "Root": root_name,
+            "Level 1": None,
+            "Level 2": None,
+            value_col: round(df_shaped["VALUE"].sum(), 2),
+        }
+    )
+
+    if not leaf1_col:
+        return pd.DataFrame(rows, columns=["Root", "Level 1", "Level 2", value_col])  # noqa: RET504
+
+    # Drop rows where leaf1 is null — they have no meaningful hierarchy position
+    base = df_shaped.dropna(subset=[leaf1_col])
+
+    # Compute leaf1 subtotals via a single flat groupby
+    leaf1_sums: pd.Series = base.groupby(leaf1_col, sort=True)["VALUE"].sum()
+
+    # Compute (leaf1, leaf2) subtotals via a single flat groupby when leaf2 exists
+    pair_sums: pd.DataFrame | None = None
+    if leaf2_col:
+        pair_sums = (
+            base.dropna(subset=[leaf2_col])
+            .groupby([leaf1_col, leaf2_col], sort=True)["VALUE"]
+            .sum()
+            .reset_index()
+        )
+        pair_sums.columns = pd.Index(["leaf1", "leaf2", "value"])
+
+    for leaf1_val, leaf1_sum in leaf1_sums.items():
+        leaf1_clean = clean(leaf1_val)
+        if leaf1_clean is None:
+            continue
+        rows.append(
+            {
+                "Root": root_name,
+                "Level 1": leaf1_clean,
+                "Level 2": None,
+                value_col: round(leaf1_sum, 2),
+            }
+        )
+
+        if pair_sums is not None:
+            for row2 in pair_sums[pair_sums["leaf1"] == leaf1_val].itertuples(index=False):
+                leaf2_clean = clean(row2.leaf2)
+                if leaf2_clean is None:
+                    continue
+                rows.append(
+                    {
+                        "Root": root_name,
+                        "Level 1": leaf1_clean,
+                        "Level 2": leaf2_clean,
+                        value_col: round(float(row2.value), 2),  # type: ignore[arg-type]
+                    }
+                )
+
+    return pd.DataFrame(rows, columns=["Root", "Level 1", "Level 2", value_col])
+
+
 @callback(
     Output("download-treemap-data", "data"),
     Input("btn-download-csv", "n_clicks"),
@@ -313,6 +402,7 @@ def update_selected_id(click_data: dict | None) -> Optional[str]:
     State("store-viewby", "data"),
     State("store-spending-type", "data"),
     State("store-unit", "data"),
+    State("store-language", "data"),
     prevent_initial_call=True,
     optional=True,
 )
@@ -322,6 +412,7 @@ def download_treemap_data(
     viewby: ViewByDimensionTypeLiteral,
     spending_type: SpendingTypeLiteral,
     unit: UnitLiteral,
+    language: str = "RU",
 ) -> dict[str, Any]:
     """
     Callback to download the current treemap data as a csv file.
@@ -333,10 +424,10 @@ def download_treemap_data(
         spending_type=spending_type,
         unit=unit,
     )
-    return dcc.send_data_frame(  # type: ignore
-        df.to_csv,
-        "treemap_data.csv",
-        sep=";",
-        index=False,
-        encoding="utf-8",
+    translated = language == "ENG"
+    download_df = _build_download_df(
+        df, spending_type=spending_type, viewby=viewby, translated=translated, unit=unit
     )
+    buf = io.BytesIO()
+    download_df.to_csv(buf, sep=";", index=False, encoding="utf-8-sig")
+    return dcc.send_bytes(buf.getvalue(), "treemap_data.csv")  # type: ignore
