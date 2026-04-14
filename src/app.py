@@ -40,6 +40,7 @@ app = Dash(
     use_pages=True,
     external_stylesheets=external_stylesheets,
     suppress_callback_exceptions=True,  # Required for pages with callbacks referencing shared stores
+    update_title=None,
 )
 
 
@@ -99,6 +100,10 @@ layout = html.Div(
         dcc.Store(id="store-treemap-node-map"),
         # Store for download status (used by clientside callback, not displayed)
         dcc.Store(id="store-download-status"),
+        # Timeseries page: tick metadata and window width for responsive tick labels
+        dcc.Store(id="store-timeseries-ticks"),
+        dcc.Store(id="store-window-width", data=1280),
+        dcc.Interval(id="timeseries-resize-interval", interval=300, disabled=True),
         # Location component to access URL parameters
         dcc.Location(id="url"),
         # This dummy div is the target for our clientside callback. It's required for the
@@ -119,138 +124,143 @@ layout = html.Div(
                     href="/",
                     title="Go to Home Page",
                 ),
-                dbc.Stack(
+                html.Div(
                     [
-                        # Budget dataset menu
-                        dbc.DropdownMenu(
-                            label="Budget",
-                            children=[],  # will be set by callback
-                            id="menu-budget",
-                            direction="down",
-                            class_name="me-2 scroll-menu",
-                            # Make the dropdown list scrollable to handle many budgets
-                        ),
-                        # View-by menu (shown on treemap, hidden on timeseries)
-                        dbc.DropdownMenu(
-                            label="View by",
-                            children=viewby_items,
-                            id="menu-viewby",
-                            direction="down",
-                            class_name="me-2",
-                            style={},  # controlled by callback
-                        ),
-                        # Period menu (for timeseries, hidden on treemap)
-                        dbc.DropdownMenu(
-                            label="Period",
-                            children=period_items,
-                            id="menu-period",
-                            direction="down",
-                            class_name="me-2",
-                            style={"display": "none"},  # controlled by callback
-                        ),
-                        # Spending type menu
-                        dbc.DropdownMenu(
-                            label="Spending type",
-                            children=spending_type_items,
-                            id="menu-spending-type",
-                            direction="down",
-                            class_name="me-2",
-                        ),
-                        # Unit menu
-                        dbc.DropdownMenu(
-                            label="Unit",
-                            children=unit_items,
-                            id="menu-unit",
-                            direction="down",
-                            class_name="me-2",
-                        ),
-                    ],
-                    direction="horizontal",
-                    class_name="me-auto toolbar-group",
-                ),
-                # Stack for action buttons on the right
-                dbc.Stack(
-                    [
-                        # Button to switch to the time series view
-                        dbc.Button(
+                        dbc.Stack(
                             [
-                                # Icon for the button
-                                html.Img(
-                                    src="/assets/icons/stacked_bar_chart.svg",
+                                # Budget dataset menu
+                                dbc.DropdownMenu(
+                                    label="Budget",
+                                    children=[],  # will be set by callback
+                                    id="menu-budget",
+                                    direction="down",
+                                    class_name="me-2 scroll-menu",
+                                    # Make the dropdown list scrollable to handle many budgets
                                 ),
-                                # Text for the button
-                                html.Span("Timeseries", className="btn-label"),
+                                # View-by menu (shown on treemap, hidden on timeseries)
+                                dbc.DropdownMenu(
+                                    label="View by",
+                                    children=viewby_items,
+                                    id="menu-viewby",
+                                    direction="down",
+                                    class_name="me-2",
+                                    style={},  # controlled by callback
+                                ),
+                                # Period menu (for timeseries, hidden on treemap)
+                                dbc.DropdownMenu(
+                                    label="Period",
+                                    children=period_items,
+                                    id="menu-period",
+                                    direction="down",
+                                    class_name="me-2",
+                                    style={"display": "none"},  # controlled by callback
+                                ),
+                                # Spending type menu
+                                dbc.DropdownMenu(
+                                    label="Spending type",
+                                    children=spending_type_items,
+                                    id="menu-spending-type",
+                                    direction="down",
+                                    class_name="me-2",
+                                ),
+                                # Unit menu
+                                dbc.DropdownMenu(
+                                    label="Unit",
+                                    children=unit_items,
+                                    id="menu-unit",
+                                    direction="down",
+                                    class_name="me-2",
+                                ),
                             ],
-                            id="btn-switch-graphs",
-                            title="Switch to Time Series View",
-                            href="/timeseries",
+                            direction="horizontal",
+                            class_name="toolbar-group",
                         ),
-                        # Share button
-                        dbc.Button(
-                            html.Img(
-                                src="/assets/icons/share.svg",
-                            ),
-                            id="btn-share-link",
-                            title="Copy shareable link to clipboard",
-                        ),
-                        # Toast notification for sharing
-                        dbc.Toast(
-                            id="share-toast",
-                            header="Link copied",
-                            children="The shareable link was copied to your clipboard.",
-                            is_open=False,
-                            duration=2000,
-                            dismissable=False,
-                            style={
-                                "position": "fixed",
-                                "bottom": 20,
-                                "left": "50%",
-                                "transform": "translateX(-50%)",
-                                "zIndex": 1060,
-                            },
-                        ),
-                        # Download image button
-                        dbc.Button(
-                            html.Img(
-                                src="/assets/icons/photo_camera.svg",
-                            ),
-                            id="btn-download-image",
-                            title="Download Plot as PNG",
-                        ),
-                        dcc.Download(id="download-treemap-image"),
-                        dcc.Download(id="download-timeseries-image"),
-                        # Download data button
-                        dbc.Button(
-                            html.Img(
-                                src="/assets/icons/download.svg",
-                            ),
-                            id="btn-download-csv",
-                            title="Download Data as CSV",
-                        ),
-                        dcc.Download(id="download-treemap-data"),
-                        dcc.Download(id="download-timeseries-data"),
-                        # Language toggle button: default text shows next language (EN), default param RU
-                        dbc.Button(
+                        # Stack for action buttons on the right
+                        dbc.Stack(
                             [
-                                # Text for the button
-                                html.Span("EN", className="btn-label"),
+                                # Button to switch to the time series view
+                                dbc.Button(
+                                    [
+                                        # Icon for the button
+                                        html.Img(
+                                            src="/assets/icons/stacked_bar_chart.svg",
+                                        ),
+                                        # Text for the button
+                                        html.Span("Timeseries", className="btn-label"),
+                                    ],
+                                    id="btn-switch-graphs",
+                                    title="Switch to Time Series View",
+                                    href="/timeseries",
+                                ),
+                                # Share button
+                                dbc.Button(
+                                    html.Img(
+                                        src="/assets/icons/share.svg",
+                                    ),
+                                    id="btn-share-link",
+                                    title="Copy shareable link to clipboard",
+                                ),
+                                # Toast notification for sharing
+                                dbc.Toast(
+                                    id="share-toast",
+                                    header="Link copied",
+                                    children="The shareable link was copied to your clipboard.",
+                                    is_open=False,
+                                    duration=2000,
+                                    dismissable=False,
+                                    style={
+                                        "position": "fixed",
+                                        "bottom": 20,
+                                        "left": "50%",
+                                        "transform": "translateX(-50%)",
+                                        "zIndex": 1060,
+                                    },
+                                ),
+                                # Download image button
+                                dbc.Button(
+                                    html.Img(
+                                        src="/assets/icons/photo_camera.svg",
+                                    ),
+                                    id="btn-download-image",
+                                    title="Download Plot as PNG",
+                                ),
+                                dcc.Download(id="download-treemap-image"),
+                                dcc.Download(id="download-timeseries-image"),
+                                # Download data button
+                                dbc.Button(
+                                    html.Img(
+                                        src="/assets/icons/download.svg",
+                                    ),
+                                    id="btn-download-csv",
+                                    title="Download Data as CSV",
+                                ),
+                                dcc.Download(id="download-treemap-data"),
+                                dcc.Download(id="download-timeseries-data"),
+                                # Language toggle button: default text shows next language (EN), default param RU
+                                dbc.Button(
+                                    [
+                                        # Text for the button
+                                        html.Span("EN", className="btn-label"),
+                                    ],
+                                    id="btn-switch-data-language",
+                                    title="Toggle data language",
+                                ),
+                                # Info/About button
+                                dbc.Button(
+                                    html.Img(
+                                        src="/assets/icons/info.svg",
+                                    ),
+                                    id="btn-about",
+                                    title="About This Project",
+                                    href="/about",
+                                ),
                             ],
-                            id="btn-switch-data-language",
-                            title="Toggle data language",
-                        ),
-                        # Info/About button
-                        dbc.Button(
-                            html.Img(
-                                src="/assets/icons/info.svg",
-                            ),
-                            id="btn-about",
-                            title="About This Project",
-                            href="/about",
+                            direction="horizontal",
+                            gap=2,
+                            class_name="toolbar-group toolbar-actions",
                         ),
                     ],
-                    direction="horizontal",
-                    gap=2,
-                    class_name="toolbar-group toolbar-actions",
+                    className="toolbar-body",
                 ),
             ],
             direction="horizontal",
@@ -379,6 +389,15 @@ def toggle_period_menu_disabled(
     budget_type = next((opt.get("type") for opt in options if opt.get("value") == budget_id), None)
     return budget_type == "LAW"
 
+
+# Hide the treemap loading spinner once the graph becomes visible.
+# Uses a named ClientsideFunction so the inline string parser in Dash 4 is not involved.
+clientside_callback(
+    ClientsideFunction(namespace="clientside", function_name="hideTreemapSpinner"),
+    Output("dummy-output", "lang"),
+    Input("treemap-graph", "style"),
+    prevent_initial_call=True,
+)
 
 # Clientside callback to constrain treemap text within tile boundaries via SVG textLength.
 clientside_callback(
@@ -654,6 +673,68 @@ def select_budget_dynamic(options, clicks):
     return selected_value
 
 
+_viewby_labels = {v: l for l, v in VIEWBY_OPTIONS}
+_spending_type_labels = {v: l for l, v in SPENDING_TYPE_OPTIONS}
+_unit_labels = {v: l for l, v in UNIT_OPTIONS}
+_period_labels = {v: l for l, v in PERIOD_OPTIONS}
+
+
+def _item_span(label: str, selected: bool) -> html.Span:
+    style = {"fontWeight": "bold"} if selected else {}
+    return html.Span(label, title=label, style=style)
+
+
+@callback(
+    Output({"type": "viewby-item", "value": ALL}, "children"),
+    Input("store-viewby", "data"),
+    State({"type": "viewby-item", "value": ALL}, "id"),
+)
+def highlight_viewby(current, ids):
+    return [_item_span(_viewby_labels[item["value"]], item["value"] == current) for item in ids]
+
+
+@callback(
+    Output({"type": "spending-type-item", "value": ALL}, "children"),
+    Input("store-spending-type", "data"),
+    State({"type": "spending-type-item", "value": ALL}, "id"),
+)
+def highlight_spending_type(current, ids):
+    return [
+        _item_span(_spending_type_labels[item["value"]], item["value"] == current) for item in ids
+    ]
+
+
+@callback(
+    Output({"type": "unit-item", "value": ALL}, "children"),
+    Input("store-unit", "data"),
+    State({"type": "unit-item", "value": ALL}, "id"),
+)
+def highlight_unit(current, ids):
+    return [_item_span(_unit_labels[item["value"]], item["value"] == current) for item in ids]
+
+
+@callback(
+    Output({"type": "period-item", "value": ALL}, "children"),
+    Input("store-period", "data"),
+    State({"type": "period-item", "value": ALL}, "id"),
+)
+def highlight_period(current, ids):
+    return [_item_span(_period_labels[item["value"]], item["value"] == current) for item in ids]
+
+
+@callback(
+    Output({"type": "budget-item", "value": ALL}, "children"),
+    Input("store-budget-id", "data"),
+    State({"type": "budget-item", "value": ALL}, "id"),
+    State("store-budget-options", "data"),
+)
+def highlight_budget(current, ids, options):
+    if not options:
+        raise PreventUpdate
+    label_map = {opt["value"]: opt["label"] for opt in options}
+    return [_item_span(label_map[item["value"]], item["value"] == current) for item in ids]
+
+
 @callback(
     Output("menu-budget", "label"),
     Input("store-budget-id", "data"),
@@ -692,6 +773,14 @@ def update_menu_labels(
         unit_map.get(unit or "", "Unit"),  # type: ignore
         period_map.get(period or "", "Period"),
     )
+
+
+@callback(
+    Output("timeseries-resize-interval", "disabled"),
+    Input("url", "pathname"),
+)
+def toggle_resize_interval(pathname: str | None) -> bool:
+    return pathname != "/timeseries"
 
 
 if __name__ == "__main__":

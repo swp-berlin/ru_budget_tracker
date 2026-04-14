@@ -1,3 +1,4 @@
+import io
 import logging
 from typing import Any
 from datetime import date
@@ -7,10 +8,12 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from dash import (
+    ClientsideFunction,
     Input,
     Output,
     State,
     callback,
+    clientside_callback,
     dcc,
     html,
     register_page,
@@ -114,7 +117,7 @@ def fetch_timeseries_data(
     unit: UnitLiteral = "ABSOLUTE",
     period: PeriodLiteral = "ALL",
     selected_dimension: dict[str, int | str] | None = None,
-) -> tuple[pd.DataFrame, str]:
+) -> tuple[pd.DataFrame, str, BudgetTypeLiteral]:
     """Fetch and transform treemap data for the current filters."""
     data_fetcher = BarChartDataFetcher(spending_type)
     dimension_id = None
@@ -147,7 +150,7 @@ def fetch_timeseries_data(
     df = _calculate_values(df, budget_id, unit, budget_type)
     # Rename LAW and REPORT to OPEN for clearer legend labeling in the timeseries view.
     df["types"] = df["types"].apply(lambda x: "OPEN" if x != "CLASSIFIED" else x)
-    return df, type
+    return df, type, budget_type
 
 
 def generate_figure(
@@ -157,6 +160,7 @@ def generate_figure(
     spending_type: SpendingTypeLiteral = "ALL",
     language: LanguageTypeLiteral = "EN",
     title: str | None = None,
+    budget_type: BudgetTypeLiteral = "LAW",
 ) -> go.Figure:
     """Build a treemap with stable ids and clean hover info."""
     # Build figure
@@ -194,8 +198,8 @@ def generate_figure(
         xaxis_title="",  # Format x-axis to show quarter labels (e.g., "2018-Q1")
         uirevision=f"unit:{unit}",
     )
-    # Set x-axis tick labels to show quarters if budget_type is REPORT
-    if "REPORT" in df["types"].values:
+    # Set x-axis tick labels and hover format based on budget type
+    if budget_type == "REPORT":
         # Constrain ticks to visible data to avoid extra quarters.
         tick_values = df["dates"].dropna().sort_values().unique().tolist()
         fig.update_layout(
@@ -205,7 +209,12 @@ def generate_figure(
                 tickmode="array",
                 tickvals=tick_values,
                 tick0=df["dates"].min() if not df.empty else None,
+                hoverformat="%Y-Q%q",
             ),  # Force a full redraw when unit changes so the chart reloads reliably
+        )
+    else:
+        fig.update_layout(
+            xaxis=dict(hoverformat="%Y"),
         )
 
     # Set custom hover templates for each trace
@@ -309,6 +318,7 @@ def layout(**other_kwargs) -> html.Div:
 @callback(
     Output("timeseries-graph", "figure"),
     Output("timeseries-graph", "style"),
+    Output("store-timeseries-ticks", "data"),
     Input("url", "pathname"),
     Input("store-budget-id", "data"),
     Input("store-period", "data"),
@@ -325,17 +335,17 @@ def update_figure_from_filters(
     unit: UnitLiteral = "ABSOLUTE",
     selected_node_id: str | None = None,
     node_map: dict[str, dict[str, int | str]] | None = None,
-) -> tuple[go.Figure, dict[str, str]]:
+) -> tuple[go.Figure, dict[str, str], dict | None]:
     # Guard: only render on the timeseries page to keep hidden graphs hidden.
     if pathname != "/timeseries":
-        return go.Figure(), {"display": "none"}
+        return go.Figure(), {"display": "none"}, None
     # Guard: wait until a budget is selected
     if budget_id is None:
         raise PreventUpdate
 
     # Fetch and render using the selected values from stores
     selected_dimension = _resolve_selected_dimension(selected_node_id, node_map)
-    df, _ = fetch_timeseries_data(
+    df, _, budget_type = fetch_timeseries_data(
         budget_id=budget_id,
         spending_type=spending_type,
         unit=unit,
@@ -344,38 +354,106 @@ def update_figure_from_filters(
     )
     # Build a title based on the treemap selection and spending-type filter.
     title = _format_timeseries_title(selected_node_id, spending_type)
+
+    # Provide tick metadata for the clientside responsive-tick callback.
+    # Only needed for REPORT budgets shown with all periods (many quarterly ticks).
+    tick_info: dict | None = None
+    if budget_type == "REPORT" and period == "ALL":
+        tick_values = df["dates"].dropna().sort_values().unique().tolist()
+        tick_info = {"tickvals": [t.isoformat() for t in tick_values]}
+
     return (
-        generate_figure(df, [], unit, spending_type, language="EN", title=title),
+        generate_figure(
+            df, [], unit, spending_type, language="EN", title=title, budget_type=budget_type
+        ),
         {"visibility": "visible"},
+        tick_info,
     )
 
 
 @callback(
     Output("download-timeseries-data", "data"),
     Input("btn-download-csv", "n_clicks"),
+    State("url", "pathname"),
     State("store-budget-id", "data"),
     State("store-period", "data"),
     State("store-spending-type", "data"),
     State("store-unit", "data"),
+    State("store-selected-id", "data"),
+    State("store-treemap-node-map", "data"),
     prevent_initial_call=True,
     optional=True,
 )
 def download_timeseries_data(
     n_clicks,
+    pathname: str | None,
     budget_id: int | None = None,
     period: PeriodLiteral = "ALL",
     spending_type: SpendingTypeLiteral = "ALL",
     unit: UnitLiteral = "ABSOLUTE",
+    selected_node_id: str | None = None,
+    node_map: dict[str, dict[str, int | str]] | None = None,
 ) -> dict[str, Any]:
     """
-    Callback to download the current treemap data as a csv file.
+    Callback to download the current timeseries data as a csv file.
     Returns:
         dict[str, Any]: The data for download.
     """
-    return dcc.send_data_frame(  # type: ignore
-        pd.DataFrame([]).to_csv,
-        "timeseries_data.csv",
-        sep=";",
-        index=False,
-        encoding="utf-8",
+    if pathname != "/timeseries":
+        raise PreventUpdate
+    if budget_id is None:
+        raise PreventUpdate
+    selected_dimension = _resolve_selected_dimension(selected_node_id, node_map)
+    df, _, budget_type = fetch_timeseries_data(
+        budget_id=budget_id,
+        spending_type=spending_type,
+        unit=unit,
+        period=period,
+        selected_dimension=selected_dimension,
     )
+
+    value_col = next(label for label, u in UNIT_OPTIONS if u == unit)
+
+    def _format_period(dt: pd.Timestamp) -> str:
+        if budget_type == "REPORT":
+            quarter = dt.month // 3
+            return f"{dt.year}-Q{quarter}"
+        return str(dt.year)
+
+    download_df = df[["dates", "expenses", "types"]].copy()
+    download_df["Period"] = download_df["dates"].apply(_format_period)
+    pivoted = (
+        download_df.groupby(["Period", "types"])["expenses"]
+        .sum()
+        .round(2)
+        .unstack(fill_value=0)
+        .reindex(columns=["OPEN", "CLASSIFIED"], fill_value=0)
+        .reset_index()
+        .rename(columns={"OPEN": f"Open ({value_col})", "CLASSIFIED": f"Classified ({value_col})"}),
+    )[0]
+    pivoted[f"Total ({value_col})"] = (
+        pivoted[f"Open ({value_col})"] + pivoted[f"Classified ({value_col})"]
+    ).round(2)
+
+    buf = io.BytesIO()
+    pivoted.to_csv(buf, sep=";", index=False, encoding="utf-8-sig")
+    return dcc.send_bytes(buf.getvalue(), "timeseries_data.csv")  # type: ignore
+
+
+# Poll window width via a lightweight interval so resize events reach Dash.
+clientside_callback(
+    "function(n) { return window.innerWidth; }",
+    Output("store-window-width", "data"),
+    Input("timeseries-resize-interval", "n_intervals"),
+)
+
+# Adjust quarterly tick labels when the viewport crosses the 640 px stacking threshold.
+# Only active for REPORT budgets with all periods selected (many quarterly ticks).
+clientside_callback(
+    ClientsideFunction(namespace="clientside", function_name="adjustTimeseriesTicks"),
+    Output("timeseries-graph", "figure", allow_duplicate=True),
+    Input("store-window-width", "data"),
+    Input("store-timeseries-ticks", "data"),
+    State("timeseries-graph", "figure"),
+    prevent_initial_call=True,
+)

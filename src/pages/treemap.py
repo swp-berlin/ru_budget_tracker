@@ -233,13 +233,24 @@ def layout(**other_kwargs) -> html.Div:
         [
             # Hidden timeseries graph keeps cross-page callbacks satisfied.
             dcc.Graph(id="timeseries-graph", style={"display": "none"}),
+            # Loading spinner overlay, hidden once the graph is ready.
+            html.Div(
+                html.Div(className="treemap-spinner"),
+                id="treemap-spinner",
+                style={
+                    "position": "absolute",
+                    "top": "50%",
+                    "left": "50%",
+                    "transform": "translate(-50%, -50%)",
+                },
+            ),
             dcc.Graph(
                 id="treemap-graph",
                 config=TREEMAP_CONFIG,
                 style={"visibility": "hidden"},
             ),
         ],
-        style={"width": "100%", "height": "90vh"},
+        style={"width": "100%", "height": "90vh", "position": "relative"},
     )
 
 
@@ -387,6 +398,7 @@ def _build_download_df(
         if pair_sums is not None:
             for row2 in pair_sums[pair_sums["leaf1"] == leaf1_val].itertuples(index=False):
                 leaf2_clean = clean(row2.leaf2)
+
                 if leaf2_clean is None:
                     continue
                 rows.append(
@@ -404,6 +416,7 @@ def _build_download_df(
 @callback(
     Output("download-treemap-data", "data"),
     Input("btn-download-csv", "n_clicks"),
+    State("url", "pathname"),
     State("store-budget-id", "data"),
     State("store-viewby", "data"),
     State("store-spending-type", "data"),
@@ -414,6 +427,7 @@ def _build_download_df(
 )
 def download_treemap_data(
     n_clicks,
+    pathname: str | None,
     budget_id: int,
     viewby: ViewByDimensionTypeLiteral,
     spending_type: SpendingTypeLiteral,
@@ -425,6 +439,8 @@ def download_treemap_data(
     Returns:
         dict[str, Any]: The data for download.
     """
+    if pathname != "/":
+        raise PreventUpdate
     df = transform_treemap_data(
         budget_id=budget_id,
         spending_type=spending_type,
