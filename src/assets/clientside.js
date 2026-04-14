@@ -1,11 +1,9 @@
-// Ensure the top-level dash_clientside object exists
 window.dash_clientside = window.dash_clientside || {};
 
-// Define the 'clientside' namespace and all its functions
 window.dash_clientside.clientside = {
   /**
-   * Finds a Plotly treemap node by its label text and simulates a click on it.
-   * This function is triggered by a clientside_callback in Dash when URL or figure changes.
+   * Finds a Plotly treemap node by its id and focuses it.
+   * Triggered by a clientside_callback in Dash when URL or figure changes.
    *
    * @param {string} search - The URL search string (query parameters)
    * @param {object} figure - The treemap figure object (used to detect figure updates)
@@ -13,74 +11,73 @@ window.dash_clientside.clientside = {
    */
   findAndClickSlice: function (search, figure) {
     console.debug('[Treemap Focus] Callback invoked', { search, hasFigure: !!figure });
-    // Parse the URL search string to get the focus parameter
-    if (!search) {
-      return `No search parameters at ${new Date().toISOString()}`;
-    }
 
-    // Parse query parameters from URL
-    const params = new URLSearchParams(search.replace('?', ''));
+    if (!search) return `No search parameters at ${new Date().toISOString()}`;
+
+    const params = new URLSearchParams(search);
     const focusNode = params.get('focus');
     console.debug('[Treemap Focus] Parsed focus param', focusNode);
 
-    // Guard against empty focus parameter
-    if (!focusNode) {
-      return `No focus parameter found at ${new Date().toISOString()}`;
-    }
+    if (!focusNode) return `No focus parameter found at ${new Date().toISOString()}`;
 
-    // Decode the focus node in case it's URL-encoded
+    // URLSearchParams already decodes %xx; apply decodeURIComponent only for double-encoded values.
     const decodedFocusNode = decodeURIComponent(focusNode).trim();
 
-    /**
-     * Function to find and click the target slice using the specified DOM traversal strategy
-     * @param {string} nodeLabel - The text label of the node to find.
-     * @returns {boolean} - True if the node was found and clicked, false otherwise.
-     */
-    // Label-based click removed; only coordinate-based clicks are used.
+    function getPlotDiv() {
+      return document.querySelector('#treemap-graph .js-plotly-plot');
+    }
 
     /**
-     * Try focusing a treemap node using its stable id via Plotly.react.
-     * If unavailable, falls back to DOM click simulation by index.
+     * Find the treemap trace containing targetId in plotDiv.data.
+     * @returns {{ traceIndex: number, pointNumber: number }}
+     */
+    function findTreemapTrace(plotDiv, targetId) {
+      const plotData = Array.isArray(plotDiv.data) ? plotDiv.data : [];
+      for (let i = 0; i < plotData.length; i++) {
+        const tr = plotData[i];
+        if (tr && tr.type === 'treemap' && Array.isArray(tr.ids)) {
+          const pointNumber = tr.ids.findIndex((id) => id === targetId);
+          if (pointNumber >= 0) return { traceIndex: i, pointNumber };
+        }
+      }
+      return { traceIndex: -1, pointNumber: -1 };
+    }
+
+    function dispatchMouseSequence(target, eventInit) {
+      ['pointerover', 'mouseover', 'pointerenter', 'mouseenter', 'pointermove', 'mousemove',
+        'pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach((type) => {
+        target.dispatchEvent(new MouseEvent(type, eventInit));
+      });
+    }
+
+    /**
+     * Try focusing a treemap node using Plotly APIs, falling back to DOM click simulation.
      * @param {string} targetId
      * @param {object} figJson - Plotly figure JSON
      * @returns {boolean}
      */
     function focusSliceById(targetId, figJson) {
       console.debug('[Treemap Focus] Trying synthetic click for id', targetId);
-      const hostDiv = document.getElementById('treemap-graph');
-      if (!hostDiv || !figJson || !figJson.data || !figJson.data[0]) return false;
+      if (!figJson?.data?.[0]) return false;
 
       const ids = figJson.data[0].ids || [];
       const idx = ids.findIndex((id) => id === targetId);
       console.debug('[Treemap Focus] ids length / index', ids.length, idx);
       if (idx < 0) return false;
 
-      // Simulate a click on the corresponding DOM slice by index
-      const plotDiv = hostDiv.querySelector('.js-plotly-plot');
-      // Prefer Plotly's internal restyle API to zoom without relying on DOM events.
+      const plotDiv = getPlotDiv();
+
+      // Prefer Plotly's restyle API to zoom without relying on DOM events.
       // This matches manual click behavior more closely and avoids missing labels.
       try {
         if (plotDiv && window.Plotly && typeof window.Plotly.restyle === 'function') {
-          const plotData = Array.isArray(plotDiv.data) ? plotDiv.data : [];
-          let traceIndex = -1;
-          for (let i = 0; i < plotData.length; i += 1) {
-            const tr = plotData[i];
-            if (tr && tr.type === 'treemap' && Array.isArray(tr.ids)) {
-              if (tr.ids.includes(targetId)) {
-                traceIndex = i;
-                break;
-              }
-            }
-          }
+          const { traceIndex } = findTreemapTrace(plotDiv, targetId);
           if (traceIndex >= 0) {
-            // Use the stable id first; fall back to label if needed.
-            const labelFromFig = (figJson && figJson.data && figJson.data[0] && figJson.data[0].labels)
-              ? figJson.data[0].labels[idx]
-              : null;
+            const labelFromFig = figJson.data[0].labels?.[idx] ?? null;
             console.debug('[Treemap Focus] Plotly.restyle level', { traceIndex, targetId, labelFromFig });
             window.Plotly.restyle(plotDiv, { level: targetId }, [traceIndex]);
+            // Plotly tolerates redundant restyle; this helps if level expects label.
             if (labelFromFig) {
-              // Plotly tolerates redundant restyle; this helps if level expects label.
               window.Plotly.restyle(plotDiv, { level: labelFromFig }, [traceIndex]);
             }
             return true;
@@ -89,24 +86,11 @@ window.dash_clientside.clientside = {
       } catch (e) {
         console.debug('[Treemap Focus] Plotly.restyle failed', e);
       }
+
       // Prefer Plotly's internal click API when available to ensure deep-node focus.
       try {
         if (plotDiv && window.Plotly && typeof window.Plotly.Fx?.click === 'function') {
-          // Resolve the correct treemap trace and point index inside Plotly's data arrays.
-          const plotData = Array.isArray(plotDiv.data) ? plotDiv.data : [];
-          let traceIndex = -1;
-          let pointNumber = idx;
-          for (let i = 0; i < plotData.length; i += 1) {
-            const tr = plotData[i];
-            if (tr && tr.type === 'treemap' && Array.isArray(tr.ids)) {
-              const localIdx = tr.ids.findIndex((id) => id === targetId);
-              if (localIdx >= 0) {
-                traceIndex = i;
-                pointNumber = localIdx;
-                break;
-              }
-            }
-          }
+          const { traceIndex, pointNumber } = findTreemapTrace(plotDiv, targetId);
           if (traceIndex >= 0) {
             console.debug('[Treemap Focus] Plotly.Fx.click', { traceIndex, pointNumber, targetId });
             window.Plotly.Fx.click(plotDiv, { points: [{ curveNumber: traceIndex, pointNumber }] });
@@ -116,85 +100,68 @@ window.dash_clientside.clientside = {
       } catch (e) {
         console.debug('[Treemap Focus] Plotly.Fx.click failed', e);
       }
-      // Attach a one-time click listener to confirm event receipt
-      if (plotDiv && !plotDiv.__treemapDebugClickAttached) {
-        plotDiv.__treemapDebugClickAttached = true;
-        plotDiv.addEventListener('click', (ev) => {
-          const tgt = ev.target;
-          const info = {
-            tag: tgt && tgt.tagName,
-            classes: tgt && tgt.className,
-            x: ev.clientX,
-            y: ev.clientY,
-          };
-          console.debug('[Treemap Focus] Plot container received click', info);
-        }, { capture: true });
-      }
-      const treemapLayer = plotDiv?.querySelector('.treemaplayer');
+
       // Prefer the treemap trace with the most slices to reduce mismatch across sub-traces
+      const treemapLayer = plotDiv?.querySelector('.treemaplayer');
       let traceTreemap = null;
       if (treemapLayer) {
-        const traces = treemapLayer.querySelectorAll('.trace.treemap');
         let maxCount = -1;
-        traces.forEach((tr) => {
+        treemapLayer.querySelectorAll('.trace.treemap').forEach((tr) => {
           const count = tr.querySelectorAll('g.slice.cursor-pointer').length;
           if (count > maxCount) { maxCount = count; traceTreemap = tr; }
         });
       }
       if (!traceTreemap) { console.debug('[Treemap Focus] No treemap trace found'); return false; }
 
+      // Normalize labels: remove <br> tags, collapse whitespace, lowercase
+      const normalize = (s) => s
+        .toString()
+        .replace(/<br\s*\/>|<br\s*>|&lt;br\s*&gt;/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
+
       // Prefer selecting by label text from figure at idx, then click by coordinates
       let slice = null;
-      {
-        try {
-          // Normalize labels: remove <br> tags, collapse whitespace, lowercase
-          const normalize = (s) => s
-            .toString()
-            .replace(/<br\s*\/>|<br\s*>|&lt;br\s*&gt;/gi, ' ')
-            .replace(/\s+/g, ' ')
-            .trim()
-            .toLowerCase();
-          const targetLabel = (figJson && figJson.data && figJson.data[0] && figJson.data[0].labels)
-            ? normalize(figJson.data[0].labels[idx] || '')
-            : '';
-          if (targetLabel) {
-            const candidates = traceTreemap.querySelectorAll('g.slice.cursor-pointer');
-            // First pass: exact matches only
-            let matches = [];
+      try {
+        const targetLabel = figJson.data[0].labels
+          ? normalize(figJson.data[0].labels[idx] || '')
+          : '';
+        if (targetLabel) {
+          const candidates = traceTreemap.querySelectorAll('g.slice.cursor-pointer');
+          // First pass: exact matches only
+          let matches = [];
+          candidates.forEach((s) => {
+            const t = s.querySelector('g.slicetext text');
+            const raw = t ? (t.getAttribute('data-unformatted') || t.textContent || '') : '';
+            if (normalize(raw) === targetLabel) matches.push(s);
+          });
+          // If no exact match, fall back to includes
+          if (matches.length === 0) {
             candidates.forEach((s) => {
               const t = s.querySelector('g.slicetext text');
               const raw = t ? (t.getAttribute('data-unformatted') || t.textContent || '') : '';
               const text = normalize(raw);
-              if (text && text === targetLabel) { matches.push(s); }
+              if (text && text.includes(targetLabel)) matches.push(s);
             });
-            // If multiple or none, do includes as secondary
-            if (matches.length === 0) {
-              candidates.forEach((s) => {
-                const t = s.querySelector('g.slicetext text');
-                const raw = t ? (t.getAttribute('data-unformatted') || t.textContent || '') : '';
-                const text = normalize(raw);
-                if (text && text.includes(targetLabel)) { matches.push(s); }
-              });
-            }
-            // Choose the match whose bbox left/top is smallest (closest to origin) to avoid nested duplicates
-            if (matches.length > 0) {
-              let best = matches[0];
-              let bestScore = Infinity;
-              matches.forEach((m) => {
-                const box = (m.querySelector('path.surface') || m.querySelector('path') || m).getBoundingClientRect();
-                const score = box.left + box.top;
-                if (score < bestScore) { bestScore = score; best = m; }
-              });
-              slice = best;
-              console.debug('[Treemap Focus] Resolved slice by label match with score', bestScore);
-            }
           }
-        } catch (_) { }
-      }
+          // Choose the match whose bbox left+top is smallest to avoid nested duplicates
+          if (matches.length > 0) {
+            let best = matches[0];
+            let bestScore = Infinity;
+            matches.forEach((m) => {
+              const box = (m.querySelector('path.surface') || m.querySelector('path') || m).getBoundingClientRect();
+              const score = box.left + box.top;
+              if (score < bestScore) { bestScore = score; best = m; }
+            });
+            slice = best;
+            console.debug('[Treemap Focus] Resolved slice by label match with score', bestScore);
+          }
+        }
+      } catch (_) { }
+
       // If label resolution failed, try data-point-number
-      if (!slice) {
-        slice = traceTreemap.querySelector(`g.slice.cursor-pointer[data-point-number="${idx}"]`);
-      }
+      if (!slice) slice = traceTreemap.querySelector(`g.slice.cursor-pointer[data-point-number="${idx}"]`);
       // Finally, fallback to DOM order
       if (!slice) {
         const allSlices = traceTreemap.querySelectorAll('g.slice.cursor-pointer');
@@ -204,33 +171,25 @@ window.dash_clientside.clientside = {
       if (!slice) { console.debug('[Treemap Focus] No slice for index', idx); return false; }
 
       const clickable = slice.querySelector('path.surface') || slice.querySelector('path') || slice;
-      // Compute click position using the slice's bounding box.
       // Use a point well inside the tile to avoid boundary misses or label overlays.
       const bbox = clickable.getBoundingClientRect();
-      // Pick a point inside the slice with safe padding so pointer-events resolve to the path.
-      const padding = 6; // px
+      const padding = 6;
       const cx = Math.min(bbox.right - padding, Math.max(bbox.left + padding, bbox.left + bbox.width / 2));
       const cy = Math.min(bbox.bottom - padding, Math.max(bbox.top + padding, bbox.top + bbox.height / 2));
-      // Ensure the target area is in view
       try { clickable.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch (_) { }
+
       const hitElem = document.elementFromPoint(cx, cy);
       console.debug('[Treemap Focus] elementFromPoint at top hotspot', {
-        cx,
-        cy,
-        hitTag: hitElem && hitElem.tagName,
-        hitClass: hitElem && hitElem.className,
+        cx, cy,
+        hitTag: hitElem?.tagName,
+        hitClass: hitElem?.className,
       });
+
       const eventInit = { view: window, bubbles: true, cancelable: true, clientX: cx, clientY: cy, buttons: 1, detail: 1 };
       // Prefer dispatching on the element resolved from the point to align with Plotly's hit-testing.
-      const targetForEvents = hitElem || clickable || plotDiv;
-      const seq = ['pointerover', 'mouseover', 'pointerenter', 'mouseenter', 'pointermove', 'mousemove', 'pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
-      seq.forEach((type) => {
-        // Use MouseEvent for compatibility; Plotly listens to mouse events on SVG elements.
-        const evt = new MouseEvent(type, eventInit);
-        targetForEvents.dispatchEvent(evt);
-      });
+      dispatchMouseSequence(hitElem || clickable || plotDiv, eventInit);
       console.debug('[Treemap Focus] Dispatched DOM events to slice index', idx, 'at', { cx, cy, bbox });
-      // Temporary highlight for visual confirmation
+
       try {
         const pathElemHL = slice.querySelector('path.surface') || slice.querySelector('path');
         if (pathElemHL) {
@@ -244,13 +203,12 @@ window.dash_clientside.clientside = {
           }, 500);
         }
       } catch (_) { }
+
       // Also dispatch a synthetic sequence directly on the slice path as a fallback
       try {
         const pathElem = slice.querySelector('path.surface') || slice.querySelector('path');
         if (pathElem) {
-          seq.forEach((type) => {
-            pathElem.dispatchEvent(new MouseEvent(type, eventInit));
-          });
+          dispatchMouseSequence(pathElem, eventInit);
           console.debug('[Treemap Focus] Dispatched direct event sequence on path element');
         }
       } catch (e) {
@@ -261,25 +219,17 @@ window.dash_clientside.clientside = {
 
     /**
      * Check if the treemap is fully rendered by verifying text elements exist.
-     * @returns {boolean} True if text elements are present in treemap slices.
+     * @returns {boolean}
      */
     function isTreemapTextRendered() {
-      const hostDiv = document.getElementById('treemap-graph');
-      if (!hostDiv) return false;
-      const plotDiv = hostDiv.querySelector('.js-plotly-plot');
+      const plotDiv = getPlotDiv();
       if (!plotDiv) return false;
       const treemapLayer = plotDiv.querySelector('.treemaplayer');
       if (!treemapLayer) return false;
-      // Check for text elements inside slices - these indicate full render
       const textElements = treemapLayer.querySelectorAll('g.slice g.slicetext text');
       const sliceCount = treemapLayer.querySelectorAll('g.slice.cursor-pointer').length;
-      // Consider rendered if we have text elements and they're not empty
       if (textElements.length === 0 || sliceCount === 0) return false;
-      // Verify at least some text content exists
-      let hasText = false;
-      textElements.forEach((t) => {
-        if (t.textContent && t.textContent.trim().length > 0) hasText = true;
-      });
+      const hasText = Array.from(textElements).some((t) => t.textContent?.trim().length > 0);
       console.debug('[Treemap Focus] Render check', { textElements: textElements.length, sliceCount, hasText });
       return hasText;
     }
@@ -291,10 +241,10 @@ window.dash_clientside.clientside = {
      * @returns {string[]}
      */
     function buildAncestorPath(targetId, figJson) {
-      const ids = (figJson && figJson.data && figJson.data[0] && figJson.data[0].ids) || [];
-      const parents = (figJson && figJson.data && figJson.data[0] && figJson.data[0].parents) || [];
+      const ids = figJson?.data?.[0]?.ids || [];
+      const parents = figJson?.data?.[0]?.parents || [];
       const parentMap = new Map();
-      for (let i = 0; i < ids.length; i += 1) {
+      for (let i = 0; i < ids.length; i++) {
         parentMap.set(ids[i], parents[i]);
       }
       const path = [];
@@ -305,11 +255,10 @@ window.dash_clientside.clientside = {
         const next = parentMap.get(current);
         if (!next || next === current) break;
         current = next;
-        guard += 1;
+        guard++;
       }
       return path.reverse();
     }
-
 
     /**
      * Wait for Plotly's plotly_afterplot event to ensure treemap is fully rendered.
@@ -317,24 +266,16 @@ window.dash_clientside.clientside = {
      * @param {function} callback - Function to call when render is confirmed.
      * @param {number} timeout - Max time to wait in ms (default 5000).
      */
-    function waitForPlotlyRender(callback, timeout) {
-      timeout = timeout || 5000;
-      const hostDiv = document.getElementById('treemap-graph');
-      const plotDiv = hostDiv && hostDiv.querySelector('.js-plotly-plot');
-
+    function waitForPlotlyRender(callback, timeout = 5000) {
+      const plotDiv = getPlotDiv();
       let resolved = false;
       let pollCount = 0;
-      const maxPolls = 20; // 20 polls at 250ms = 5s max
-      const pollDelay = 250;
 
       const tryCallback = () => {
         if (resolved) return;
-        if (isTreemapTextRendered()) {
-          resolved = true;
-          console.debug('[Treemap Focus] Treemap fully rendered, proceeding with click');
-          // Add small delay after render detection for any final layout adjustments
-          setTimeout(callback, 100);
-        }
+        resolved = true;
+        console.debug('[Treemap Focus] Treemap fully rendered, proceeding with click');
+        setTimeout(callback, 100);
       };
 
       // Listen for plotly_afterplot event as primary signal
@@ -342,14 +283,10 @@ window.dash_clientside.clientside = {
         const afterPlotHandler = () => {
           console.debug('[Treemap Focus] plotly_afterplot event received');
           plotDiv.removeEventListener('plotly_afterplot', afterPlotHandler);
-          // Check if text is rendered after the event
-          setTimeout(tryCallback, 50);
+          setTimeout(() => { if (isTreemapTextRendered()) tryCallback(); }, 50);
         };
         plotDiv.addEventListener('plotly_afterplot', afterPlotHandler);
-        // Clean up listener after timeout
-        setTimeout(() => {
-          plotDiv.removeEventListener('plotly_afterplot', afterPlotHandler);
-        }, timeout);
+        setTimeout(() => plotDiv.removeEventListener('plotly_afterplot', afterPlotHandler), timeout);
       }
 
       // Poll as fallback in case event already fired or doesn't fire
@@ -361,8 +298,8 @@ window.dash_clientside.clientside = {
           tryCallback();
           return;
         }
-        if (pollCount < maxPolls) {
-          setTimeout(poll, pollDelay);
+        if (pollCount < 20) {
+          setTimeout(poll, 250);
         } else {
           // Give up and try anyway after max polls
           console.debug('[Treemap Focus] Max polls reached, proceeding anyway');
@@ -371,22 +308,19 @@ window.dash_clientside.clientside = {
         }
       };
 
-      // Start polling after initial delay
       setTimeout(poll, 300);
     }
 
     /**
      * Click through the ancestor path to ensure the final node is visible at maxdepth.
-     * This is important when Plotly treemap requires expanding parents to reach deep nodes.
      * Waits for treemap to be fully rendered before clicking.
      * @param {string} targetId
      * @param {object} figJson
      * @returns {boolean}
      */
     function focusSliceByIdSequential(targetId, figJson) {
-      if (!figJson || !figJson.data || !figJson.data[0]) return false;
-      const hostDiv = document.getElementById('treemap-graph');
-      const plotDiv = hostDiv && hostDiv.querySelector('.js-plotly-plot');
+      if (!figJson?.data?.[0]) return false;
+      const plotDiv = getPlotDiv();
       const path = buildAncestorPath(targetId, figJson);
       console.debug('[Treemap Focus] Focusing path', path);
 
@@ -398,15 +332,7 @@ window.dash_clientside.clientside = {
         // Prefer Plotly restyle to match manual click behavior per step.
         try {
           if (plotDiv && window.Plotly && typeof window.Plotly.restyle === 'function') {
-            const plotData = Array.isArray(plotDiv.data) ? plotDiv.data : [];
-            let traceIndex = -1;
-            for (let i = 0; i < plotData.length; i += 1) {
-              const tr = plotData[i];
-              if (tr && tr.type === 'treemap' && Array.isArray(tr.ids) && tr.ids.includes(id)) {
-                traceIndex = i;
-                break;
-              }
-            }
+            const { traceIndex } = findTreemapTrace(plotDiv, id);
             if (traceIndex >= 0) {
               console.debug('[Treemap Focus] Step restyle level', { id, traceIndex, idx });
               window.Plotly.restyle(plotDiv, { level: id }, [traceIndex]);
@@ -424,12 +350,14 @@ window.dash_clientside.clientside = {
 
         // Wait for Plotly to finish before the next step.
         if (plotDiv) {
+          let fallbackTimer = null;
           const afterPlotHandler = () => {
+            clearTimeout(fallbackTimer);
             plotDiv.removeEventListener('plotly_afterplot', afterPlotHandler);
             setTimeout(() => stepFocus(idx + 1), 30);
           };
           plotDiv.addEventListener('plotly_afterplot', afterPlotHandler);
-          setTimeout(() => {
+          fallbackTimer = setTimeout(() => {
             plotDiv.removeEventListener('plotly_afterplot', afterPlotHandler);
             stepFocus(idx + 1);
           }, 10);
@@ -438,59 +366,39 @@ window.dash_clientside.clientside = {
         }
       };
 
-      // Ensure the base treemap is fully rendered before stepping into the path.
       waitForPlotlyRender(() => stepFocus(0));
       return true;
     }
 
-    // Start polling mechanism to find the slice (in case DOM is still loading)
     let attempts = 0;
-    const maxAttempts = 5; // Maximum polling attempts
-    const pollInterval = 500; // Milliseconds between attempts
-
-    // Use longer initial delay to allow treemap to render
-    const initialDelay = 300;
 
     const pollForSlice = () => {
       attempts++;
-
       try {
-        const idsDebug = (figure && figure.data && figure.data[0] && figure.data[0].ids) || [];
+        const idsDebug = figure?.data?.[0]?.ids || [];
         console.debug('[Treemap Focus] Attempt', attempts, {
           idsCount: Array.isArray(idsDebug) ? idsDebug.length : 0,
-          plotlyVersion: (window.Plotly && window.Plotly.version) || 'unknown',
+          plotlyVersion: window.Plotly?.version || 'unknown',
         });
       } catch (_) { }
 
-      // Try to find and click the slice via coordinates only
-      const usedIdRaw = (figure && figure.data && figure.data[0] && Array.isArray(figure.data[0].ids))
-        ? focusNode // focus parameter may carry id
-        : null;
-      const usedId = usedIdRaw ? decodeURIComponent(usedIdRaw.replace(/\+/g, ' ')).trim() : null;
-
-      if (usedId) {
-        // Prefer sequential clicks to expand parents before targeting the final node.
-        const ok = focusSliceByIdSequential(usedId, figure) || focusSliceById(usedId, figure);
-        console.debug('[Treemap Focus] Synthetic click by id result', ok, 'for id', usedId);
+      if (figure?.data?.[0] && Array.isArray(figure.data[0].ids)) {
+        const ok = focusSliceByIdSequential(decodedFocusNode, figure) || focusSliceById(decodedFocusNode, figure);
+        console.debug('[Treemap Focus] Synthetic click by id result', ok, 'for id', decodedFocusNode);
         if (ok) return;
       }
 
-      // Continue polling if not found and under max attempts
-      if (attempts < maxAttempts) {
-        setTimeout(pollForSlice, pollInterval);
-      }
+      if (attempts < 5) setTimeout(pollForSlice, 500);
     };
 
-    // Start polling after the calculated initial delay
-    console.debug('[Treemap Focus] Starting poll after initial delay', initialDelay);
-    setTimeout(pollForSlice, initialDelay);
+    console.debug('[Treemap Focus] Starting poll after initial delay', 300);
+    setTimeout(pollForSlice, 300);
 
-    // Return a status message for the dummy output component
     const msg = `Search triggered for '${decodedFocusNode}' at ${new Date().toISOString()}`;
     console.debug('[Treemap Focus] Returning status', msg);
     return msg;
-  }
-  ,
+  },
+
   /**
    * Build a shareable URL from current filters and selected id and copy it.
    * Params included: budget_id, viewby, spending_type, unit, focus
@@ -514,19 +422,22 @@ window.dash_clientside.clientside = {
       if (unit) params.set('unit', unit);
       if (selectedId) params.set('focus', selectedId);
 
-      const base = window.location.origin + (pathname || '/');
-      const url = `${base}?${params.toString()}`;
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(url);
-        return 'Link copied to clipboard';
+      const url = `${window.location.origin}${pathname || '/'}?${params.toString()}`;
+
+      const copyViaTextarea = () => {
+        const el = document.createElement('textarea');
+        el.value = url;
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand('copy');
+        document.body.removeChild(el);
+      };
+
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(url).catch(copyViaTextarea);
+      } else {
+        copyViaTextarea();
       }
-      // Fallback for older browsers
-      const el = document.createElement('textarea');
-      el.value = url;
-      document.body.appendChild(el);
-      el.select();
-      document.execCommand('copy');
-      document.body.removeChild(el);
       return 'Link copied to clipboard';
     } catch (e) {
       console.debug('[Share] Failed to copy link', e);
@@ -549,13 +460,9 @@ window.dash_clientside.clientside = {
    */
   downloadPlotImage: function (n_clicks, pathname, budgetId, budgetOptions, unit, spendingType) {
     try {
-      // If no click, do nothing
-      if (!n_clicks) {
-        return window.dash_clientside.no_update;
-      }
+      if (!n_clicks) return window.dash_clientside.no_update;
 
-      // Determine which graph to download based on pathname
-      var graphId, filenamePrefix;
+      let graphId, filenamePrefix;
       if (!pathname || pathname === '/') {
         graphId = 'treemap-graph';
         filenamePrefix = 'treemap';
@@ -566,146 +473,97 @@ window.dash_clientside.clientside = {
         return window.dash_clientside.no_update;
       }
 
-      // Get the Dash Graph container
-      var container = document.getElementById(graphId);
+      const container = document.getElementById(graphId);
       if (!container) {
         console.warn('[Download] Graph container not found:', graphId);
         return window.dash_clientside.no_update;
       }
 
-      // Find the actual Plotly plot div
-      var graphDiv = container.querySelector('.js-plotly-plot');
-      if (!graphDiv) {
-        graphDiv = container;
-      }
-
-      // Verify Plotly data exists
+      const graphDiv = container.querySelector('.js-plotly-plot') || container;
       if (!graphDiv.data || !graphDiv.layout) {
         console.warn('[Download] No Plotly data found on element');
         return window.dash_clientside.no_update;
       }
 
-      // Get budget name from options
-      var budgetName = 'unknown';
-      if (budgetOptions && budgetId != null) {
-        for (var i = 0; i < budgetOptions.length; i++) {
-          if (budgetOptions[i].value === budgetId) {
-            budgetName = budgetOptions[i].label || 'unknown';
-            break;
-          }
-        }
-      }
+      const budgetName = budgetOptions?.find((o) => o.value === budgetId)?.label || 'unknown';
+      const now = new Date();
+      const timestamp = now.toISOString().replace(/[-:]/g, '').replace('T', '_').slice(0, 15);
+      const sanitizedBudget = budgetName.replace(/\s+/g, '_').replace(/\//g, '-');
+      const unitLabel = (unit || 'ABSOLUTE').toLowerCase();
+      const militarySuffix = spendingType === 'MILITARY' ? '_military' : '';
+      const filename = `${filenamePrefix}_${timestamp}_${sanitizedBudget}_${unitLabel}${militarySuffix}`;
 
-      // Build filename
-      var now = new Date();
-      var currentYear = now.getFullYear();
-      var timestamp = now.toISOString().replace(/[-:]/g, '').replace('T', '_').slice(0, 15);
-      var sanitizedBudget = (budgetName || 'unknown').replace(/\s+/g, '_').replace(/\//g, '-');
-      var unitLabel = (unit || 'ABSOLUTE').toLowerCase();
-      var militarySuffix = spendingType === 'MILITARY' ? '_military' : '';
-      var filename = filenamePrefix + '_' + timestamp + '_' + sanitizedBudget + '_' + unitLabel + militarySuffix;
+      const width = graphDiv.offsetWidth || 800;
+      const height = graphDiv.offsetHeight || 600;
+      const scale = 2;
 
-      // Get dimensions
-      var width = graphDiv.offsetWidth || 800;
-      var height = graphDiv.offsetHeight || 600;
-      var scale = 2;
-
-      // Get the SVG from the current plot
-      var svgElement = graphDiv.querySelector('svg.main-svg');
+      const svgElement = graphDiv.querySelector('svg.main-svg');
       if (!svgElement) {
         console.warn('[Download] SVG element not found, falling back to Plotly.downloadImage');
-        window.Plotly.downloadImage(graphDiv, {
-          format: 'png',
-          width: width * scale,
-          height: height * scale,
-          filename: filename
-        });
+        window.Plotly.downloadImage(graphDiv, { format: 'png', width: width * scale, height: height * scale, filename });
         return now.toISOString();
       }
 
-      // Clone the SVG
-      var svgClone = svgElement.cloneNode(true);
-      var svgWidth = parseInt(svgElement.getAttribute('width')) || width;
-      var svgHeight = parseInt(svgElement.getAttribute('height')) || height;
+      const svgClone = svgElement.cloneNode(true);
+      const svgWidth = parseInt(svgElement.getAttribute('width')) || width;
+      const svgHeight = parseInt(svgElement.getAttribute('height')) || height;
 
-      // Add a style element with embedded Google Font
-      var styleEl = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+      // Embed Google Font for correct text rendering in exported image
+      const styleEl = document.createElementNS('http://www.w3.org/2000/svg', 'style');
       styleEl.textContent = '@import url("https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap"); text, tspan { font-family: "Source Sans 3", sans-serif !important; }';
       svgClone.insertBefore(styleEl, svgClone.firstChild);
 
-      // Update all text elements to use Source Sans 3
-      var textElements = svgClone.querySelectorAll('text, tspan');
-      textElements.forEach(function (el) {
+      svgClone.querySelectorAll('text, tspan').forEach((el) => {
         el.setAttribute('font-family', '"Source Sans 3", sans-serif');
       });
 
-      // Add watermark text element to the SVG
-      var watermarkText = 'Stiftung Wissenschaft und Politik (SWP), ' + currentYear + ' | CC BY 4.0';
-      var textNS = 'http://www.w3.org/2000/svg';
-      var watermark = document.createElementNS(textNS, 'text');
+      const watermark = document.createElementNS('http://www.w3.org/2000/svg', 'text');
       watermark.setAttribute('x', svgWidth - 10);
       watermark.setAttribute('y', svgHeight - 8);
       watermark.setAttribute('text-anchor', 'end');
       watermark.setAttribute('font-family', '"Source Sans 3", sans-serif');
       watermark.setAttribute('font-size', '12');
       watermark.setAttribute('fill', '#333333');
-      watermark.textContent = watermarkText;
+      watermark.textContent = `Stiftung Wissenschaft und Politik (SWP), ${now.getFullYear()} | CC BY 4.0`;
       svgClone.appendChild(watermark);
 
-      // Set explicit dimensions
       svgClone.setAttribute('width', svgWidth);
       svgClone.setAttribute('height', svgHeight);
       svgClone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
 
-      // Serialize SVG
-      var serializer = new XMLSerializer();
-      var svgString = serializer.serializeToString(svgClone);
-
-      // Load the Google Font before drawing
-      var fontUrl = 'https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap';
+      const svgString = new XMLSerializer().serializeToString(svgClone);
 
       // Create a hidden element to trigger font loading
-      var fontLoader = document.createElement('div');
+      const fontLoader = document.createElement('div');
       fontLoader.style.cssText = 'position:absolute;left:-9999px;font-family:"Source Sans 3",sans-serif;';
       fontLoader.textContent = 'Font loader';
       document.body.appendChild(fontLoader);
 
-      // Wait for font to load, then render
-      var fontLoadPromise;
-      if (document.fonts && document.fonts.load) {
-        fontLoadPromise = document.fonts.load('400 12px "Source Sans 3"').then(function () {
-          return document.fonts.load('600 12px "Source Sans 3"');
-        });
-      } else {
-        fontLoadPromise = new Promise(function (resolve) { setTimeout(resolve, 500); });
-      }
+      const fontLoadPromise = document.fonts?.load
+        ? Promise.all([
+            document.fonts.load('400 12px "Source Sans 3"'),
+            document.fonts.load('600 12px "Source Sans 3"'),
+          ])
+        : new Promise((resolve) => setTimeout(resolve, 500));
 
-      fontLoadPromise.then(function () {
-        // Create canvas for PNG conversion
-        var canvas = document.createElement('canvas');
+      fontLoadPromise.then(() => {
+        const canvas = document.createElement('canvas');
         canvas.width = svgWidth * scale;
         canvas.height = svgHeight * scale;
-        var ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext('2d');
         ctx.scale(scale, scale);
         ctx.fillStyle = 'white';
         ctx.fillRect(0, 0, svgWidth, svgHeight);
 
-        // Create image from SVG
-        var img = new Image();
-        // Use data URL to avoid CORS issues
-        var svgBase64 = btoa(unescape(encodeURIComponent(svgString)));
-        var dataUrl = 'data:image/svg+xml;base64,' + svgBase64;
-
-        img.onload = function () {
+        const img = new Image();
+        img.onload = () => {
           ctx.drawImage(img, 0, 0);
           document.body.removeChild(fontLoader);
-
-          // Convert to PNG and download
-          canvas.toBlob(function (pngBlob) {
-            var downloadUrl = URL.createObjectURL(pngBlob);
-            var link = document.createElement('a');
+          canvas.toBlob((pngBlob) => {
+            const downloadUrl = URL.createObjectURL(pngBlob);
+            const link = document.createElement('a');
             link.href = downloadUrl;
-            link.download = filename + '.png';
+            link.download = `${filename}.png`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
@@ -713,21 +571,13 @@ window.dash_clientside.clientside = {
             console.debug('[Download] PNG downloaded:', filename);
           }, 'image/png');
         };
-
-        img.onerror = function (err) {
+        img.onerror = (err) => {
           console.error('[Download] SVG to image failed:', err);
           document.body.removeChild(fontLoader);
-          // Fallback to Plotly's built-in export
-          window.Plotly.downloadImage(graphDiv, {
-            format: 'png',
-            width: width * scale,
-            height: height * scale,
-            filename: filename
-          });
+          window.Plotly.downloadImage(graphDiv, { format: 'png', width: width * scale, height: height * scale, filename });
         };
-
-        img.src = dataUrl;
-      }).catch(function (err) {
+        img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgString)));
+      }).catch((err) => {
         console.error('[Download] Font loading failed:', err);
         document.body.removeChild(fontLoader);
       });
@@ -748,32 +598,30 @@ window.dash_clientside.clientside = {
    * @returns {window.dash_clientside.no_update}
    */
   applyTreemapTextInset: function (figure) {
-    if (!figure || !figure.data || !figure.data.length) return window.dash_clientside.no_update;
+    if (!figure?.data?.length) return window.dash_clientside.no_update;
 
-    var H_INSET = 5;
+    const H_INSET = 5;
 
     function scheduleInset(initialDelay) {
-      var maxTries = 30;
-      var tries = 0;
+      let tries = 0;
 
       function tryApply() {
         tries++;
-        var plotDiv = document.querySelector('#treemap-graph .js-plotly-plot');
+        const plotDiv = document.querySelector('#treemap-graph .js-plotly-plot');
         if (!plotDiv) {
-          if (tries < maxTries) setTimeout(tryApply, 100);
+          if (tries < 30) setTimeout(tryApply, 100);
           return;
         }
 
-        var slices = plotDiv.querySelectorAll('g.slice');
-        var rendered = false;
-        slices.forEach(function (slice) {
-          var surface = slice.querySelector('path.surface');
+        let rendered = false;
+        plotDiv.querySelectorAll('g.slice').forEach((slice) => {
+          const surface = slice.querySelector('path.surface');
           if (surface) {
             try { if (surface.getBBox().width > 0) rendered = true; } catch (e) { }
           }
         });
         if (!rendered) {
-          if (tries < maxTries) setTimeout(tryApply, 100);
+          if (tries < 30) setTimeout(tryApply, 100);
           return;
         }
 
@@ -787,20 +635,19 @@ window.dash_clientside.clientside = {
           // Use a MutationObserver on the treemap layer's path `d` attributes instead.
           // Plotly rewrites `d` on every re-render; we never touch `d` (only `transform`),
           // so there is no risk of an infinite loop.
-          var treemapLayer = plotDiv.querySelector('.treemaplayer');
+          const treemapLayer = plotDiv.querySelector('.treemaplayer');
           if (treemapLayer) {
-            var insetAnimating = false;
-            var tileObserver = new MutationObserver(function () {
+            let insetAnimating = false;
+            const tileObserver = new MutationObserver(() => {
               // On the very first mutation of each animation burst, fire scheduleInset
-              // immediately so text is corrected as early as possible. Tiles have barely
-              // moved at this point so the measured geometry is close to the final state.
+              // immediately so text is corrected as early as possible.
               if (!insetAnimating) {
                 insetAnimating = true;
                 scheduleInset(0);
               }
               // Also re-apply once tiles have fully settled for a pixel-perfect result.
               clearTimeout(plotDiv._textInsetTimer);
-              plotDiv._textInsetTimer = setTimeout(function () {
+              plotDiv._textInsetTimer = setTimeout(() => {
                 insetAnimating = false;
                 scheduleInset();
               }, 1);
@@ -819,10 +666,10 @@ window.dash_clientside.clientside = {
         // appending scale(ratio, 1) compresses symmetrically around that center.
         // We avoid CSS transforms entirely — they override SVG attribute transforms
         // and cause text to lose its tile-center position.
-        slices.forEach(function (slice) {
-          var surface = slice.querySelector('path.surface');
+        plotDiv.querySelectorAll('g.slice').forEach((slice) => {
+          const surface = slice.querySelector('path.surface');
           if (!surface) return;
-          var gText = slice.querySelector('g.slicetext');
+          const gText = slice.querySelector('g.slicetext');
           if (!gText) return;
 
           // Clear any CSS transforms from previous runs so measurements are clean.
@@ -831,10 +678,9 @@ window.dash_clientside.clientside = {
 
           // Strip the exact transform string we appended last time (stored in a data
           // attribute) so we always measure against Plotly's unmodified transform.
-          // This is robust regardless of what shape our appended string takes.
-          var currentTransform = gText.getAttribute('transform') || '';
-          var prevAppended = gText.getAttribute('data-text-scale') || '';
-          var cleanTransform;
+          const currentTransform = gText.getAttribute('transform') || '';
+          const prevAppended = gText.getAttribute('data-text-scale') || '';
+          let cleanTransform;
           if (prevAppended && currentTransform.endsWith(prevAppended)) {
             cleanTransform = currentTransform.slice(0, currentTransform.length - prevAppended.length).trim();
           } else {
@@ -845,13 +691,11 @@ window.dash_clientside.clientside = {
           }
           gText.setAttribute('transform', cleanTransform);
 
-          var surfaceRect = surface.getBoundingClientRect();
-          var textRect = gText.getBoundingClientRect();
+          const surfaceRect = surface.getBoundingClientRect();
+          const textRect = gText.getBoundingClientRect();
+          const targetLeft = surfaceRect.left + H_INSET;
+          const targetRight = surfaceRect.right - H_INSET;
 
-          var targetLeft = surfaceRect.left + H_INSET;
-          var targetRight = surfaceRect.right - H_INSET;
-
-          // No overflow on either side — nothing to do.
           if (textRect.left >= targetLeft && textRect.right <= targetRight) {
             gText.removeAttribute('data-text-scale');
             return;
@@ -859,10 +703,9 @@ window.dash_clientside.clientside = {
 
           // Anchor the scale to the text's natural left edge (clamped to the left inset
           // boundary). Scaling around this point keeps the left edge visually fixed so
-          // compressed text starts at the same relative position as uncompressed text,
-          // and only the right edge is pulled inward.
-          var anchorVP = Math.max(textRect.left, targetLeft);
-          var ratio = (targetRight - anchorVP) / textRect.width;
+          // compressed text starts at the same relative position as uncompressed text.
+          const anchorVP = Math.max(textRect.left, targetLeft);
+          const ratio = (targetRight - anchorVP) / textRect.width;
           if (ratio >= 1 || ratio <= 0) {
             gText.removeAttribute('data-text-scale');
             return;
@@ -870,22 +713,22 @@ window.dash_clientside.clientside = {
 
           // Build a scale transform around the anchor point converted to local SVG
           // coordinates via the CTM.
-          var scaleTransform;
-          var ctm = gText.getCTM();
+          let scaleTransform;
+          const ctm = gText.getCTM();
           if (ctm && ctm.a !== 0) {
-            var localAnchor = (anchorVP - ctm.e) / ctm.a;
-            scaleTransform = 'translate(' + localAnchor + ',0) scale(' + ratio + ',1) translate(' + (-localAnchor) + ',0)';
+            const localAnchor = (anchorVP - ctm.e) / ctm.a;
+            scaleTransform = `translate(${localAnchor},0) scale(${ratio},1) translate(${-localAnchor},0)`;
           } else {
-            scaleTransform = 'scale(' + ratio + ',1)';
+            scaleTransform = `scale(${ratio},1)`;
           }
 
-          var appended = (cleanTransform ? ' ' : '') + scaleTransform;
+          const appended = (cleanTransform ? ' ' : '') + scaleTransform;
           gText.setAttribute('data-text-scale', appended);
           gText.setAttribute('transform', cleanTransform + appended);
         });
       }
 
-      setTimeout(tryApply, initialDelay !== undefined ? initialDelay : 10);
+      setTimeout(tryApply, initialDelay ?? 10);
     }
 
     scheduleInset();
