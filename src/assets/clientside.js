@@ -752,7 +752,7 @@ window.dash_clientside.clientside = {
 
     var H_INSET = 5;
 
-    function scheduleInset() {
+    function scheduleInset(initialDelay) {
       var maxTries = 30;
       var tries = 0;
 
@@ -789,9 +789,21 @@ window.dash_clientside.clientside = {
           // so there is no risk of an infinite loop.
           var treemapLayer = plotDiv.querySelector('.treemaplayer');
           if (treemapLayer) {
+            var insetAnimating = false;
             var tileObserver = new MutationObserver(function () {
+              // On the very first mutation of each animation burst, fire scheduleInset
+              // immediately so text is corrected as early as possible. Tiles have barely
+              // moved at this point so the measured geometry is close to the final state.
+              if (!insetAnimating) {
+                insetAnimating = true;
+                scheduleInset(0);
+              }
+              // Also re-apply once tiles have fully settled for a pixel-perfect result.
               clearTimeout(plotDiv._textInsetTimer);
-              plotDiv._textInsetTimer = setTimeout(scheduleInset, 150);
+              plotDiv._textInsetTimer = setTimeout(function () {
+                insetAnimating = false;
+                scheduleInset();
+              }, 1);
             });
             tileObserver.observe(treemapLayer, {
               subtree: true,
@@ -873,7 +885,7 @@ window.dash_clientside.clientside = {
         });
       }
 
-      setTimeout(tryApply, 50);
+      setTimeout(tryApply, initialDelay !== undefined ? initialDelay : 10);
     }
 
     scheduleInset();

@@ -170,6 +170,7 @@ def generate_figure(
     fig.update_layout(
         margin=dict(t=15, l=10, r=10, b=10),
         font=dict(family="Source Sans 3"),
+        transition=dict(duration=300, easing="linear"),
     )
 
     return fig
