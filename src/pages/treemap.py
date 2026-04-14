@@ -179,32 +179,38 @@ def generate_figure(
 
 
 def _build_treemap_node_map(df: pd.DataFrame, translated: bool) -> dict[str, dict[str, int | str]]:
-    """Build a node-id map (Plotly treemap ids) to dimension metadata."""
-    name_ending = "_NAME_TRANSLATED" if translated else "_NAME"
-    name_cols = ["ROOT"] + [col for col in df.columns if col.endswith(name_ending)]
+    """Build a node-id map (Plotly treemap ids) to dimension metadata.
+
+    Paths for both languages are always included so that focus lookups succeed
+    regardless of which language was active when a node was selected.
+    """
     node_map: dict[str, dict[str, int | str]] = {}
 
-    for _, row in df.iterrows():
-        labels: list[str] = []
-        for col in name_cols:
-            label = row.get(col)
-            if not label:
-                break
-            labels.append(str(label))
-            if col == "ROOT":
-                continue
-            base = col.replace(name_ending, "")
-            dim_id = row.get(f"{base}_DIM_ID")
-            dim_orig_id = row.get(f"{base}_ORIG_ID")
-            dim_type = "PROGRAM" if base.startswith("PROGRAM_") else base
-            path = "/".join(labels)
-            # Skip null/NaN ids that can appear for root/placeholder nodes.
-            if pd.notnull(dim_id) and pd.notnull(dim_orig_id):
-                node_map[path] = {
-                    "dimension_id": int(dim_id),
-                    "dimension_original_identifier": str(dim_orig_id),
-                    "dimension_type": str(dim_type),
-                }
+    for name_ending in ("_NAME", "_NAME_TRANSLATED"):
+        name_cols = ["ROOT"] + [col for col in df.columns if col.endswith(name_ending)]
+
+        for _, row in df.iterrows():
+            labels: list[str] = []
+            for col in name_cols:
+                label = row.get(col)
+                if not label:
+                    break
+                labels.append(str(label))
+                if col == "ROOT":
+                    continue
+                base = col.replace(name_ending, "")
+                dim_id = row.get(f"{base}_DIM_ID")
+                dim_orig_id = row.get(f"{base}_ORIG_ID")
+                dim_type = "PROGRAM" if base.startswith("PROGRAM_") else base
+                path = "/".join(labels)
+                # Skip null/NaN ids that can appear for root/placeholder nodes.
+                if pd.notnull(dim_id) and pd.notnull(dim_orig_id):
+                    node_map[path] = {
+                        "dimension_id": int(dim_id),
+                        "dimension_original_identifier": str(dim_orig_id),
+                        "dimension_type": str(dim_type),
+                        "language": "EN" if name_ending == "_NAME_TRANSLATED" else "RU",
+                    }
 
     return node_map
 
@@ -265,8 +271,8 @@ def update_figure_from_filters(
         raise PreventUpdate
 
     # Fetch and render using the selected values from stores
-    # Use translated names when language is ENG (English)
-    translated = language == "ENG"
+    # Use translated names when language is EN (English)
+    translated = language == "EN"
     df = transform_treemap_data(
         budget_id=budget_id,
         spending_type=spending_type,
@@ -424,7 +430,7 @@ def download_treemap_data(
         spending_type=spending_type,
         unit=unit,
     )
-    translated = language == "ENG"
+    translated = language == "EN"
     download_df = _build_download_df(
         df, spending_type=spending_type, viewby=viewby, translated=translated, unit=unit
     )

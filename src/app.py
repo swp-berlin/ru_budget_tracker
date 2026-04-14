@@ -229,11 +229,11 @@ layout = html.Div(
                         ),
                         dcc.Download(id="download-treemap-data"),
                         dcc.Download(id="download-timeseries-data"),
-                        # Language toggle button: default text shows next language (ENG), default param RU
+                        # Language toggle button: default text shows next language (EN), default param RU
                         dbc.Button(
                             [
                                 # Text for the button
-                                html.Span("ENG", className="btn-label"),
+                                html.Span("EN", className="btn-label"),
                             ],
                             id="btn-switch-data-language",
                             title="Toggle data language",
@@ -393,6 +393,8 @@ clientside_callback(
     Output("dummy-output", "children"),
     Input("url", "search"),
     Input("treemap-graph", "figure", allow_optional=True),
+    State("store-treemap-node-map", "data"),
+    State("store-language", "data"),
     prevent_initial_call=True,
 )
 
@@ -407,6 +409,7 @@ clientside_callback(
     State("store-spending-type", "data"),
     State("store-unit", "data"),
     State("store-selected-id", "data"),
+    State("store-treemap-node-map", "data"),
     prevent_initial_call=True,
 )
 
@@ -445,14 +448,14 @@ def show_share_toast(n_clicks: int | None) -> bool:
     prevent_initial_call=True,
 )
 def toggle_language(n_clicks: int | None, current_lang: str | None):
-    """Toggle the language between RU and ENG.
+    """Toggle the language between RU and EN.
 
     - Button text shows the next language (handled by a separate callback).
     """
     if not n_clicks:
         raise PreventUpdate
 
-    new_lang = "ENG" if (current_lang or "RU") == "RU" else "RU"
+    new_lang = "EN" if (current_lang or "RU") == "RU" else "RU"
 
     return [html.Span(new_lang, className="btn-label")], new_lang
 

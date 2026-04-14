@@ -9,7 +9,7 @@ window.dash_clientside.clientside = {
    * @param {object} figure - The treemap figure object (used to detect figure updates)
    * @returns {string} A status message for the dummy output component.
    */
-  findAndClickSlice: function (search, figure) {
+  findAndClickSlice: function (search, figure, nodeMap, language) {
     console.debug('[Treemap Focus] Callback invoked', { search, hasFigure: !!figure });
 
     if (!search) return `No search parameters at ${new Date().toISOString()}`;
@@ -21,7 +21,31 @@ window.dash_clientside.clientside = {
     if (!focusNode) return `No focus parameter found at ${new Date().toISOString()}`;
 
     // URLSearchParams already decodes %xx; apply decodeURIComponent only for double-encoded values.
-    const decodedFocusNode = decodeURIComponent(focusNode).trim();
+    let decodedFocusNode = decodeURIComponent(focusNode).trim();
+
+    // If the focus param is a numeric dimension_id, reverse-look it up in the node map.
+    // Each entry carries a "language" tag ("RU" or "EN") set during nodeMap construction,
+    // so we can reliably select the path that matches the active figure language without
+    // relying on Plotly's exact ID format.
+    const dimId = parseInt(decodedFocusNode, 10);
+    if (!isNaN(dimId) && nodeMap) {
+      const currentLang = (language || 'RU').toUpperCase();
+      const allEntries = Object.entries(nodeMap).filter(([, info]) => info.dimension_id === dimId);
+      // Prefer the entry whose language tag matches the active language; fall back to any match.
+      const matchingEntry =
+        allEntries.find(([, info]) => info.language === currentLang) || allEntries[0];
+      if (matchingEntry) {
+        decodedFocusNode = matchingEntry[0];
+        console.debug('[Treemap Focus] Resolved dimension_id', dimId, '→', decodedFocusNode, '(lang:', currentLang, ')');
+      }
+    }
+
+    // If the figure is already loaded and the resolved node is not in it, bail immediately.
+    // This avoids 5 × 500 ms retries when the node simply is not present in the current figure.
+    if (figure?.data?.[0]?.ids && !figure.data[0].ids.includes(decodedFocusNode)) {
+      console.debug('[Treemap Focus] Focus node not in current figure, skipping');
+      return `Focus node not in figure at ${new Date().toISOString()}`;
+    }
 
     function getPlotDiv() {
       return document.querySelector('#treemap-graph .js-plotly-plot');
@@ -218,23 +242,6 @@ window.dash_clientside.clientside = {
     }
 
     /**
-     * Check if the treemap is fully rendered by verifying text elements exist.
-     * @returns {boolean}
-     */
-    function isTreemapTextRendered() {
-      const plotDiv = getPlotDiv();
-      if (!plotDiv) return false;
-      const treemapLayer = plotDiv.querySelector('.treemaplayer');
-      if (!treemapLayer) return false;
-      const textElements = treemapLayer.querySelectorAll('g.slice g.slicetext text');
-      const sliceCount = treemapLayer.querySelectorAll('g.slice.cursor-pointer').length;
-      if (textElements.length === 0 || sliceCount === 0) return false;
-      const hasText = Array.from(textElements).some((t) => t.textContent?.trim().length > 0);
-      console.debug('[Treemap Focus] Render check', { textElements: textElements.length, sliceCount, hasText });
-      return hasText;
-    }
-
-    /**
      * Build an ordered ancestor path from root to target id using trace parents.
      * @param {string} targetId
      * @param {object} figJson
@@ -261,54 +268,26 @@ window.dash_clientside.clientside = {
     }
 
     /**
-     * Wait for Plotly's plotly_afterplot event to ensure treemap is fully rendered.
-     * Falls back to polling if event doesn't fire within timeout.
-     * @param {function} callback - Function to call when render is confirmed.
-     * @param {number} timeout - Max time to wait in ms (default 5000).
+     * Wait for Plotly's plotly_afterplot event, then invoke callback.
+     * Falls back to a fixed timeout if the event does not fire.
+     * @param {function} callback
+     * @param {number} timeout - Fallback delay in ms (default 400).
      */
-    function waitForPlotlyRender(callback, timeout = 5000) {
+    function waitForPlotlyRender(callback, timeout = 400) {
       const plotDiv = getPlotDiv();
       let resolved = false;
-      let pollCount = 0;
-
-      const tryCallback = () => {
+      const resolve = () => {
         if (resolved) return;
         resolved = true;
-        console.debug('[Treemap Focus] Treemap fully rendered, proceeding with click');
-        setTimeout(callback, 100);
+        if (plotDiv) plotDiv.removeEventListener('plotly_afterplot', afterPlotHandler);
+        setTimeout(callback, 50);
       };
-
-      // Listen for plotly_afterplot event as primary signal
-      if (plotDiv) {
-        const afterPlotHandler = () => {
-          console.debug('[Treemap Focus] plotly_afterplot event received');
-          plotDiv.removeEventListener('plotly_afterplot', afterPlotHandler);
-          setTimeout(() => { if (isTreemapTextRendered()) tryCallback(); }, 50);
-        };
-        plotDiv.addEventListener('plotly_afterplot', afterPlotHandler);
-        setTimeout(() => plotDiv.removeEventListener('plotly_afterplot', afterPlotHandler), timeout);
-      }
-
-      // Poll as fallback in case event already fired or doesn't fire
-      const poll = () => {
-        if (resolved) return;
-        pollCount++;
-        console.debug('[Treemap Focus] Polling for render completion', pollCount);
-        if (isTreemapTextRendered()) {
-          tryCallback();
-          return;
-        }
-        if (pollCount < 20) {
-          setTimeout(poll, 250);
-        } else {
-          // Give up and try anyway after max polls
-          console.debug('[Treemap Focus] Max polls reached, proceeding anyway');
-          resolved = true;
-          callback();
-        }
+      const afterPlotHandler = () => {
+        console.debug('[Treemap Focus] plotly_afterplot received');
+        resolve();
       };
-
-      setTimeout(poll, 300);
+      if (plotDiv) plotDiv.addEventListener('plotly_afterplot', afterPlotHandler);
+      setTimeout(resolve, timeout);
     }
 
     /**
@@ -412,7 +391,7 @@ window.dash_clientside.clientside = {
    * @param {string|null} selectedId
    * @returns {string} Status message in dummy output title.
    */
-  copyShareLink: function (n_clicks, pathname, budgetId, viewby, spendingType, unit, selectedId) {
+  copyShareLink: function (n_clicks, pathname, budgetId, viewby, spendingType, unit, selectedId, nodeMap) {
     try {
       if (!n_clicks) return 'Share not triggered';
       const params = new URLSearchParams();
@@ -420,7 +399,12 @@ window.dash_clientside.clientside = {
       if (viewby) params.set('viewby', viewby);
       if (spendingType) params.set('spending_type', spendingType);
       if (unit) params.set('unit', unit);
-      if (selectedId) params.set('focus', selectedId);
+      if (selectedId) {
+        // Use the short dimension_id from the node map instead of the full path.
+        const nodeInfo = nodeMap && nodeMap[selectedId];
+        const focusParam = nodeInfo ? String(nodeInfo.dimension_id) : selectedId;
+        params.set('focus', focusParam);
+      }
 
       const url = `${window.location.origin}${pathname || '/'}?${params.toString()}`;
 
