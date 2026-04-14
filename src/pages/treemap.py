@@ -94,7 +94,7 @@ def transform_treemap_data(
     budget_id: int,
     spending_type: SpendingTypeLiteral,
     unit: UnitLiteral,
-    character_limit: int = 25,
+    character_limit: int = 50,
 ) -> pd.DataFrame:
     dimensions, programs, published_at = fetch_treemap_data(budget_id)
     budget_type: BudgetTypeLiteral = next(
@@ -129,12 +129,6 @@ def generate_figure(
         hover_data=None,
         custom_data=["BUDGET_TYPE"],
     )
-    # Layout adjustments
-    # Change font to Source Sans 3 and make it wrapped
-    fig.update_layout(
-        margin=dict(t=15, l=10, r=10, b=10),
-        font=dict(family="Source Sans 3"),
-    )
 
     # Extract the necessary data from the treemap trace to compute percentages
     # and apply coloring rules.
@@ -155,22 +149,28 @@ def generate_figure(
         spending_type,
         viewby,
     )
-    fig.update_traces(marker_colors=colors)
     # Combine existing customdata with new percentage data and node ids for hover and click interactions.
     # Attach custom data for hover to every node, including id for click selection.
-    fig.data[0].customdata = list(
-        zip(values, parent_percentages, root_percentages, node_ids)  # type: ignore
+    fig.update_traces(
+        marker_colors=colors,
+        customdata=list(zip(values, parent_percentages, root_percentages, node_ids)),  # type: ignore
+        hovertemplate="<br>".join(
+            [
+                "%{label}",
+                "%{customdata[0]:,.1f}" + unit_map[unit],
+                "%{customdata[1]:.1f}%" + " of parent",
+                "%{customdata[2]:.1f}%" + " of total",
+            ]
+        ),
+        texttemplate="%{label}<br>%{value:,.1f}" + unit_map[unit],
     )
 
-    fig.data[0].hovertemplate = "<br>".join(
-        [
-            "%{label}",
-            "%{customdata[0]:,.1f}" + unit_map[unit],
-            "%{customdata[1]:.1f}%" + " of parent",
-            "%{customdata[2]:.1f}%" + " of total",
-        ]
+    # Layout adjustments
+    # Change font to Source Sans 3 and make it wrapped
+    fig.update_layout(
+        margin=dict(t=15, l=10, r=10, b=10),
+        font=dict(family="Source Sans 3"),
     )
-    fig.data[0].texttemplate = "%{label}<br>%{value:,.1f}" + unit_map[unit]
 
     return fig
 

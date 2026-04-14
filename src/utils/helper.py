@@ -70,7 +70,7 @@ def create_treemap_colors(
         orig_ids = []
         label: str = path_ids[-1]  # The label is the last part of the node_id path
         for pid in path_ids:
-            orig_id = pid.split(" - ")[
+            orig_id = pid.split(" ")[
                 0
             ]  # Extract original ID from label (e.g., "01 - General State")
             orig_ids.append(orig_id)

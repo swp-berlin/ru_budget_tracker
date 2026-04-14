@@ -380,6 +380,13 @@ def toggle_period_menu_disabled(
     return budget_type == "LAW"
 
 
+# Clientside callback to constrain treemap text within tile boundaries via SVG textLength.
+clientside_callback(
+    ClientsideFunction(namespace="clientside", function_name="applyTreemapTextInset"),
+    Output("dummy-output", "className"),
+    Input("treemap-graph", "figure", allow_optional=True),
+)
+
 # Clientside callback to handle URL focus parameter and click simulation
 clientside_callback(
     ClientsideFunction(namespace="clientside", function_name="findAndClickSlice"),

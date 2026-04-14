@@ -78,7 +78,10 @@ def _build_dimension_name_column(translated: bool = False):
         SQLAlchemy column expression for concatenated dimension name.
     """
     name_field = Dimension.name_translated if translated else Dimension.name
-    return func.CONCAT(Dimension.original_identifier, " - ", name_field)
+    return case(
+        (Dimension.type == "PROGRAM", name_field),
+        else_=func.CONCAT(Dimension.original_identifier, " ", name_field),
+    )
 
 
 @lru_cache(maxsize=1)

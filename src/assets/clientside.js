@@ -737,5 +737,116 @@ window.dash_clientside.clientside = {
       console.error('[Download] Error:', e);
       return window.dash_clientside.no_update;
     }
+  },
+
+  /**
+   * Constrain treemap text to stay within tile boundaries using SVG textLength.
+   * Plotly treemap does not clip text — it overflows naturally. This runs after
+   * each figure update and compresses any text line wider than (tile - 2*inset).
+   *
+   * @param {object} figure - Treemap figure (used as trigger only)
+   * @returns {window.dash_clientside.no_update}
+   */
+  applyTreemapTextInset: function (figure) {
+    if (!figure || !figure.data || !figure.data.length) return window.dash_clientside.no_update;
+
+    var H_INSET = 5;
+    var maxTries = 30;
+    var tries = 0;
+
+    function tryApply() {
+      tries++;
+      var plotDiv = document.querySelector('#treemap-graph .js-plotly-plot');
+      if (!plotDiv) {
+        if (tries < maxTries) setTimeout(tryApply, 100);
+        return;
+      }
+
+      var slices = plotDiv.querySelectorAll('g.slice');
+      var rendered = false;
+      slices.forEach(function (slice) {
+        var surface = slice.querySelector('path.surface');
+        if (surface) {
+          try { if (surface.getBBox().width > 0) rendered = true; } catch (e) { }
+        }
+      });
+      if (!rendered) {
+        if (tries < maxTries) setTimeout(tryApply, 100);
+        return;
+      }
+
+      // Constrain overflowing text by appending scale() to Plotly's SVG transform.
+      // Plotly centers g.slicetext at the tile center via translate(tx, ty), so
+      // appending scale(ratio, 1) compresses symmetrically around that center.
+      // We avoid CSS transforms entirely — they override SVG attribute transforms
+      // and cause text to lose its tile-center position.
+      slices.forEach(function (slice) {
+        var surface = slice.querySelector('path.surface');
+        if (!surface) return;
+        var gText = slice.querySelector('g.slicetext');
+        if (!gText) return;
+
+        // Clear any CSS transforms from previous runs so measurements are clean.
+        gText.style.transform = '';
+        gText.style.transformOrigin = '';
+
+        // Strip the exact transform string we appended last time (stored in a data
+        // attribute) so we always measure against Plotly's unmodified transform.
+        // This is robust regardless of what shape our appended string takes.
+        var currentTransform = gText.getAttribute('transform') || '';
+        var prevAppended = gText.getAttribute('data-text-scale') || '';
+        var cleanTransform;
+        if (prevAppended && currentTransform.endsWith(prevAppended)) {
+          cleanTransform = currentTransform.slice(0, currentTransform.length - prevAppended.length).trim();
+        } else {
+          // Fallback for first run or mismatched state: strip a bare trailing scale().
+          cleanTransform = currentTransform
+            .replace(/\s*scale\(\s*[\d.eE+-]+\s*,\s*[\d.eE+-]+\s*\)\s*$/, '')
+            .trim();
+        }
+        gText.setAttribute('transform', cleanTransform);
+
+        var surfaceRect = surface.getBoundingClientRect();
+        var textRect = gText.getBoundingClientRect();
+
+        var targetLeft = surfaceRect.left + H_INSET;
+        var targetRight = surfaceRect.right - H_INSET;
+
+        // No overflow on either side — nothing to do.
+        if (textRect.left >= targetLeft && textRect.right <= targetRight) {
+          gText.removeAttribute('data-text-scale');
+          return;
+        }
+
+        // Anchor the scale to the text's natural left edge (clamped to the left inset
+        // boundary). Scaling around this point keeps the left edge visually fixed so
+        // compressed text starts at the same relative position as uncompressed text,
+        // and only the right edge is pulled inward.
+        var anchorVP = Math.max(textRect.left, targetLeft);
+        var ratio = (targetRight - anchorVP) / textRect.width;
+        if (ratio >= 1 || ratio <= 0) {
+          gText.removeAttribute('data-text-scale');
+          return;
+        }
+
+        // Build a scale transform around the anchor point converted to local SVG
+        // coordinates via the CTM.
+        var scaleTransform;
+        var ctm = gText.getCTM();
+        if (ctm && ctm.a !== 0) {
+          var localAnchor = (anchorVP - ctm.e) / ctm.a;
+          scaleTransform = 'translate(' + localAnchor + ',0) scale(' + ratio + ',1) translate(' + (-localAnchor) + ',0)';
+        } else {
+          scaleTransform = 'scale(' + ratio + ',1)';
+        }
+
+        var appended = (cleanTransform ? ' ' : '') + scaleTransform;
+        gText.setAttribute('data-text-scale', appended);
+        gText.setAttribute('transform', cleanTransform + appended);
+      });
+    }
+
+    setTimeout(tryApply, 50);
+    return window.dash_clientside.no_update;
   }
 };
