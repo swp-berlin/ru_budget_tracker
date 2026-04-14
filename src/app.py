@@ -456,8 +456,9 @@ def toggle_language(n_clicks: int | None, current_lang: str | None):
         raise PreventUpdate
 
     new_lang = "EN" if (current_lang or "RU") == "RU" else "RU"
+    btn_label = "RU" if new_lang == "EN" else "EN"
 
-    return [html.Span(new_lang, className="btn-label")], new_lang
+    return [html.Span(btn_label, className="btn-label")], new_lang
 
 
 # View-by selection (pattern-matched, single callback)
