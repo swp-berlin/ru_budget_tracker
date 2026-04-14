@@ -744,6 +744,24 @@ window.dash_clientside.clientside = {
     return window.dash_clientside.no_update;
   },
 
+  showTreemapSpinner: function () {
+    var spinner = document.getElementById('treemap-spinner');
+    if (spinner) spinner.style.display = '';
+    return window.dash_clientside.no_update;
+  },
+
+  showTimeseriesSpinner: function () {
+    var spinner = document.getElementById('timeseries-spinner');
+    if (spinner) spinner.style.display = '';
+    return window.dash_clientside.no_update;
+  },
+
+  hideTimeseriesSpinner: function (style) {
+    var el = document.getElementById('timeseries-spinner');
+    if (el) el.style.display = 'none';
+    return window.dash_clientside.no_update;
+  },
+
   adjustTimeseriesTicks: function (windowWidth, tickInfo, figure) {
     if (!tickInfo || !tickInfo.tickvals || !tickInfo.tickvals.length || !figure) {
       return window.dash_clientside.no_update;

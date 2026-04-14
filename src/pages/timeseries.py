@@ -305,13 +305,25 @@ def layout(**other_kwargs) -> html.Div:
         [
             # Hidden treemap graph keeps cross-page callbacks satisfied.
             dcc.Graph(id="treemap-graph", style={"display": "none"}),
+            # Loading spinner overlay, hidden once the graph is ready.
+            html.Div(
+                html.Div(className="treemap-spinner"),
+                id="timeseries-spinner",
+                style={
+                    "position": "absolute",
+                    "top": "50%",
+                    "left": "50%",
+                    "transform": "translate(-50%, -50%)",
+                    "zIndex": 10,
+                },
+            ),
             dcc.Graph(
                 id="timeseries-graph",
                 config=TIMESERIES_CONFIG,
                 style={"visibility": "hidden"},
             ),
         ],
-        style={"width": "100%", "height": "90vh"},
+        style={"width": "100%", "height": "90vh", "position": "relative"},
     )
 
 

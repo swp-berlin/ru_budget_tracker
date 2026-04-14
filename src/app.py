@@ -304,6 +304,7 @@ app.validation_layout = html.Div(
         dcc.Graph(id="timeseries-graph"),
         dcc.Graph(id="treemap-graph"),
         dcc.Download(id="download-timeseries-data"),
+        html.Div(id="timeseries-spinner"),
     ]
 )
 
@@ -395,7 +396,38 @@ def toggle_period_menu_disabled(
 clientside_callback(
     ClientsideFunction(namespace="clientside", function_name="hideTreemapSpinner"),
     Output("dummy-output", "lang"),
-    Input("treemap-graph", "style"),
+    Input("treemap-graph", "figure", allow_optional=True),
+    prevent_initial_call=True,
+)
+
+# Show treemap spinner when any filter store changes (before the Python callback completes).
+clientside_callback(
+    ClientsideFunction(namespace="clientside", function_name="showTreemapSpinner"),
+    Output("dummy-output", "dir"),
+    Input("store-budget-id", "data"),
+    Input("store-viewby", "data"),
+    Input("store-spending-type", "data"),
+    Input("store-unit", "data"),
+    Input("store-language", "data"),
+    prevent_initial_call=True,
+)
+
+# Show timeseries spinner when any filter store changes.
+clientside_callback(
+    ClientsideFunction(namespace="clientside", function_name="showTimeseriesSpinner"),
+    Output("dummy-output", "tabIndex"),
+    Input("store-budget-id", "data"),
+    Input("store-period", "data"),
+    Input("store-spending-type", "data"),
+    Input("store-unit", "data"),
+    prevent_initial_call=True,
+)
+
+# Hide the timeseries spinner once the graph becomes visible.
+clientside_callback(
+    ClientsideFunction(namespace="clientside", function_name="hideTimeseriesSpinner"),
+    Output("dummy-output", "accessKey"),
+    Input("timeseries-graph", "figure", allow_optional=True),
     prevent_initial_call=True,
 )
 

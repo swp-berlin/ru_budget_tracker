@@ -17,6 +17,7 @@ from sqlalchemy import (
     and_,
     extract,
     func,
+    literal,
     or_,
     select,
     case,
@@ -650,6 +651,49 @@ class BarChartDataFetcher:
             )
         return result, budget_type
 
+    def _fetch_chapter_original_identifier(self, dimension_id: int) -> str | None:
+        """Walk up the dimension hierarchy to find the ancestor CHAPTER's original_identifier."""
+        current_id = dimension_id
+        for _ in range(10):  # max depth safeguard
+            stmt = select(
+                Dimension.id,
+                Dimension.parent_id,
+                Dimension.type,
+                Dimension.original_identifier,
+            ).where(Dimension.id == current_id)
+            with get_sync_session() as session:
+                row = session.execute(stmt).mappings().one_or_none()
+            if row is None:
+                return None
+            if row["type"] == "CHAPTER":
+                return str(row["original_identifier"])
+            if row["parent_id"] is None:
+                return None
+            current_id = row["parent_id"]
+        return None
+
+    def _fetch_total_law_expenses_for_chapter(self, chapter_orig_id: str) -> Sequence[RowMapping]:
+        """Fetch TOTAL LAW budget expenses for a specific chapter to enable classified spending calculation."""
+        base_columns = self._get_budget_expense_columns()
+        stmt = (
+            select(
+                *base_columns,
+                func.sum(func.abs(Expense.value)).label("total_value"),
+                literal(0.0).label("military_value"),
+            )
+            .select_from(Budget)
+            .join(Expense, Budget.id == Expense.budget_id, isouter=True)
+            .join(assoc_table, Expense.id == assoc_table.c.expense_id, isouter=True)
+            .join(Dimension, assoc_table.c.dimension_id == Dimension.id, isouter=True)
+            .where(Budget.type == "TOTAL")
+            .where(Budget.original_identifier.like("%LAW%"))
+            .where(Dimension.type == "CHAPTER")
+            .where(Dimension.original_identifier == chapter_orig_id)
+            .group_by(*base_columns)
+        )
+        with get_sync_session() as session:
+            return session.execute(stmt).mappings().all()
+
     def fetch_budgets_filtered(
         self, budget_id: int, dimension_id: int
     ) -> tuple[Sequence[RowMapping], BudgetTypeLiteral]:
@@ -667,14 +711,18 @@ class BarChartDataFetcher:
                 "REPORT",
             )
         elif initial_budget.type == "LAW":
-            return (
-                self._fetch_budget_expenses_for_dimensions(
-                    ["LAW"],
-                    dimension_ids,
-                    quarterly_only=False,
-                ),
-                "LAW",
+            open_data = self._fetch_budget_expenses_for_dimensions(
+                ["LAW"],
+                dimension_ids,
+                quarterly_only=False,
             )
+            # Also fetch TOTAL budget data for the ancestor CHAPTER so classified spending
+            # can be computed as TOTAL_chapter - open_chapter.
+            chapter_orig_id = self._fetch_chapter_original_identifier(dimension_id)
+            if chapter_orig_id:
+                total_data = self._fetch_total_law_expenses_for_chapter(chapter_orig_id)
+                return list(open_data) + list(total_data), "LAW"
+            return open_data, "LAW"
         else:
             raise ValueError(f"Unsupported budget type: {initial_budget.type} for ID {budget_id}")
 
