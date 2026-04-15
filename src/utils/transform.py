@@ -4,7 +4,12 @@ from typing import Sequence
 import networkx as nx
 import pandas as pd
 from sqlalchemy import RowMapping
-from utils.definitions import SpendingTypeLiteral, MilitarySpending, TOTAL_VALUE_MULTIPLIER
+from utils.definitions import (
+    SpendingTypeLiteral,
+    MilitarySpending,
+    LAW_TOTAL_VALUE_MULTIPLIER,
+    REPORT_TOTAL_VALUE_MULTIPLIER,
+)
 
 # Classified spending dimension IDs
 CLASSIFIED_DIMENSION_ID_OFFSET = 1_000_000  # Offset to avoid ID conflicts with real dimensions
@@ -110,9 +115,9 @@ class TreemapTransformer:
         # REPORT Totals only have 1 row, so we calculate the difference between the 1 TOTAL
         # and the sum of the chapters
         for row in totals:
-            multiplier: float = TOTAL_VALUE_MULTIPLIER
+            multiplier: float = LAW_TOTAL_VALUE_MULTIPLIER
             if budget_type == "REPORT":
-                multiplier = 1.0
+                multiplier = REPORT_TOTAL_VALUE_MULTIPLIER
             if row["dimension_type"] is None:
                 total_value = row.get("value", 0.0)
                 difference_value_budget = total_value * multiplier - budget_sum_value
@@ -415,7 +420,7 @@ class TreemapTransformer:
         return df
 
 
-class BarchartTransformer:
+class TimeseriesTransformer:
     def _normalize_cumulative_expenses(
         self, budgets: Sequence[RowMapping]
     ) -> list[dict[str, str | float | int]]:
@@ -463,7 +468,7 @@ class BarchartTransformer:
         budgets: Sequence[RowMapping],
         normalize: bool,
     ) -> pd.DataFrame:
-        """Transform law budget rows into a dataframe suitable for barchart visualization."""
+        """Transform law budget rows into a dataframe suitable for Timeseries visualization."""
         if not budgets:
             return pd.DataFrame()
 
@@ -498,9 +503,9 @@ class BarchartTransformer:
             if corresponding_budget is None:
                 continue
 
-            multiplicator: float = 1.0
-            if corresponding_budget["type"] == "LAW":
-                multiplicator = TOTAL_VALUE_MULTIPLIER
+            multiplicator: float = LAW_TOTAL_VALUE_MULTIPLIER
+            if corresponding_budget["type"] == "REPORT":
+                multiplicator = REPORT_TOTAL_VALUE_MULTIPLIER
 
             total_value: float = budget["total_value"] * multiplicator  # type: ignore
 
@@ -530,7 +535,7 @@ class BarchartTransformer:
         return df
 
     def transform_data(self, budgets: Sequence[RowMapping], normalize: bool = True) -> pd.DataFrame:
-        """Transform raw rows into a dataframe suitable for barchart visualization."""
+        """Transform raw rows into a dataframe suitable for Timeseries visualization."""
         if not budgets:
             return pd.DataFrame()
         df = self._transform_budget_totals(budgets, normalize)

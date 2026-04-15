@@ -11,6 +11,8 @@ from utils.definitions import (
     BudgetTypeLiteral,
     BudgetScopeLiteral,
     QUARTERLY_MONTHS,
+    LAW_TOTAL_VALUE_MULTIPLIER,
+    REPORT_TOTAL_VALUE_MULTIPLIER,
 )
 
 
@@ -195,7 +197,11 @@ class Calculator:
                 f"No spending data found for {period_start_date.year} in {unit_map[self.unit]}"
             )
 
+        multiplier: float = LAW_TOTAL_VALUE_MULTIPLIER
+        if self.budget_type == "REPORT":
+            multiplier = REPORT_TOTAL_VALUE_MULTIPLIER
         spending_value = spending_cumulative - previous_spending_value
+        spending_value *= multiplier
         Calculator._spending_cache[cache_key] = spending_value
         return spending_value
 

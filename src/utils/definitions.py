@@ -7,7 +7,13 @@ HIERARCHY_OBJECTS = ("MINISTRY", "CHAPTER", "SUBCHAPTER", "PROGRAMM")
 QUARTERLY_MONTHS = [3, 6, 9, 12]
 
 # Multiplier for TOTAL budget values (stored in thousands)
-TOTAL_VALUE_MULTIPLIER = 1000
+LAW_TOTAL_VALUE_MULTIPLIER = 1000
+REPORT_TOTAL_VALUE_MULTIPLIER = 1
+
+# Multiplier for LAW budget expense values for  2018 and 2019
+# This exists because in the current dataset these years have double the value
+# they should have
+LAW_18_19_VALUE_MULTIPLIER = 0.5
 
 BudgetTypeLiteral = Literal["DRAFT", "LAW", "REPORT", "TOTAL"]
 BudgetScopeLiteral = Literal["YEARLY", "QUARTERLY", "MONTHLY"]

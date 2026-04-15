@@ -21,8 +21,8 @@ from dash import (
 )
 from dash.exceptions import PreventUpdate
 
-from utils.fetch import BarChartDataFetcher
-from utils.transform import BarchartTransformer
+from utils.fetch import TimeseriesDataFetcher
+from utils.transform import TimeseriesTransformer
 from utils.calculate import Calculator
 from utils.definitions import (
     BudgetTypeLiteral,
@@ -120,7 +120,7 @@ def fetch_timeseries_data(
     selected_dimension: dict[str, int | str] | None = None,
 ) -> tuple[pd.DataFrame, str, BudgetTypeLiteral]:
     """Fetch and transform treemap data for the current filters."""
-    data_fetcher = BarChartDataFetcher(spending_type)
+    data_fetcher = TimeseriesDataFetcher(spending_type)
     dimension_id = None
     if selected_dimension is not None:
         dimension_id_value = selected_dimension.get("dimension_id")
@@ -133,7 +133,7 @@ def fetch_timeseries_data(
         budget_id=budget_id,
         dimension_id=dimension_id,
     )
-    transformer = BarchartTransformer()
+    transformer = TimeseriesTransformer()
     if unit in [
         "PERCENT_YEAR_TO_DATE_SPENDING",
         "PERCENT_YEAR_TO_DATE_REVENUE",

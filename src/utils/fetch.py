@@ -31,6 +31,7 @@ from utils.definitions import (
     QUARTERLY_MONTHS,
     BudgetTypeLiteral,
     MilitarySpending,
+    LAW_18_19_VALUE_MULTIPLIER,
 )
 
 # =============================================================================
@@ -192,7 +193,16 @@ class TreemapDataFetcher:
         stmt = (
             select(
                 Expense.id,
-                Expense.value,
+                case(
+                    (
+                        and_(
+                            Budget.type == "LAW",
+                            extract("year", Budget.published_at).in_([2018, 2019]),
+                        ),
+                        Expense.value * LAW_18_19_VALUE_MULTIPLIER,
+                    ),
+                    else_=Expense.value,
+                ).label("value"),
                 Budget.id.label("budget_id"),
                 Budget.original_identifier.label("budget_original_identifier"),
                 Budget.type.label("budget_type"),
@@ -322,7 +332,7 @@ class TreemapDataFetcher:
 # =============================================================================
 
 
-class BarChartDataFetcher:
+class TimeseriesDataFetcher:
     """Fetches and prepares data for bar chart (timeseries) visualization."""
 
     def __init__(self, spending_type: SpendingTypeLiteral = "ALL") -> None:
@@ -518,12 +528,31 @@ class BarChartDataFetcher:
 
         expenses_subquery = self._build_expense_subquery(military_conditions, budget_type="LAW")
 
+        law_2018_2019_condition = extract("year", Budget.published_at).in_([2018, 2019])
+
         # LAW budgets with MINISTRY dimensions
         law_ministry_stmt = (
             select(
                 *base_columns,
-                func.sum(func.abs(expenses_subquery.c.value)).label("total_value"),
-                func.sum(func.abs(expenses_subquery.c.military_value)).label("military_value"),
+                func.sum(
+                    case(
+                        (
+                            law_2018_2019_condition,
+                            func.abs(expenses_subquery.c.value) * LAW_18_19_VALUE_MULTIPLIER,
+                        ),
+                        else_=func.abs(expenses_subquery.c.value),
+                    )
+                ).label("total_value"),
+                func.sum(
+                    case(
+                        (
+                            law_2018_2019_condition,
+                            func.abs(expenses_subquery.c.military_value)
+                            * LAW_18_19_VALUE_MULTIPLIER,
+                        ),
+                        else_=func.abs(expenses_subquery.c.military_value),
+                    )
+                ).label("military_value"),
             )
             .select_from(Budget)
             .join(expenses_subquery, Budget.id == expenses_subquery.c.budget_id)
