@@ -7,8 +7,7 @@ from sqlalchemy import RowMapping
 from utils.definitions import (
     SpendingTypeLiteral,
     MilitarySpending,
-    LAW_TOTAL_VALUE_MULTIPLIER,
-    REPORT_TOTAL_VALUE_MULTIPLIER,
+    budget_config,
 )
 
 # Classified spending dimension IDs
@@ -115,9 +114,9 @@ class TreemapTransformer:
         # REPORT Totals only have 1 row, so we calculate the difference between the 1 TOTAL
         # and the sum of the chapters
         for row in totals:
-            multiplier: float = LAW_TOTAL_VALUE_MULTIPLIER
+            multiplier: float = budget_config.law_total_value_multiplier
             if budget_type == "REPORT":
-                multiplier = REPORT_TOTAL_VALUE_MULTIPLIER
+                multiplier = budget_config.report_total_value_multiplier
             if row["dimension_type"] is None:
                 total_value = row.get("value", 0.0)
                 difference_value_budget = total_value * multiplier - budget_sum_value
@@ -503,9 +502,9 @@ class TimeseriesTransformer:
             if corresponding_budget is None:
                 continue
 
-            multiplicator: float = LAW_TOTAL_VALUE_MULTIPLIER
+            multiplicator: float = budget_config.law_total_value_multiplier
             if corresponding_budget["type"] == "REPORT":
-                multiplicator = REPORT_TOTAL_VALUE_MULTIPLIER
+                multiplicator = budget_config.report_total_value_multiplier
 
             total_value: float = budget["total_value"] * multiplicator  # type: ignore
 

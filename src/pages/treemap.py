@@ -19,14 +19,13 @@ from dash import (
 from dash.exceptions import PreventUpdate
 from sqlalchemy import RowMapping
 
-from utils.fetch import TreemapDataFetcher
+from utils.fetch_treemap import TreemapDataFetcher
 from utils.transform import TreemapTransformer
 from utils.calculate import Calculator
 from utils.helper import create_treemap_colors, shape_for_spending_type, shape_for_viewby
 from utils.definitions import (
     UnitLiteral,
-    UNIT_OPTIONS,
-    unit_map,
+    unit_config,
     SpendingTypeLiteral,
     ViewByDimensionTypeLiteral,
     BudgetTypeLiteral,
@@ -97,7 +96,7 @@ def transform_treemap_data(
     budget_id: int,
     spending_type: SpendingTypeLiteral,
     unit: UnitLiteral,
-    character_limit: int = 50,
+    character_limit: int = 70,
 ) -> pd.DataFrame:
     dimensions, programs, published_at = fetch_treemap_data(budget_id)
     budget_type: BudgetTypeLiteral = next(
@@ -160,12 +159,12 @@ def generate_figure(
         hovertemplate="<br>".join(
             [
                 "%{label}",
-                "%{customdata[0]:,.1f}" + unit_map[unit],
+                "%{customdata[0]:,.1f}" + unit_config.map[unit],
                 "%{customdata[1]:.1f}%" + " of parent",
                 "%{customdata[2]:.1f}%" + " of total",
             ]
         ),
-        texttemplate="%{label}<br>%{value:,.1f}" + unit_map[unit],
+        texttemplate="%{label}<br>%{value:,.1f}" + unit_config.map[unit],
     )
 
     # Layout adjustments
@@ -345,7 +344,7 @@ def _build_download_df(
     leaf2_col = name_cols[1] if len(name_cols) > 1 else None
 
     root_name = df_shaped["ROOT"].iloc[0] if len(df_shaped) > 0 else "Federal Budget"
-    value_col = next(label for label, u in UNIT_OPTIONS if u == unit)
+    value_col = next(label for label, u in unit_config.options if u == unit)
 
     def clean(val: Any) -> str | None:
         if val is None or (isinstance(val, float) and pd.isna(val)):

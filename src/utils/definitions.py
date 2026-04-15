@@ -1,38 +1,16 @@
 from typing import Literal
 from re import Pattern, compile
+from pydantic import BaseModel, ConfigDict, computed_field
 
 
-HIERARCHY_OBJECTS = ("MINISTRY", "CHAPTER", "SUBCHAPTER", "PROGRAMM")
-# Quarterly months for execution budget filtering
-QUARTERLY_MONTHS = [3, 6, 9, 12]
-
-# Multiplier for TOTAL budget values (stored in thousands)
-LAW_TOTAL_VALUE_MULTIPLIER = 1000
-REPORT_TOTAL_VALUE_MULTIPLIER = 1
-
-# Multiplier for LAW budget expense values for  2018 and 2019
-# This exists because in the current dataset these years have double the value
-# they should have
-LAW_18_19_VALUE_MULTIPLIER = 0.5
+# ---- Type literals ----
 
 BudgetTypeLiteral = Literal["DRAFT", "LAW", "REPORT", "TOTAL"]
 BudgetScopeLiteral = Literal["YEARLY", "QUARTERLY", "MONTHLY"]
 DimensionTypeLiteral = Literal["MINISTRY", "CHAPTER", "SUBCHAPTER", "PROGRAMM", "EXPENSE_TYPE"]
 ViewByDimensionTypeLiteral = Literal["MINISTRY", "CHAPTER", "PROGRAMM"]
-# Menu option definitions to avoid duplication and keep layout concise
-VIEWBY_OPTIONS: list[tuple[str, str]] = [
-    ("Ministry", "MINISTRY"),
-    ("Chapter", "CHAPTER"),
-    ("Program", "PROGRAM"),
-]
-
 LanguageTypeLiteral = Literal["EN", "ORIGINAL"]
 SpendingTypeLiteral = Literal["ALL", "MILITARY"]
-# Menu option definitions to avoid duplication and keep layout concise
-SPENDING_TYPE_OPTIONS: list[tuple[str, str]] = [
-    ("All", "ALL"),
-    ("Military Only", "MILITARY"),
-]
 PeriodLiteral = Literal["ALL", "Q1", "Q2", "Q3", "Q4"]
 UnitLiteral = Literal[
     "ABSOLUTE",
@@ -45,16 +23,114 @@ UnitLiteral = Literal[
 ]
 
 
-class MilitarySpending:
+# ---- Budget constants ----
+
+
+class BudgetConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    # Hierarchy levels used throughout the data model
+    hierarchy_objects: tuple[str, ...] = ("MINISTRY", "CHAPTER", "SUBCHAPTER", "PROGRAMM")
+    # Months that mark the end of a quarter, used for execution budget filtering
+    quarterly_months: list[int] = [3, 6, 9, 12]
+    # LAW budget totals are stored in thousands in the source data
+    law_total_value_multiplier: int = 1000
+    report_total_value_multiplier: int = 1
+    # 2018 and 2019 LAW values are doubled in the source data
+    law_18_19_value_multiplier: float = 0.5
+
+
+# ---- Menu option groups ----
+
+
+class ViewByConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    options: list[tuple[str, str]] = [
+        ("Ministry", "MINISTRY"),
+        ("Chapter", "CHAPTER"),
+        ("Program", "PROGRAM"),
+    ]
+
+    @computed_field
+    @property
+    def map(self) -> dict[str, str]:
+        return {v: l for l, v in self.options}
+
+
+class SpendingTypeConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    options: list[tuple[str, str]] = [
+        ("All", "ALL"),
+        ("Military Only", "MILITARY"),
+    ]
+    # Chart-title labels intentionally differ from the short dropdown labels in options.
+    map: dict[str, str] = {"ALL": "All Spending", "MILITARY": "Military Only"}
+
+
+class PeriodConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    options: list[tuple[str, str]] = [
+        ("All Periods", "ALL"),
+        ("Q1", "Q1"),
+        ("Q1-Q2", "Q2"),
+        ("Q1-Q3", "Q3"),
+        ("Q1-Q4", "Q4"),
+    ]
+
+    @computed_field
+    @property
+    def map(self) -> dict[str, str]:
+        return {v: l for l, v in self.options}
+
+
+class UnitConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    options: list[tuple[str, UnitLiteral]] = [
+        ("Billion RUB", "ABSOLUTE"),
+        ("Billion PPP Dollars", "DOLLARS"),
+        ("% full-year GDP", "PERCENT_GDP_FULL_YEAR"),
+        ("% year-to-date GDP", "PERCENT_GDP_YEAR_TO_DATE"),
+        ("% full-year spending", "PERCENT_FULL_YEAR_SPENDING"),
+        ("% year-to-date spending", "PERCENT_YEAR_TO_DATE_SPENDING"),
+        ("% year-to-date revenue", "PERCENT_YEAR_TO_DATE_REVENUE"),
+    ]
+    # ABSOLUTE and DOLLARS carry a leading space for direct number concatenation:
+    # "100.5" + " Billion RUB". Cannot be derived from options.
+    map: dict[UnitLiteral, str] = {
+        "ABSOLUTE": " Billion RUB",
+        "DOLLARS": " Billion PPP Dollars",
+        "PERCENT_GDP_FULL_YEAR": "% full-year GDP",
+        "PERCENT_GDP_YEAR_TO_DATE": "% year-to-date GDP",
+        "PERCENT_FULL_YEAR_SPENDING": "% full-year spending",
+        "PERCENT_YEAR_TO_DATE_SPENDING": "% year-to-date spending",
+        "PERCENT_YEAR_TO_DATE_REVENUE": "% year-to-date revenue",
+    }
+
+
+# ---- Singleton instances ----
+
+budget_config = BudgetConfig()
+viewby_config = ViewByConfig()
+spending_type_config = SpendingTypeConfig()
+period_config = PeriodConfig()
+unit_config = UnitConfig()
+
+
+# ---- Military spending patterns ----
+
+
+class _MilitarySpendingConfig(BaseModel):
     """
-    The MilitarySpending class defines the patterns
-    used to identify military spending in the dataset.
-    It includes both single-level patterns (e.g., any node with a Chapter ID of "02")
-    and combination patterns (e.g., nodes that are classified as Ministry 180 AND Chapter 03).
-    The patterns are defined using regular expressions
-    and are used in the filtering logic to determine whether a given node
-    in the hierarchy should be classified as military spending.
+    Defines patterns used to identify military spending in the dataset.
+    Includes single-level patterns (e.g. any node with Chapter ID "02")
+    and combination patterns (e.g. Ministry 180 AND Chapter 03).
     """
+
+    model_config = ConfigDict(frozen=True)
 
     simple_patterns: dict[str, Pattern] = {
         "CHAPTER": compile(r"^02$"),
@@ -71,12 +147,14 @@ class MilitarySpending:
         "PROGRAM": "^31.*",
         "MINISTRY": "^187$",
     }
+
     combination_patterns: list[dict[str, Pattern]] = [
         {
             "MINISTRY": compile(r"^180$"),
             "CHAPTER": compile(r"^03$"),
         }
     ]
+
     combination_patterns_sql: list[dict[str, str]] = [
         {
             "MINISTRY": "^180$",
@@ -89,93 +167,35 @@ class MilitarySpending:
     }
 
 
-PERIOD_OPTIONS: list[tuple[str, str]] = [
-    ("All Periods", "ALL"),
-    ("Q1", "Q1"),
-    ("Q1-Q2", "Q2"),
-    ("Q1-Q3", "Q3"),
-    ("Q1-Q4", "Q4"),
-]
-
-period_map = {
-    "ALL": "All Periods",
-    "Q1": "Q1",
-    "Q2": "Q1-Q2",
-    "Q3": "Q1-Q3",
-    "Q4": "Q1-Q4",
-}
-
-UNIT_OPTIONS: list[tuple[str, UnitLiteral]] = [
-    ("Billion RUB", "ABSOLUTE"),
-    ("Billion PPP Dollars", "DOLLARS"),
-    ("% full-year GDP", "PERCENT_GDP_FULL_YEAR"),
-    ("% year-to-date GDP", "PERCENT_GDP_YEAR_TO_DATE"),
-    ("% full-year spending", "PERCENT_FULL_YEAR_SPENDING"),
-    ("% year-to-date spending", "PERCENT_YEAR_TO_DATE_SPENDING"),
-    ("% year-to-date revenue", "PERCENT_YEAR_TO_DATE_REVENUE"),
-]
-
-unit_map: dict[UnitLiteral, str] = {
-    "ABSOLUTE": " Billion RUB",
-    "DOLLARS": " Billion PPP Dollars",
-    "PERCENT_GDP_FULL_YEAR": "% full-year GDP",
-    "PERCENT_GDP_YEAR_TO_DATE": "% year-to-date GDP",
-    "PERCENT_FULL_YEAR_SPENDING": "% full-year spending",
-    "PERCENT_YEAR_TO_DATE_SPENDING": "% year-to-date spending",
-    "PERCENT_YEAR_TO_DATE_REVENUE": "% year-to-date revenue",
-}
-
-viewby_map = {
-    "MINISTRY": "Ministry",
-    "CHAPTER": "Chapter",
-    "PROGRAM": "Program",
-}
-spending_type_map = {
-    "ALL": "All Spending",
-    "MILITARY": "Military Only",
-}
+MilitarySpending = _MilitarySpendingConfig()
 
 
-class Colors:
-    CLASSIFIED_GRAY = "#dddddd"
-    CULTURE_PINK = "#ffafcc"
-    ECONOMY_BLUE = "#80cbc4"
-    EDUCATION_PURPLE = "#cdb4db"
-    ENVIRONMENT_GREEN = "#81cf83"
-    GENERAL_STATE_BLUE = "#93c5fd"
-    HEALTHCARE_BLUE = "#8dd5e4"
-    HOUSING_ORANGE = "#f7bb73"
-    SERVICING_DEBT_YELLOW = "#ffd166"
-    INTERBUDGETARY_TRANSFERS_ORANGE = "#e0c097"
-    LAW_ENFORCEMENT_BLUE = "#b3c7ff"
-    MASS_MEDIA_PURPLE = "b3c7ff"
-    MILITARY_GREEN = "#949d85"
-    MINISTRY_GRAY = "#aaaaaa"
-    ROOT_WHITE = "#ffffff"
-    SOCIAL_RED = "#e46a6a"
-    SPORT_GREEN = "#c6e48b"
+# ---- Colors ----
 
-    # The color mappings CHAPTERs is based on the official color coding used in the original Dashboard.
-    color_mapping_chapters = {
-        "01": GENERAL_STATE_BLUE,
-        "02": MILITARY_GREEN,
-        "03": LAW_ENFORCEMENT_BLUE,
-        "04": ECONOMY_BLUE,
-        "05": HOUSING_ORANGE,
-        "06": ENVIRONMENT_GREEN,
-        "07": EDUCATION_PURPLE,
-        "08": CULTURE_PINK,
-        "09": HEALTHCARE_BLUE,
-        "10": SOCIAL_RED,
-        "11": SPORT_GREEN,
-        "12": MASS_MEDIA_PURPLE,
-        "13": SERVICING_DEBT_YELLOW,
-        "14": INTERBUDGETARY_TRANSFERS_ORANGE,
-    }
 
-    # The color palette filler is used for any nodes that do not match
-    # the CHAPTER or PROGRAM color mappings.
-    color_mapping_filler = [
+class _ColorsConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    CLASSIFIED_GRAY: str = "#dddddd"
+    CULTURE_PINK: str = "#ffafcc"
+    ECONOMY_BLUE: str = "#80cbc4"
+    EDUCATION_PURPLE: str = "#cdb4db"
+    ENVIRONMENT_GREEN: str = "#81cf83"
+    GENERAL_STATE_BLUE: str = "#93c5fd"
+    HEALTHCARE_BLUE: str = "#8dd5e4"
+    HOUSING_ORANGE: str = "#f7bb73"
+    SERVICING_DEBT_YELLOW: str = "#ffd166"
+    INTERBUDGETARY_TRANSFERS_ORANGE: str = "#e0c097"
+    LAW_ENFORCEMENT_BLUE: str = "#b3c7ff"
+    MASS_MEDIA_PURPLE: str = "#b3c7ff"
+    MILITARY_GREEN: str = "#949d85"
+    MINISTRY_GRAY: str = "#aaaaaa"
+    ROOT_WHITE: str = "#ffffff"
+    SOCIAL_RED: str = "#e46a6a"
+    SPORT_GREEN: str = "#c6e48b"
+
+    # Filler palette for nodes that don't match a CHAPTER or PROGRAM color mapping.
+    color_mapping_filler: list[str] = [
         "#93c5fd",
         "#fbc4ab",
         "#a3d9a5",
@@ -195,3 +215,27 @@ class Colors:
         "#ec9d9d",
         "#c6e48b",
     ]
+
+    # Color mapping for CHAPTERs based on the official color coding in the original dashboard.
+    @computed_field
+    @property
+    def color_mapping_chapters(self) -> dict[str, str]:
+        return {
+            "01": self.GENERAL_STATE_BLUE,
+            "02": self.MILITARY_GREEN,
+            "03": self.LAW_ENFORCEMENT_BLUE,
+            "04": self.ECONOMY_BLUE,
+            "05": self.HOUSING_ORANGE,
+            "06": self.ENVIRONMENT_GREEN,
+            "07": self.EDUCATION_PURPLE,
+            "08": self.CULTURE_PINK,
+            "09": self.HEALTHCARE_BLUE,
+            "10": self.SOCIAL_RED,
+            "11": self.SPORT_GREEN,
+            "12": self.MASS_MEDIA_PURPLE,
+            "13": self.SERVICING_DEBT_YELLOW,
+            "14": self.INTERBUDGETARY_TRANSFERS_ORANGE,
+        }
+
+
+Colors = _ColorsConfig()

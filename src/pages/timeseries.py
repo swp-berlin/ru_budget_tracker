@@ -21,7 +21,7 @@ from dash import (
 )
 from dash.exceptions import PreventUpdate
 
-from utils.fetch import TimeseriesDataFetcher
+from utils.fetch_timeseries import TimeseriesDataFetcher
 from utils.transform import TimeseriesTransformer
 from utils.calculate import Calculator
 from utils.definitions import (
@@ -29,8 +29,9 @@ from utils.definitions import (
     LanguageTypeLiteral,
     UnitLiteral,
     SpendingTypeLiteral,
-    UNIT_OPTIONS,
-    PERIOD_OPTIONS,
+    unit_config,
+    period_config,
+    spending_type_config,
     PeriodLiteral,
 )
 
@@ -45,12 +46,6 @@ TIMESERIES_CONFIG = dcc.Graph.Config(
     displaylogo=False,
     responsive=True,
 )
-
-# Menu option definitions to avoid duplication and keep layout concise
-SPENDING_TYPE_OPTIONS: list[tuple[str, str]] = [
-    ("All", "ALL"),
-    ("Military Only", "MILITARY"),
-]
 
 unit_labels = {
     "ABSOLUTE": "billion RUB (nominal)",
@@ -283,7 +278,7 @@ def layout(**other_kwargs) -> html.Div:
             html.Span(label, title=label),
             id={"type": "period-item", "value": value},
         )
-        for label, value in PERIOD_OPTIONS
+        for label, value in period_config.options
     ]
 
     spending_type_items = [
@@ -291,7 +286,7 @@ def layout(**other_kwargs) -> html.Div:
             html.Span(label, title=label),
             id={"type": "spending-type-item", "value": value},
         )
-        for label, value in SPENDING_TYPE_OPTIONS
+        for label, value in spending_type_config.options
     ]
 
     unit_items = [
@@ -299,7 +294,7 @@ def layout(**other_kwargs) -> html.Div:
             html.Span(label, title=label),
             id={"type": "unit-item", "value": value},
         )
-        for label, value in UNIT_OPTIONS
+        for label, value in unit_config.options
     ]
     return html.Div(
         # Graph to display the timeseries
@@ -425,7 +420,7 @@ def download_timeseries_data(
         selected_dimension=selected_dimension,
     )
 
-    value_col = next(label for label, u in UNIT_OPTIONS if u == unit)
+    value_col = next(label for label, u in unit_config.options if u == unit)
 
     def _format_period(dt: pd.Timestamp) -> str:
         if budget_type == "REPORT":

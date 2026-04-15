@@ -7,12 +7,10 @@ from models import ConversionRate, Budget, Expense, Dimension
 from database import get_sync_session
 from utils.definitions import (
     UnitLiteral,
-    unit_map,
     BudgetTypeLiteral,
     BudgetScopeLiteral,
-    QUARTERLY_MONTHS,
-    LAW_TOTAL_VALUE_MULTIPLIER,
-    REPORT_TOTAL_VALUE_MULTIPLIER,
+    budget_config,
+    unit_config,
 )
 
 
@@ -112,7 +110,7 @@ class Calculator:
 
         if not value:
             raise ValueError(
-                f"No GDP data found for {period_start_date.year} in {unit_map[self.unit]}"
+                f"No GDP data found for {period_start_date.year} in {unit_config.map[self.unit]}"
             )
 
         Calculator._gdp_cache[cache_key] = value
@@ -160,7 +158,9 @@ class Calculator:
         # For monthly budgets, we need to consider the latest available month up to the period start date
         if scope == "MONTHLY":
             relevant_total_budgets = [
-                b for b in relevant_total_budgets if b.published_at.month in QUARTERLY_MONTHS
+                b
+                for b in relevant_total_budgets
+                if b.published_at.month in budget_config.quarterly_months
             ]
         spending_cumulative = 0.0
         previous_spending_value = 0.0
@@ -194,12 +194,12 @@ class Calculator:
 
         if not spending_cumulative:
             raise ValueError(
-                f"No spending data found for {period_start_date.year} in {unit_map[self.unit]}"
+                f"No spending data found for {period_start_date.year} in {unit_config.map[self.unit]}"
             )
 
-        multiplier: float = LAW_TOTAL_VALUE_MULTIPLIER
+        multiplier: float = budget_config.law_total_value_multiplier
         if self.budget_type == "REPORT":
-            multiplier = REPORT_TOTAL_VALUE_MULTIPLIER
+            multiplier = budget_config.report_total_value_multiplier
         spending_value = spending_cumulative - previous_spending_value
         spending_value *= multiplier
         Calculator._spending_cache[cache_key] = spending_value
@@ -219,7 +219,7 @@ class Calculator:
                 Budget.type == "TOTAL",
                 Budget.original_identifier.like("%-REVENUE-%"),
                 Dimension.type.is_(None),  # Exclude expenses with dimensions
-                extract("month", Budget.published_at).in_(QUARTERLY_MONTHS),
+                extract("month", Budget.published_at).in_(budget_config.quarterly_months),
             )
         )
         with get_sync_session() as session:
