@@ -3,11 +3,11 @@ from models import (
     Budget,
     Expense,
     Dimension,
-    DimensionTypeLiteral,
 )
 from faker import Faker
 import networkx as nx
 from database import get_sync_session
+from utils.definitions import DimensionTypeLiteral
 
 
 def _create_budgets() -> list[Budget]:
