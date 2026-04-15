@@ -321,10 +321,12 @@ class TreemapTransformer:
         )
         budget_type = "REPORT" if len(difference_rows) == 0 else "LAW"
 
-        for row in difference_rows:
-            # Get only first row in df with matching original identifier at CHAPTER_ORIG_ID column
-            chapter_orig_id = row["dimension_original_identifier"]
+        # Collect all new rows first, then concat once to avoid O(n²) repeated concats.
+        new_entries: list[dict] = []
+        line_length = self.max_line_length
 
+        for row in difference_rows:
+            chapter_orig_id = row["dimension_original_identifier"]
             expense_id = row["id"]
             expense_value = row.get("value", 0.0)
             classified_entry: dict[str, int | float | str | None] = {
@@ -332,20 +334,19 @@ class TreemapTransformer:
                 "BUDGET_TYPE": "CLASSIFIED",
                 "ROOT": "Federal Budget",
                 "IS_MILITARY": None,
+                "MINISTRY_DIM_ID": CLASSIFIED_PARENT_ID,
+                "MINISTRY_ORIG_ID": "CLASSIFIED_PARENT",
+                "MINISTRY_NAME": "Classified Spending",
+                "MINISTRY_NAME_TRANSLATED": "Classified Spending",
+                "CHAPTER_DIM_ID": row["dimension_id"],
+                "CHAPTER_ORIG_ID": row["dimension_original_identifier"],
+                "CHAPTER_NAME": row["dimension_name"],
+                "CHAPTER_NAME_TRANSLATED": row["dimension_name_translated"],
+                "SUBCHAPTER_DIM_ID": CLASSIFIED_DIMENSION_ID_OFFSET + int(expense_id),
+                "SUBCHAPTER_ORIG_ID": f"CLASSIFIED_{chapter_orig_id}",
+                "SUBCHAPTER_NAME": "Classified Spending",
+                "SUBCHAPTER_NAME_TRANSLATED": "Classified Spending",
             }
-            classified_entry["MINISTRY_DIM_ID"] = CLASSIFIED_PARENT_ID
-            classified_entry["MINISTRY_ORIG_ID"] = "CLASSIFIED_PARENT"
-            classified_entry["MINISTRY_NAME"] = "Classified Spending"
-            classified_entry["MINISTRY_NAME_TRANSLATED"] = "Classified Spending"
-            classified_entry["CHAPTER_DIM_ID"] = row["dimension_id"]
-            classified_entry["CHAPTER_ORIG_ID"] = row["dimension_original_identifier"]
-            classified_entry["CHAPTER_NAME"] = row["dimension_name"]
-            classified_entry["CHAPTER_NAME_TRANSLATED"] = row["dimension_name_translated"]
-            classified_entry["SUBCHAPTER_DIM_ID"] = CLASSIFIED_DIMENSION_ID_OFFSET + int(expense_id)
-            classified_entry["SUBCHAPTER_ORIG_ID"] = f"CLASSIFIED_{chapter_orig_id}"
-            classified_entry["SUBCHAPTER_NAME"] = "Classified Spending"
-            classified_entry["SUBCHAPTER_NAME_TRANSLATED"] = "Classified Spending"
-            # PROGRAM levels
             for idx in range(0, 3):
                 classified_entry[f"PROGRAM_{idx}_DIM_ID"] = CLASSIFIED_DIMENSION_ID_OFFSET + int(
                     expense_id
@@ -354,17 +355,17 @@ class TreemapTransformer:
                 classified_entry[f"PROGRAM_{idx}_NAME"] = "Classified Spending"
                 classified_entry[f"PROGRAM_{idx}_NAME_TRANSLATED"] = "Classified Spending"
 
-            # Append the new row via concat to avoid deprecated append and type issues.
-            classified_entry_df = pd.DataFrame([classified_entry])
-            # Add line breaks to long names if max_line_length is set.
-            line_length = self.max_line_length
             if line_length is not None:
-                for col in classified_entry_df.columns:
-                    if "NAME" in col:
-                        classified_entry_df[col] = classified_entry_df[col].apply(
-                            lambda x, w=line_length: "<br>".join(wrap(x, width=w)) if x else x
-                        )
-            df = pd.concat([df, classified_entry_df], ignore_index=True)
+                for key in list(classified_entry):
+                    if "NAME" in key and isinstance(classified_entry[key], str):
+                        classified_entry[key] = "<br>".join(
+                            wrap(classified_entry[key], width=line_length)
+                        )  # type: ignore[arg-type]
+
+            new_entries.append(classified_entry)
+
+        if new_entries:
+            df = pd.concat([df, pd.DataFrame(new_entries)], ignore_index=True)
 
         if budget_type == "REPORT":
             root_row = {

@@ -111,7 +111,7 @@ def transform_treemap_data(
     df = transformer.transform_data()
     # Calculate values based on unit, budget, and published_at
     calculator = Calculator(unit, budget_id, published_at, budget_type)
-    df["VALUE"] = df["VALUE"].apply(calculator.calculate)
+    df["VALUE"] = calculator.calculate_series(df["VALUE"])
     return df
 
 
@@ -190,22 +190,25 @@ def _build_treemap_node_map(df: pd.DataFrame, translated: bool) -> dict[str, dic
     regardless of which language was active when a node was selected.
     """
     node_map: dict[str, dict[str, int | str]] = {}
+    # Convert once to plain dicts — ~10-50x faster than iterrows() which wraps each row in a Series.
+    records = df.to_dict("records")
 
     for name_ending in ("_NAME", "_NAME_TRANSLATED"):
         name_cols = ["ROOT"] + [col for col in df.columns if col.endswith(name_ending)]
+        language = "EN" if name_ending == "_NAME_TRANSLATED" else "RU"
 
-        for _, row in df.iterrows():
+        for record in records:
             labels: list[str] = []
             for col in name_cols:
-                label = row.get(col)
+                label = record.get(col)
                 if not label:
                     break
                 labels.append(str(label))
                 if col == "ROOT":
                     continue
                 base = col.replace(name_ending, "")
-                dim_id = row.get(f"{base}_DIM_ID")
-                dim_orig_id = row.get(f"{base}_ORIG_ID")
+                dim_id = record.get(f"{base}_DIM_ID")
+                dim_orig_id = record.get(f"{base}_ORIG_ID")
                 dim_type = "PROGRAM" if base.startswith("PROGRAM_") else base
                 path = "/".join(labels)
                 # Skip null/NaN ids that can appear for root/placeholder nodes.
@@ -214,7 +217,7 @@ def _build_treemap_node_map(df: pd.DataFrame, translated: bool) -> dict[str, dic
                         "dimension_id": int(dim_id),
                         "dimension_original_identifier": str(dim_orig_id),
                         "dimension_type": str(dim_type),
-                        "language": "EN" if name_ending == "_NAME_TRANSLATED" else "RU",
+                        "language": language,
                     }
 
     return node_map

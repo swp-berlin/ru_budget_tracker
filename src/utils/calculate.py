@@ -2,6 +2,7 @@ from datetime import date
 from functools import lru_cache
 from typing import ClassVar, Sequence
 
+import pandas as pd
 from sqlalchemy import RowMapping, and_, extract, func, or_, select
 from models import ConversionRate, Budget, Expense, Dimension
 from database import get_sync_session
@@ -323,4 +324,29 @@ class Calculator:
             return self._percentage_spending(value, date)
         if self.unit == "PERCENT_YEAR_TO_DATE_REVENUE":
             return self._percentage_revenue(value, date)
+        raise ValueError(f"Unknown spending scope: {self.unit}")
+
+    def calculate_series(self, series: pd.Series) -> pd.Series:
+        """Apply calculation to an entire Series using vectorized operations."""
+        date = self.date
+        if self.unit == "ABSOLUTE":
+            return series / 1_000_000_000
+        if self.unit == "DOLLARS":
+            rate = self._load_conversion_rate()
+            return (series / rate) / 1_000_000_000
+        if self.unit in ["PERCENT_GDP_FULL_YEAR", "PERCENT_GDP_YEAR_TO_DATE"]:
+            gdp = self._fetch_gdp_data(date)
+            if gdp == 0:
+                raise ValueError("GDP value is zero, cannot calculate percentage.")
+            return (series / gdp) * 100
+        if self.unit in ["PERCENT_FULL_YEAR_SPENDING", "PERCENT_YEAR_TO_DATE_SPENDING"]:
+            spending_value = self._fetch_spending_value(date)
+            if spending_value == 0:
+                raise ValueError("Spending value is zero, cannot calculate percentage.")
+            return (series / spending_value) * 100
+        if self.unit == "PERCENT_YEAR_TO_DATE_REVENUE":
+            revenue_value = self._fetch_revenue_value(date)
+            if revenue_value == 0:
+                raise ValueError("Revenue value is zero, cannot calculate percentage.")
+            return (series / revenue_value) * 100
         raise ValueError(f"Unknown spending scope: {self.unit}")

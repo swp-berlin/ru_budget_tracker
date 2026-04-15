@@ -4,7 +4,6 @@ Miscellaneous utility functions
 
 import hashlib
 import random
-import re
 
 import pandas as pd
 
@@ -108,69 +107,43 @@ def shape_for_spending_type(
     spending_type: SpendingTypeLiteral,
 ) -> pd.DataFrame:
     """Return the shape configuration for the given spending type."""
-    # For military spending, we might want to highlight certain ministries or chapters.
-    # This function can be expanded in the future if needed.
     if spending_type == "MILITARY":
-        # Filter the dataframe to include only rows that match the military spending criteria
-        # First, we check for single-dimension matches based on the patterns
-        # defined in MilitarySpendingDictionary["SINGLE"].
-        df_single = df[
-            df.apply(
-                lambda row: any(
-                    (
-                        re.match(pattern, str(row.get(f"{dim}_ORIG_ID", "")))
-                        if isinstance(pattern, re.Pattern)
-                        else False
-                    )
-                    # or row.get("BUDGET_TYPE") == "CLASSIFIED"
-                    for dim, pattern in MilitarySpending.simple_patterns.items()
-                    if dim.endswith("CHAPTER")
-                    or dim.endswith("PROGRAM")
-                    or dim.endswith("MINISTRY")
-                ),
-                axis=1,
-            )
-        ]
-        # Then, we check for combination matches based on the patterns
-        # defined in MilitarySpendingDictionary["COMBINATION"].
-        df_combination = df[
-            df.apply(
-                lambda row: any(
-                    all(
-                        re.match(pattern, str(row.get(f"{dim}_ORIG_ID", "")))
-                        if isinstance(pattern, re.Pattern)
-                        else False
-                        for dim, pattern in combination.items()
-                    )
-                    for combination in MilitarySpending.combination_patterns
-                ),
-                axis=1,
-            )
-        ]
-        # Finally, we check for custom classified matches based on the patterns
-        # defined in MilitarySpendingDictionary["CUSTOM_CLASSIFIED"].
-        df_classified = df[
-            df.apply(
-                lambda row: any(
-                    (
-                        re.match(pattern, str(row.get(f"{dim}_ORIG_ID", "")))
-                        if isinstance(pattern, re.Pattern)
-                        else False
-                    )
-                    and row.get("BUDGET_TYPE") == "CLASSIFIED"
-                    for dim, pattern in MilitarySpending.custom_patterns.items()
-                    if dim.endswith("CHAPTER")
-                    or dim.endswith("PROGRAM")
-                    or dim.endswith("MINISTRY")
-                ),
-                axis=1,
-            )
-        ]
-        # Combine both single and combination matches and remove duplicates
+        # Single-dimension patterns — vectorized str.match instead of row-by-row apply()
+        single_mask = pd.Series(False, index=df.index)
+        for dim, pattern in MilitarySpending.simple_patterns.items():
+            if dim.endswith(("CHAPTER", "PROGRAM", "MINISTRY")):
+                col = f"{dim}_ORIG_ID"
+                if col in df.columns:
+                    single_mask |= df[col].astype(str).str.match(pattern.pattern, na=False)
+
+        # Combination patterns — each combination must match all dims simultaneously
+        combo_mask = pd.Series(False, index=df.index)
+        for combination in MilitarySpending.combination_patterns:
+            sub_mask = pd.Series(True, index=df.index)
+            valid = True
+            for dim, pattern in combination.items():
+                col = f"{dim}_ORIG_ID"
+                if col not in df.columns:
+                    valid = False
+                    break
+                sub_mask &= df[col].astype(str).str.match(pattern.pattern, na=False)
+            if valid:
+                combo_mask |= sub_mask
+
+        # Custom classified patterns — must also have BUDGET_TYPE == "CLASSIFIED"
+        classified_mask = pd.Series(False, index=df.index)
+        for dim, pattern in MilitarySpending.custom_patterns.items():
+            if dim.endswith(("CHAPTER", "PROGRAM", "MINISTRY")):
+                col = f"{dim}_ORIG_ID"
+                if col in df.columns:
+                    classified_mask |= df[col].astype(str).str.match(pattern.pattern, na=False)
+        classified_mask &= df["BUDGET_TYPE"] == "CLASSIFIED"
+
         df_military = (
-            pd.concat([df_single, df_combination, df_classified])
+            df[single_mask | combo_mask | classified_mask]
             .drop_duplicates()
             .reset_index(drop=True)
+            .copy()
         )
         df_military["ROOT"] = "Military Spending"
         return df_military
