@@ -20,9 +20,14 @@ from dash.exceptions import PreventUpdate
 from sqlalchemy import RowMapping
 
 from utils.fetch_treemap import TreemapDataFetcher
-from utils.transform import TreemapTransformer
+from utils.transform_treemap import TreemapTransformer
 from utils.calculate import Calculator
-from utils.helper import create_treemap_colors, shape_for_spending_type, shape_for_viewby
+from utils.helper import (
+    create_treemap_colors,
+    get_unit_label,
+    shape_for_spending_type,
+    shape_for_viewby,
+)
 from utils.definitions import (
     UnitLiteral,
     unit_config,
@@ -344,7 +349,7 @@ def _build_download_df(
     leaf2_col = name_cols[1] if len(name_cols) > 1 else None
 
     root_name = df_shaped["ROOT"].iloc[0] if len(df_shaped) > 0 else "Federal Budget"
-    value_col = next(label for label, u in unit_config.options if u == unit)
+    value_col = get_unit_label(unit)
 
     def clean(val: Any) -> str | None:
         if val is None or (isinstance(val, float) and pd.isna(val)):

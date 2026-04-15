@@ -12,9 +12,16 @@ from utils.definitions import (
     Colors,
     MilitarySpending,
     SpendingTypeLiteral,
+    UnitLiteral,
     ViewByDimensionTypeLiteral,
+    unit_config,
 )
 from plotly import graph_objects as go
+
+
+def get_unit_label(unit: UnitLiteral) -> str:
+    """Return the human-readable label for a unit (used as CSV column header)."""
+    return next(label for label, u in unit_config.options if u == unit)
 
 
 def create_treemap_colors(

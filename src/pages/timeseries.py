@@ -22,7 +22,8 @@ from dash import (
 from dash.exceptions import PreventUpdate
 
 from utils.fetch_timeseries import TimeseriesDataFetcher
-from utils.transform import TimeseriesTransformer
+from utils.helper import get_unit_label
+from utils.transform_timeseries import TimeseriesTransformer
 from utils.calculate import Calculator
 from utils.definitions import (
     BudgetTypeLiteral,
@@ -78,33 +79,16 @@ def _calculate_values(
     return df
 
 
+_PERIOD_MONTH = {"Q1": 3, "Q2": 6, "Q3": 9, "Q4": 12}
+
+
 def _shape_for_period(df: pd.DataFrame, period: PeriodLiteral) -> pd.DataFrame:
     if period == "ALL":
         return df
-    elif period == "Q1":
-        filtered_df = df.loc[df["dates"].dt.month == 3]
-        return filtered_df
-    elif period == "Q2":
-        filtered_df = df.loc[df["dates"].dt.month == 6]
-        return filtered_df
-    elif period == "Q3":
-        filtered_df = df.loc[df["dates"].dt.month == 9]
-        return filtered_df
-    elif period == "Q4":
-        filtered_df = df.loc[df["dates"].dt.month == 12]
-        return filtered_df
-    else:
+    month = _PERIOD_MONTH.get(period)
+    if month is None:
         raise ValueError(f"Invalid period: {period}")
-
-
-def _resolve_selected_dimension(
-    selected_node_id: str | None,
-    node_map: dict[str, dict[str, int | str]] | None,
-) -> dict[str, int | str] | None:
-    """Resolve a selected treemap node id into dimension metadata."""
-    if not selected_node_id or not node_map:
-        return None
-    return node_map.get(selected_node_id)
+    return df.loc[df["dates"].dt.month == month]
 
 
 def fetch_timeseries_data(
@@ -352,7 +336,7 @@ def update_figure_from_filters(
         raise PreventUpdate
 
     # Fetch and render using the selected values from stores
-    selected_dimension = _resolve_selected_dimension(selected_node_id, node_map)
+    selected_dimension = node_map.get(selected_node_id) if selected_node_id and node_map else None
     df, _, budget_type = fetch_timeseries_data(
         budget_id=budget_id,
         spending_type=spending_type,
@@ -411,7 +395,7 @@ def download_timeseries_data(
         raise PreventUpdate
     if budget_id is None:
         raise PreventUpdate
-    selected_dimension = _resolve_selected_dimension(selected_node_id, node_map)
+    selected_dimension = node_map.get(selected_node_id) if selected_node_id and node_map else None
     df, _, budget_type = fetch_timeseries_data(
         budget_id=budget_id,
         spending_type=spending_type,
@@ -420,7 +404,7 @@ def download_timeseries_data(
         selected_dimension=selected_dimension,
     )
 
-    value_col = next(label for label, u in unit_config.options if u == unit)
+    value_col = get_unit_label(unit)
 
     def _format_period(dt: pd.Timestamp) -> str:
         if budget_type == "REPORT":
