@@ -35,7 +35,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from models import Budget, Dimension, Expense, ConversionRate
-from sqlalchemy.orm import noload
 from database.sessions import get_sync_session
 from parsers import (
     parse_law_file,
@@ -45,7 +44,7 @@ from parsers import (
     save_ppp_csv,
     fetch_ppp_api_data,
 )
-        
+
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -92,7 +91,6 @@ def upsert_dimension(
     # First: check for exact match (same parent_id) → skip
     exact_match = (
         session.query(Dimension)
-        .options(noload(Dimension.expenses))
         .filter_by(
             original_identifier=original_identifier,
             type=dim_type,
@@ -110,7 +108,6 @@ def upsert_dimension(
     if parent_db_id is not None:
         null_parent = (
             session.query(Dimension)
-            .options(noload(Dimension.expenses))
             .filter_by(
                 original_identifier=original_identifier,
                 type=dim_type,
@@ -247,27 +244,26 @@ def save_expenses(
 def get_chapter_dimensions(session: Session, chapter_codes: List[str]) -> List[Dimension]:
     """
     Get existing CHAPTER dimensions from the database.
-    
+
     If a chapter code exists multiple times (e.g., with different names),
     only one is returned per code (the first one found).
-    
+
     Args:
         session: Database session
         chapter_codes: List of chapter codes to find (e.g., ["01", "02", ..., "14"])
-        
+
     Returns:
         List of Dimension objects for matching chapters (one per code)
     """
     all_chapters = (
         session.query(Dimension)
-        .options(noload(Dimension.expenses))
         .filter(
             Dimension.type == "CHAPTER",
             Dimension.original_identifier.in_(chapter_codes),
         )
         .all()
     )
-    
+
     # Deduplicate: keep only one per original_identifier
     seen_codes: set = set()
     chapters: List[Dimension] = []
@@ -279,34 +275,34 @@ def get_chapter_dimensions(session: Session, chapter_codes: List[str]) -> List[D
             logger.debug(
                 f"Skipping duplicate chapter {chapter.original_identifier}: {chapter.name[:50]}"
             )
-    
+
     found_codes = {c.original_identifier for c in chapters}
     missing = set(chapter_codes) - found_codes
-    
+
     if missing:
         logger.warning(f"Missing chapter dimensions: {sorted(missing)}")
-    
+
     if len(all_chapters) != len(chapters):
         logger.info(
             f"Found {len(all_chapters)} chapter rows, deduplicated to {len(chapters)} unique codes"
         )
     else:
         logger.info(f"Found {len(chapters)} of {len(chapter_codes)} chapter dimensions")
-    
+
     return chapters
 
 
-## GDP FUNCTIONS 
+## GDP FUNCTIONS
 
 
 def save_conversion_rates(session, rates: List) -> Tuple[int, int]:
     """
     Save ConversionRate entries to database (upsert by name).
-    
+
     Returns: (inserted_count, updated_count)
     """
     inserted, updated = 0, 0
-    
+
     for rate in rates:
         existing = session.query(ConversionRate).filter_by(name=rate.name).first()
         if existing:
@@ -317,11 +313,9 @@ def save_conversion_rates(session, rates: List) -> Tuple[int, int]:
         else:
             session.add(rate)
             inserted += 1
-    
+
     session.flush()
     return inserted, updated
-
-
 
 
 # =============================================================================
@@ -375,15 +369,15 @@ def import_report_file(file_path: Path) -> int:
 def import_totals_file(file_path: Path) -> int:
     """
     Import a totals file.
-    
+
     Creates per month (from 2018 onwards):
     - 1 Budget for total revenue (TOTAL-REVENUE-YYYY-MM) with 1 expense, no dimensions
     - 1 Budget for total expenses (TOTAL-EXPENSE-YYYY-MM) with 15 expenses:
       - 1 total expense (no dimensions)
       - 14 chapter expenses (each linked to one chapter)
-    
+
     IMPORTANT: Law files must be imported first to create the CHAPTER dimensions.
-    
+
     Returns: number of budgets imported
     """
     logger.info(f"\n{'=' * 60}")
@@ -391,7 +385,7 @@ def import_totals_file(file_path: Path) -> int:
     logger.info(f"{'=' * 60}")
 
     budgets, chapter_codes, expenses_with_chapter = parse_totals_file(file_path)
-    
+
     if not budgets:
         logger.warning(f"No data found in {file_path.name}")
         return 0
@@ -399,30 +393,30 @@ def import_totals_file(file_path: Path) -> int:
     with get_sync_session() as session:
         # Get existing chapter dimensions from the database
         chapter_dimensions = get_chapter_dimensions(session, chapter_codes)
-        
+
         if not chapter_dimensions:
             logger.warning(
                 "No CHAPTER dimensions found in database. "
                 "Import LAW files first to create chapters."
             )
-        
+
         # Build lookup: chapter_code -> Dimension
         chapter_lookup: Dict[str, Dimension] = {
             dim.original_identifier: dim for dim in chapter_dimensions
         }
-        
+
         # Group expenses by budget identifier
         expenses_by_budget: Dict[str, List[Tuple[Expense, Optional[str]]]] = {}
         for budget_id, expense, chapter_code in expenses_with_chapter:
             if budget_id not in expenses_by_budget:
                 expenses_by_budget[budget_id] = []
             expenses_by_budget[budget_id].append((expense, chapter_code))
-        
+
         # Save each budget and its expenses
         count = 0
         for budget in budgets:
             budget_db_id = save_budget(session, budget)
-            
+
             budget_expenses = expenses_by_budget.get(budget.original_identifier, [])
             for expense, chapter_code in budget_expenses:
                 # Link to chapter dimension if specified
@@ -433,34 +427,35 @@ def import_totals_file(file_path: Path) -> int:
                         db_dims.append(chapter_dim)
                     else:
                         logger.warning(f"Chapter {chapter_code} not found in database")
-                
+
                 new_expense = Expense(
                     budget_id=budget_db_id,
                     value=expense.value,
                     dimensions=db_dims,
                 )
                 session.add(new_expense)
-            
+
             count += 1
-        
+
         session.commit()
 
     # Summary
     years = sorted(set(b.published_at.year for b in budgets))
     revenue_count = len([b for b in budgets if "REVENUE" in b.original_identifier])
     expense_count = len([b for b in budgets if "EXPENSE" in b.original_identifier])
-    
+
     logger.info(f"✓ Imported {count} budgets")
     logger.info(f"  Revenue budgets: {revenue_count} (1 expense each, no dimensions)")
     logger.info(f"  Expense budgets: {expense_count} (15 expenses each: 1 total + 14 per chapter)")
     logger.info(f"  Years: {min(years)} - {max(years)}")
-    
+
     return count
+
 
 def import_gdp_data(rosstat_path: Path, minekonom_path: Path) -> None:
     """
     Import GDP data from Rosstat and Minekonom files.
-    
+
     Creates ConversionRate entries:
     - Quarterly: gdp_YYYY_qN (e.g., gdp_2024_q1)
     - Yearly: gdp_YYYY (e.g., gdp_2024)
@@ -468,18 +463,18 @@ def import_gdp_data(rosstat_path: Path, minekonom_path: Path) -> None:
     """
     from parsers import parse_gdp_files
     from database.sessions import get_sync_session
-    
+
     logger.info(f"Parsing GDP files...")
     logger.info(f"  Rosstat: {rosstat_path}")
     logger.info(f"  Minekonom: {minekonom_path}")
-    
+
     quarterly_rates, yearly_rates = parse_gdp_files(rosstat_path, minekonom_path)
-    
+
     with get_sync_session() as session:
         q_ins, q_upd = save_conversion_rates(session, quarterly_rates)
         y_ins, y_upd = save_conversion_rates(session, yearly_rates)
         session.commit()
-    
+
     logger.info(f"✓ Quarterly GDP: {q_ins} inserted, {q_upd} updated")
     logger.info(f"✓ Yearly GDP: {y_ins} inserted, {y_upd} updated")
 
@@ -487,16 +482,16 @@ def import_gdp_data(rosstat_path: Path, minekonom_path: Path) -> None:
 def import_ppp_data(save_csv: bool = True) -> None:
     """
     Import PPP data from World Bank API (with CSV fallback).
-    
+
     Creates ConversionRate entries:
     - Yearly: ppp_YYYY (e.g., ppp_2024)
     - Imputed: ppp_YYYY_imputed_SSSS (e.g., ppp_2025_imputed_2024)
-    
+
     Args:
         save_csv: If True, updates CSV cache when API fetch succeeds
     """
     logger.info("Fetching PPP data...")
-    
+
     # Try to update CSV cache if API works
     if save_csv:
         try:
@@ -504,17 +499,14 @@ def import_ppp_data(save_csv: bool = True) -> None:
             save_ppp_csv(ppp_data)
         except Exception as e:
             logger.warning(f"Could not update CSV cache: {e}")
-    
+
     rates = fetch_ppp_rates()
-    
+
     with get_sync_session() as session:
         ins, upd = save_conversion_rates(session, rates)
         session.commit()
-    
+
     logger.info(f"✓ PPP: {ins} inserted, {upd} updated")
-
-
-
 
 
 # =============================================================================
@@ -526,7 +518,7 @@ def get_law_files(data_dir: Path, years: List[int] | None = None) -> List[Path]:
     """Get law files for specified years (or all years 2018-2025)."""
     if years is None:
         years = list(range(2018, 2027))
-    
+
     laws_dir = data_dir / "laws"
     return [laws_dir / f"law_{year}.xlsx" for year in years]
 
@@ -534,50 +526,50 @@ def get_law_files(data_dir: Path, years: List[int] | None = None) -> List[Path]:
 def get_report_files(data_dir: Path, years: List[int] | None = None) -> List[Path]:
     """
     Get report files for specified years (or all years 2018-2025).
-    
+
     Reports are named: report_YYYY_MM.xlsx
     Returns all report files found for the specified years.
     """
     if years is None:
         years = list(range(2018, 2027))
-    
+
     reports_dir = data_dir / "reports"
-    
+
     if not reports_dir.exists():
         logger.warning(f"Reports directory not found: {reports_dir}")
         return []
-    
+
     files = []
     for year in years:
         # Find all report files for this year
         pattern = f"report_{year}_*.xls*"
         year_files = sorted(reports_dir.glob(pattern))
         files.extend(year_files)
-    
+
     return files
 
 
 def find_gdp_files(raw_dir: Path) -> Tuple[Path, Path]:
     """
     Auto-discover GDP files in the raw data directory.
-    
+
     Expects:
         raw_dir/conversion_tables/gdp/rosstat/*.xlsx
         raw_dir/conversion_tables/gdp/minekonom/*.xlsx
-    
+
     Returns: (rosstat_path, minekonom_path)
     """
     rosstat_dir = raw_dir / "conversion_tables" / "gdp" / "rosstat"
     minekonom_dir = raw_dir / "conversion_tables" / "gdp" / "minekonom"
-    
+
     rosstat_files = list(rosstat_dir.glob("*.xlsx")) if rosstat_dir.exists() else []
     minekonom_files = list(minekonom_dir.glob("*.xlsx")) if minekonom_dir.exists() else []
-    
+
     if not rosstat_files:
         raise FileNotFoundError(f"No Rosstat files found in {rosstat_dir}")
     if not minekonom_files:
         raise FileNotFoundError(f"No Minekonom files found in {minekonom_dir}")
-    
+
     return rosstat_files[0], minekonom_files[0]
 
 
@@ -715,7 +707,9 @@ def main():
             if args.rosstat and args.minekonom:
                 rosstat_path, minekonom_path = args.rosstat, args.minekonom
             elif args.rosstat or args.minekonom:
-                raise SystemExit("Provide both --rosstat and --minekonom, or neither (for auto-discovery).")
+                raise SystemExit(
+                    "Provide both --rosstat and --minekonom, or neither (for auto-discovery)."
+                )
             else:
                 raw_dir = args.data_dir.parent / "raw"
                 rosstat_path, minekonom_path = find_gdp_files(raw_dir)
