@@ -188,7 +188,7 @@ layout = html.Div(
                                     [
                                         # Icon for the button
                                         html.Img(
-                                            src="/assets/icons/stacked_bar_chart.svg",
+                                            src=get_asset_url("icons/stacked_bar_chart.svg"),
                                         ),
                                         # Text for the button
                                         html.Span("Timeseries", className="btn-label"),
@@ -200,7 +200,7 @@ layout = html.Div(
                                 # Share button
                                 dbc.Button(
                                     html.Img(
-                                        src="/assets/icons/share.svg",
+                                        src=get_asset_url("icons/share.svg"),
                                     ),
                                     id="btn-share-link",
                                     title="Copy shareable link to clipboard",
@@ -224,7 +224,7 @@ layout = html.Div(
                                 # Download image button
                                 dbc.Button(
                                     html.Img(
-                                        src="/assets/icons/photo_camera.svg",
+                                        src=get_asset_url("icons/photo_camera.svg"),
                                     ),
                                     id="btn-download-image",
                                     title="Download Plot as PNG",
@@ -234,7 +234,7 @@ layout = html.Div(
                                 # Download data button
                                 dbc.Button(
                                     html.Img(
-                                        src="/assets/icons/download.svg",
+                                        src=get_asset_url("icons/download.svg"),
                                     ),
                                     id="btn-download-csv",
                                     title="Download Data as CSV",
@@ -253,7 +253,7 @@ layout = html.Div(
                                 # Info/About button
                                 dbc.Button(
                                     html.Img(
-                                        src="/assets/icons/info.svg",
+                                        src=get_asset_url("icons/info.svg"),
                                     ),
                                     id="btn-about",
                                     title="About This Project",
