@@ -19,8 +19,6 @@ from sqlalchemy import (
     select,
     case,
 )
-from sqlalchemy.orm import aliased
-
 from database import get_sync_session
 from models import Budget, Dimension, Expense
 from utils.definitions import (
@@ -100,7 +98,6 @@ def fetch_budgets_for_dropdown() -> list[dict[str, Any]]:
 class TreemapDataFetcher:
     """Fetches and prepares data for treemap visualization."""
 
-    @lru_cache(maxsize=10)
     def get_published_at_date(self, budget_id: int) -> date:
         """
         Fetch the published_at date for a given budget ID.
@@ -179,7 +176,6 @@ class TreemapDataFetcher:
         """
         initial_budget, totals_budget = self.fetch_relevant_budgets(budget_id=budget_id)
 
-        parent_dimension = aliased(Dimension)
         stmt = (
             select(
                 Expense.id,
@@ -193,22 +189,15 @@ class TreemapDataFetcher:
                     ),
                     else_=Expense.value,
                 ).label("value"),
-                Budget.id.label("budget_id"),
-                Budget.original_identifier.label("budget_original_identifier"),
                 Budget.type.label("budget_type"),
                 Dimension.id.label("dimension_id"),
                 Dimension.original_identifier.label("dimension_original_identifier"),
-                Dimension.parent_id.label("dimension_parent_id"),
                 Dimension.type.label("dimension_type"),
-                parent_dimension.id.label("parent_dimension_id"),
-                parent_dimension.original_identifier.label("parent_dimension_original_identifier"),
-                parent_dimension.type.label("parent_dimension_type"),
                 _build_dimension_name_column(translated=False).label("dimension_name"),
                 _build_dimension_name_column(translated=True).label("dimension_name_translated"),
             )
             .join(Expense.dimensions, isouter=True)
             .join(Expense.budget, isouter=True)
-            .join(parent_dimension, Dimension.parent_id == parent_dimension.id, isouter=True)
         )
 
         if initial_budget.type == "LAW":
@@ -234,7 +223,7 @@ class TreemapDataFetcher:
                 )
             )
 
-        return _execute_query(stmt)
+        return _execute_query(stmt, unique=False)
 
     def _fetch_treemap_programs_recursive(
         self, leaf_program_ids: list[int]
@@ -287,9 +276,8 @@ class TreemapDataFetcher:
             full_cte.c.dimension_name_translated,
         )
 
-        return _execute_query(final_stmt)
+        return _execute_query(final_stmt, unique=False)
 
-    @lru_cache(maxsize=10)
     def fetch_data(
         self,
         budget_id: int | None = None,
