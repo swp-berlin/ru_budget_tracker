@@ -450,7 +450,7 @@ window.dash_clientside.clientside = {
       if (!pathname || pathname === '/') {
         graphId = 'treemap-graph';
         filenamePrefix = 'treemap';
-      } else if (pathname === '/timeseries') {
+      } else if (pathname.endsWith('/timeseries')) {
         graphId = 'timeseries-graph';
         filenamePrefix = 'timeseries';
       } else {

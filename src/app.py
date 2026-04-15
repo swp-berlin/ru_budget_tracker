@@ -16,6 +16,8 @@ from dash import (
     html,
     no_update,
     page_container,
+    get_asset_url,
+    get_relative_path,
 )
 from dash.exceptions import PreventUpdate
 
@@ -31,6 +33,8 @@ from utils.definitions import (
     period_map,
 )
 
+from settings import settings
+
 external_stylesheets = [
     dbc.themes.BOOTSTRAP,
 ]
@@ -40,7 +44,8 @@ app = Dash(
     use_pages=True,
     external_stylesheets=external_stylesheets,
     suppress_callback_exceptions=True,  # Required for pages with callbacks referencing shared stores
-    update_title=None,
+    update_title=None,  # type: ignore
+    url_base_pathname=settings.app.url_base_pathname,  # Set base pathname from settings
 )
 
 
@@ -115,13 +120,13 @@ layout = html.Div(
                 html.A(
                     [
                         html.Img(
-                            src="/assets/logo/logo.svg",
+                            src=get_asset_url("logo/logo.svg"),
                             style={"height": "2em"},
                             alt="Logo of Stiftung Wissenschaft und Politik",
                         ),
                     ],
                     style={"marginRight": "20px", "alignSelf": "center"},
-                    href="/",
+                    href=get_relative_path("/"),
                     title="Go to Home Page",
                 ),
                 html.Div(
@@ -326,20 +331,20 @@ def switch_graphs(pathname: str | None, budget_id: int | None):
     # Build query string with budget_id if available
     query_string = f"?budget_id={budget_id}" if budget_id is not None else ""
 
-    if pathname == "/timeseries":
+    if pathname == get_relative_path("/timeseries"):
         return (
-            f"/{query_string}",
+            f"{get_relative_path('/')}{query_string}",
             [
-                html.Img(src="/assets/icons/dashboard.svg", alt="Treemap icon"),
+                html.Img(src=get_asset_url("icons/dashboard.svg"), alt="Treemap icon"),
                 html.Span("Treemap", className="btn-label"),
             ],
             "Switch to Treemap View",
         )
     # Default: treat anything else as root
     return (
-        f"/timeseries{query_string}",
+        f"{get_relative_path('/timeseries')}{query_string}",
         [
-            html.Img(src="/assets/icons/stacked_bar_chart.svg", alt="Timeseries icon"),
+            html.Img(src=get_asset_url("icons/stacked_bar_chart.svg"), alt="Timeseries icon"),
             html.Span("Timeseries", className="btn-label"),
         ],
         "Switch to Time Series View",
@@ -361,7 +366,7 @@ def toggle_viewby_period_menu(
     - On /timeseries: hide viewby, show period
     - On other pages: show viewby, hide period
     """
-    if pathname == "/timeseries":
+    if pathname == get_relative_path("/timeseries"):
         period_style: dict[str, Any] = {}
         if budget_id and options:
             budget_type = next(

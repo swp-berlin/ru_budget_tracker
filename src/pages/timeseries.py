@@ -17,6 +17,7 @@ from dash import (
     dcc,
     html,
     register_page,
+    get_relative_path,
 )
 from dash.exceptions import PreventUpdate
 
@@ -349,7 +350,7 @@ def update_figure_from_filters(
     node_map: dict[str, dict[str, int | str]] | None = None,
 ) -> tuple[go.Figure, dict[str, str], dict | None]:
     # Guard: only render on the timeseries page to keep hidden graphs hidden.
-    if pathname != "/timeseries":
+    if pathname != get_relative_path("/timeseries"):
         return go.Figure(), {"display": "none"}, None
     # Guard: wait until a budget is selected
     if budget_id is None:
