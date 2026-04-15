@@ -6,6 +6,9 @@ HIERARCHY_OBJECTS = ("MINISTRY", "CHAPTER", "SUBCHAPTER", "PROGRAMM")
 # Quarterly months for execution budget filtering
 QUARTERLY_MONTHS = [3, 6, 9, 12]
 
+# Multiplier for TOTAL budget values (stored in thousands)
+TOTAL_VALUE_MULTIPLIER = 1000
+
 BudgetTypeLiteral = Literal["DRAFT", "LAW", "REPORT", "TOTAL"]
 BudgetScopeLiteral = Literal["YEARLY", "QUARTERLY", "MONTHLY"]
 DimensionTypeLiteral = Literal["MINISTRY", "CHAPTER", "SUBCHAPTER", "PROGRAMM", "EXPENSE_TYPE"]

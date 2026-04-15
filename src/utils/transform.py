@@ -4,17 +4,11 @@ from typing import Sequence
 import networkx as nx
 import pandas as pd
 from sqlalchemy import RowMapping
-from utils.definitions import (
-    SpendingTypeLiteral,
-    MilitarySpending,
-)
+from utils.definitions import SpendingTypeLiteral, MilitarySpending, TOTAL_VALUE_MULTIPLIER
 
 # Classified spending dimension IDs
 CLASSIFIED_DIMENSION_ID_OFFSET = 1_000_000  # Offset to avoid ID conflicts with real dimensions
 CLASSIFIED_PARENT_ID = -999_999  # Synthetic ID for aggregated classified parent node
-
-# Multiplier for TOTAL budget values (stored in thousands)
-TOTAL_VALUE_MULTIPLIER = 1000
 
 
 class TreemapTransformer:
