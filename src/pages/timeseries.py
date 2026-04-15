@@ -215,7 +215,7 @@ def generate_figure(
         )
     else:
         fig.update_layout(
-            xaxis=dict(hoverformat="%Y"),
+            xaxis=dict(hoverformat="%Y", tickangle=-45),
         )
 
     # Set custom hover templates for each trace
