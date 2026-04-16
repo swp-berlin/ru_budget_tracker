@@ -12,8 +12,6 @@ from sqlalchemy.dialects.sqlite import dialect as sqlite_dialect
 
 from models import Budget, Expense, Dimension, assoc_table
 from models.classified_spending_views import LawClassifiedSpendingPerChapter
-from utils.definitions import budget_config
-
 
 # revision identifiers, used by Alembic.
 revision = "0006"  # pragma: allowlist secret
@@ -80,10 +78,15 @@ def _build_view_select():
     classified_chapters = ["02", "10"]
 
     # ── Aggregate matching expenses by (budget_id, chapter) ─────────────────────
-    # Outer-join the law classified spending view to attach classified_spending for
-    # chapters 02 (National Defense) and 10 (Social Policy).  For other chapters
-    # (e.g. Chapter 03 via the Ministry-180 combination) classified_spending is NULL
-    # because only a subset of that chapter is military.
+    # Outer-join the law classified spending view to attach classified_spending and
+    # classified_share_of_budget for chapters 02 (National Defense) and 10 (Social
+    # Policy), where the entire chapter is military.  For other chapters (e.g.
+    # Chapter 03 via the Ministry-180 combination) both values are NULL because only
+    # a subset of that chapter is military.
+    #
+    # classified_share_of_budget comes directly from the law classified view, where
+    # it is already computed as classified_spending / total_classified_across_all_chapters
+    # for that year — i.e. the chapter's share of the whole LAW classified budget.
     return (
         select(
             Budget.id.label("budget_id"),
@@ -91,13 +94,24 @@ def _build_view_select():
             Dimension.name.label("chapter_name"),
             Dimension.name_translated.label("chapter_name_translated"),
             func.sum(func.abs(Expense.value)).label("open_spending"),
-            case(
-                (
-                    Dimension.original_identifier.in_(classified_chapters),
-                    LawClassifiedSpendingPerChapter.classified_spending,
-                ),
-                else_=None,
+            func.max(
+                case(
+                    (
+                        Dimension.original_identifier.in_(classified_chapters),
+                        LawClassifiedSpendingPerChapter.classified_spending,
+                    ),
+                    else_=None,
+                )
             ).label("classified_spending"),
+            func.max(
+                case(
+                    (
+                        Dimension.original_identifier.in_(classified_chapters),
+                        LawClassifiedSpendingPerChapter.classified_share_of_budget,
+                    ),
+                    else_=None,
+                )
+            ).label("classified_share_of_budget"),
         )
         .select_from(Budget)
         .join(Expense, Budget.id == Expense.budget_id)
@@ -120,7 +134,6 @@ def _build_view_select():
             Dimension.original_identifier,
             Dimension.name,
             Dimension.name_translated,
-            LawClassifiedSpendingPerChapter.classified_spending,
         )
     )
 
