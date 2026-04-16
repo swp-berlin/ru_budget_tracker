@@ -380,6 +380,32 @@ Object.assign(window.dash_clientside.clientside, {
   },
 
   /**
+   * Restore the treemap zoom level to the previously selected node after a figure update.
+   * Uses Plotly.restyle so the existing MutationObserver in applyTreemapTextInset keeps firing.
+   *
+   * @param {object} figure - Treemap figure (trigger only)
+   * @param {string|null} selectedNodeId - Node id stored in store-selected-id
+   * @returns {window.dash_clientside.no_update}
+   */
+  restoreTreemapZoom: function (figure, selectedNodeId) {
+    if (!figure?.data?.length || !selectedNodeId) return window.dash_clientside.no_update;
+    const ids = figure.data[0].ids;
+    if (!Array.isArray(ids) || !ids.includes(selectedNodeId)) return window.dash_clientside.no_update;
+
+    function tryRestyle(attempts) {
+      const plotDiv = document.querySelector('#treemap-graph .js-plotly-plot');
+      if (!plotDiv || typeof window.Plotly?.restyle !== 'function') {
+        if (attempts < 10) setTimeout(() => tryRestyle(attempts + 1), 150);
+        return;
+      }
+      window.Plotly.restyle(plotDiv, { level: selectedNodeId }, [0]);
+    }
+
+    setTimeout(() => tryRestyle(0), 50);
+    return window.dash_clientside.no_update;
+  },
+
+  /**
    * Constrain treemap text to stay within tile boundaries using SVG textLength.
    * Plotly treemap does not clip text — it overflows naturally. This runs after
    * each figure update and compresses any text line wider than (tile - 2*inset).
@@ -415,9 +441,6 @@ Object.assign(window.dash_clientside.clientside, {
           return;
         }
 
-        // Re-apply after every navigation. plotly_afterplot fires once per render
-        // cycle, right as Plotly *starts* the d3 transition. A 2 s delay ensures
-        // the animation has fully settled before re-measuring tile geometry.
         if (!plotDiv._textInsetBound) {
           plotDiv._textInsetBound = true;
           // Plotly fires events via an internal emitter, not DOM CustomEvents, so

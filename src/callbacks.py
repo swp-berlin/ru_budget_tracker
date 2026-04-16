@@ -460,6 +460,15 @@ clientside_callback(
     Input("treemap-graph", "figure", allow_optional=True),
 )
 
+# Restore treemap zoom to the previously selected node after a figure update.
+# Uses Plotly.restyle so the MutationObserver in applyTreemapTextInset keeps working.
+clientside_callback(
+    ClientsideFunction(namespace="clientside", function_name="restoreTreemapZoom"),
+    Output("dummy-restore-zoom", "children"),
+    Input("treemap-graph", "figure", allow_optional=True),
+    State("store-selected-id", "data"),
+)
+
 # Handle URL focus parameter and click simulation.
 clientside_callback(
     ClientsideFunction(namespace="clientside", function_name="findAndClickSlice"),

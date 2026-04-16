@@ -284,6 +284,8 @@ def layout(**other_kwargs) -> html.Div:
     Output("treemap-graph", "figure"),
     Output("treemap-graph", "style"),
     Output("store-treemap-node-map", "data"),
+    Output("warning-toast", "is_open", allow_duplicate=True),
+    Output("warning-toast", "children", allow_duplicate=True),
     Input("url", "pathname"),
     Input("store-budget-id", "data"),
     Input("store-viewby", "data"),
@@ -299,7 +301,7 @@ def update_figure_from_filters(
     spending_type: SpendingTypeLiteral = "ALL",
     unit: UnitLiteral = "ABSOLUTE",
     language: str = "RU",
-) -> tuple[go.Figure, dict[str, str], dict[str, dict[str, int | str]]]:
+) -> tuple[go.Figure, dict[str, str], dict[str, dict[str, int | str]], bool, str]:
     # Guard: only run when the treemap page is active.
     if pathname != get_relative_path("/"):
         raise PreventUpdate
@@ -310,11 +312,15 @@ def update_figure_from_filters(
     # Fetch and render using the selected values from stores
     # Use translated names when language is EN (English)
     translated = language == "EN"
-    df = transform_treemap_data(
-        budget_id=budget_id,
-        spending_type=spending_type,
-        unit=unit,
-    )
+    try:
+        df = transform_treemap_data(
+            budget_id=budget_id,
+            spending_type=spending_type,
+            unit=unit,
+        )
+    except ValueError as e:
+        return go.Figure(), {"visibility": "hidden"}, {}, True, str(e)
+
     df_shaped = shape_for_spending_type(df, spending_type=spending_type)
     df_shaped = shape_for_viewby(df_shaped, viewby=viewby)
     # Build a lookup map for treemap node selection across pages.
@@ -323,6 +329,8 @@ def update_figure_from_filters(
         generate_figure(df_shaped, spending_type, unit=unit, translated=translated, viewby=viewby),
         {"visibility": "visible"},
         node_map,
+        False,
+        "",
     )
 
 

@@ -66,6 +66,7 @@ toolbar = html.Div(
         dcc.Location(id="url"),
         # Dummy div target for clientside callbacks (requires an Output but is invisible).
         html.Div(id="dummy-output", style={"display": "none"}),
+        html.Div(id="dummy-restore-zoom", style={"display": "none"}),
         dbc.Stack(
             [
                 # Logo image without button styling - only the image is visible
@@ -171,6 +172,24 @@ toolbar = html.Div(
                                         "zIndex": 1060,
                                     },
                                 ),
+                                # Toast for data warnings (e.g. missing GDP/PPP data)
+                                dbc.Toast(
+                                    id="warning-toast",
+                                    header="Data unavailable",
+                                    children="",
+                                    is_open=False,
+                                    duration=6000,
+                                    dismissable=True,
+                                    icon="warning",
+                                    style={
+                                        "position": "fixed",
+                                        "bottom": 20,
+                                        "left": "50%",
+                                        "transform": "translateX(-50%)",
+                                        "zIndex": 1060,
+                                        "minWidth": "300px",
+                                    },
+                                ),
                                 # Download image button
                                 dbc.Button(
                                     html.Img(
@@ -249,6 +268,7 @@ validation_layout = html.Div(
         toolbar,
         page_container,
         # Include page-specific components for callback validation
+        html.Div(id="dummy-restore-zoom", style={"display": "none"}),
         dcc.Store(id="store-selected-id"),
         dcc.Store(id="store-treemap-node-map"),
         dcc.Graph(id="timeseries-graph"),

@@ -127,7 +127,16 @@ or modify the necessary Secrets and Variables required for the deployment proces
    ```
 
    See [`src/scripts/README.md`](src/scripts/README.md) for full details and options.
-5. **Run the Application (Docker)**
+5. **Run the Application (without Docker)**
+   Start the Dash development server directly:
+
+   ```bash
+   cd src && uv run python app.py
+   ```
+
+   The dashboard is available at `http://localhost:8050`.
+
+6. **Run the Application (Docker)**
    Start the app locally using Docker Compose, which runs the dashboard behind a Traefik reverse proxy:
 
    ```bash

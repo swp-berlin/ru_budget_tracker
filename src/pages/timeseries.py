@@ -210,7 +210,7 @@ def generate_figure(
     classified_label = "CLASSIFIED (EST.)" if spending_type == "MILITARY" else "CLASSIFIED"
     for trace in fig.data:
         bar = cast(go.Bar, trace)
-        n = len(bar.x) if isinstance(bar.x, (list, tuple)) else 0
+        n = len(bar.x) if bar.x is not None else 0
         bar.customdata = [[unit_label]] * n
         if bar.name == "OPEN":
             bar.hovertemplate = (
@@ -325,7 +325,7 @@ def layout(**other_kwargs) -> html.Div:
     Input("store-period", "data"),
     Input("store-spending-type", "data"),
     Input("store-unit", "data"),
-    State("store-selected-id", "data"),
+    Input("store-selected-id", "data"),
     State("store-treemap-node-map", "data"),
 )
 def update_figure_from_filters(

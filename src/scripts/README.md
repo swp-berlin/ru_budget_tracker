@@ -53,6 +53,14 @@ make import-ppp
 
 # 6) Run translation pipeline (translates unseen dimension names)
 make import-translations
+
+# translations.py also accepts flags directly:
+# --batch-size N   Names per API call (default: 25)
+# --workers N      Parallel API calls (default: 4)
+# --dry-run        Preview without writing changes
+# --force          Re-translate already-translated names
+# --skip-db-update Only update CSV, skip database write
+# --limit N        Translate only the first N names (for testing)
 ```
 
 ### Data Model
@@ -67,13 +75,13 @@ using a Mermaid ER diagram.
 ### SQL Queries
 When writing functions to interact with the database, **always** use SQLAlchemy ORM methods to create statements/queries. **Do not** write raw SQL queries unless absolutely necessary. This ensures compatibility across different database backends and prevents SQL injection vulnerabilities.
 
-### Order of Import
-When importing data, ensure that you import in the following order to maintain referential integrity:
+### Referential Integrity
+When importing data, maintain this order to satisfy foreign-key constraints:
 1. Budgets
 2. Dimensions
 3. Expenses with Dimension Mappings
 
-ConversionRates can be imported at any time as they do not have dependencies on other tables.
+ConversionRates have no dependencies and can be imported at any time.
 
 ### Mapping Expenses to Dimensions
 - `DimensionTypeLiteral`: Found in the [budget.py file](src/models/budget.py). Use to ensure the correct type is assigned to each dimension. Can be expanded as needed.
