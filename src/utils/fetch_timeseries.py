@@ -23,7 +23,14 @@ from sqlalchemy import (
 )
 
 from database import get_sync_session
-from models import Budget, Dimension, Expense, assoc_table
+from models import (
+    Budget,
+    Dimension,
+    Expense,
+    LawClassifiedSpendingPerChapter,
+    ReportClassifiedSpendingPerChapter,
+    assoc_table,
+)
 from utils.definitions import (
     SpendingTypeLiteral,
     BudgetTypeLiteral,
@@ -127,7 +134,9 @@ class TimeseriesDataFetcher:
             part_queries = [
                 select(assoc_table.c.expense_id)
                 .join(Dimension, assoc_table.c.dimension_id == Dimension.id)
-                .where(and_(Dimension.type == dim, Dimension.original_identifier.op("REGEXP")(pattern)))
+                .where(
+                    and_(Dimension.type == dim, Dimension.original_identifier.op("REGEXP")(pattern))
+                )
                 for dim, pattern in combination.items()
             ]
             if part_queries:
@@ -247,32 +256,12 @@ class TimeseriesDataFetcher:
 
         expenses_subquery = self._build_expense_subquery(military_conditions, budget_type="LAW")
 
-        law_2018_2019_condition = extract("year", Budget.published_at).in_([2018, 2019])
-
         # LAW budgets with MINISTRY dimensions
         law_ministry_stmt = (
             select(
                 *base_columns,
-                func.sum(
-                    case(
-                        (
-                            law_2018_2019_condition,
-                            func.abs(expenses_subquery.c.value)
-                            * budget_config.law_18_19_value_multiplier,
-                        ),
-                        else_=func.abs(expenses_subquery.c.value),
-                    )
-                ).label("total_value"),
-                func.sum(
-                    case(
-                        (
-                            law_2018_2019_condition,
-                            func.abs(expenses_subquery.c.military_value)
-                            * budget_config.law_18_19_value_multiplier,
-                        ),
-                        else_=func.abs(expenses_subquery.c.military_value),
-                    )
-                ).label("military_value"),
+                func.sum(func.abs(expenses_subquery.c.value)).label("total_value"),
+                func.sum(func.abs(expenses_subquery.c.military_value)).label("military_value"),
             )
             .select_from(Budget)
             .join(expenses_subquery, Budget.id == expenses_subquery.c.budget_id)
@@ -319,79 +308,59 @@ class TimeseriesDataFetcher:
         )
 
         if self.spending_type == "MILITARY":
-            # For MILITARY classified we need:
-            #   classified = Σ_chapter( TOTAL_chapter × 1000 − LAW_all_open_chapter )
-            # for military chapters (02 direct, 10 via custom_patterns).
-            #
-            # We can't derive this from the existing TOTAL row (which would subtract
-            # military_open instead of all-open, causing over-counting).  Instead, pre-compute
-            # the entire classified sum in SQL and store it as:
-            #   total_value = classified_sum / 1000
-            # so the transformer recovers: total_value × 1000 − 0 = classified_sum.
-            military_chapter_filter = or_(
-                Dimension.original_identifier.op("REGEXP")(
-                    MilitarySpending.simple_patterns_sql["CHAPTER"]
-                ),
-                Dimension.original_identifier.op("REGEXP")(
-                    MilitarySpending.custom_patterns["CHAPTER"].pattern
-                ),
-            )
+            # Use the pre-computed view for military chapters (02 = National Defense, 10 = Social).
+            # The view already handles the 2018–2019 multiplier correction and computes:
+            #   classified_spending = total_spending − open_spending
+            military_chapters = ["02", "10"]
 
-            # Subquery: sum of ALL open expenses for military chapters per year.
-            # Apply 0.5 for 2018–2019 where LAW values are doubled in the source data.
-            law_chapter_open_sq = (
+            view_agg = (
                 select(
-                    extract("year", Budget.published_at).label("year"),
-                    func.sum(
-                        case(
-                            (
-                                extract("year", Budget.published_at).in_([2018, 2019]),
-                                func.abs(Expense.value) * budget_config.law_18_19_value_multiplier,
-                            ),
-                            else_=func.abs(Expense.value),
-                        )
-                    ).label("chapter_open"),
+                    LawClassifiedSpendingPerChapter.year,
+                    func.sum(LawClassifiedSpendingPerChapter.open_spending).label("military_open"),
+                    func.sum(LawClassifiedSpendingPerChapter.classified_spending).label(
+                        "military_classified"
+                    ),
                 )
-                .select_from(Budget)
-                .join(Expense, Budget.id == Expense.budget_id)
-                .join(assoc_table, Expense.id == assoc_table.c.expense_id)
-                .join(Dimension, assoc_table.c.dimension_id == Dimension.id)
-                .where(Budget.type == "LAW")
-                .where(Dimension.type == "CHAPTER")
-                .where(military_chapter_filter)
-                .group_by(extract("year", Budget.published_at))
+                .where(LawClassifiedSpendingPerChapter.original_identifier.in_(military_chapters))
+                .group_by(LawClassifiedSpendingPerChapter.year)
                 .subquery()
             )
 
-            # Replace the generic TOTAL query with one that encodes the pre-computed classified.
-            # military_value is set to 0 so the transformer subtracts nothing.
-            total_chapter_stmt = (
+            # LAW rows: open military spending from the view.
+            # Both total_value and military_value carry the same open amount;
+            # the transformer picks military_value for the open bar in MILITARY mode.
+            law_stmt = (
+                select(
+                    *base_columns,
+                    view_agg.c.military_open.label("total_value"),
+                    view_agg.c.military_open.label("military_value"),
+                )
+                .select_from(Budget)
+                .join(view_agg, extract("year", Budget.published_at) == view_agg.c.year)
+                .where(Budget.type == "LAW")
+            )
+
+            # TOTAL rows: pre-computed classified spending from the view.
+            # Divide by the multiplier so the transformer restores the correct value:
+            #   classified = (military_classified / 1000) × 1000 = military_classified
+            # military_value = 0 so the transformer subtracts nothing.
+            total_stmt = (
                 select(
                     *base_columns,
                     (
-                        (
-                            func.sum(func.abs(Expense.value))
-                            * budget_config.law_total_value_multiplier
-                            - func.max(law_chapter_open_sq.c.chapter_open)
-                        )
-                        / budget_config.law_total_value_multiplier
+                        view_agg.c.military_classified / budget_config.law_total_value_multiplier
                     ).label("total_value"),
                     literal(0.0).label("military_value"),
                 )
                 .select_from(Budget)
-                .join(Expense, Budget.id == Expense.budget_id, isouter=True)
-                .join(assoc_table, Expense.id == assoc_table.c.expense_id, isouter=True)
-                .join(Dimension, assoc_table.c.dimension_id == Dimension.id, isouter=True)
-                .join(
-                    law_chapter_open_sq,
-                    extract("year", Budget.published_at) == law_chapter_open_sq.c.year,
-                )
+                .join(view_agg, extract("year", Budget.published_at) == view_agg.c.year)
                 .where(Budget.type == "TOTAL")
                 .where(Budget.original_identifier.like("%LAW%"))
-                .where(Dimension.type == "CHAPTER")
-                .where(military_chapter_filter)
-                .group_by(Budget.id, Budget.original_identifier, Budget.type)
             )
+
+            union_stmt = law_stmt.union(total_stmt)
+            with get_sync_session() as session:
+                return session.execute(union_stmt).mappings().all()
 
         union_stmt = law_ministry_stmt.union(total_chapter_stmt)
 
@@ -402,18 +371,96 @@ class TimeseriesDataFetcher:
         """
         Fetch REPORT budgets and their corresponding TOTAL budgets.
 
-        Includes:
-        - REPORT budgets with MINISTRY dimension
-        - TOTAL budgets with NULL dimension (expense totals)
+            Includes:
+            - REPORT budgets with MINISTRY dimension
+            - TOTAL budgets with NULL dimension (expense totals)
 
-        Only includes quarterly data (months 3, 6, 9, 12).
+            Only includes quarterly data (months 3, 6, 9, 12).
 
-        Returns:
-            Sequence of budget expense row mappings.
+            Returns:
+                Sequence of budget expense row mappings.
         """
         base_columns = self._get_budget_expense_columns()
 
         military_conditions = self._build_military_spending_condition()
+
+        if self.spending_type == "MILITARY":
+            # Use the pre-computed view for chapters 02 (National Defense) and 10 (Social),
+            # matching the same chapter set used for LAW military budgets.
+            # Prefer chapter_classified_spending (direct, available 2018-2021) and fall back
+            # to estimated_classified_spending (LAW-share estimate, used from 2022 onward).
+            # Aggregate both chapters so the subquery has one row per (year, month).
+            military_chapters = ["02", "10"]
+            view_sq = (
+                select(
+                    ReportClassifiedSpendingPerChapter.year,
+                    ReportClassifiedSpendingPerChapter.month,
+                    func.sum(ReportClassifiedSpendingPerChapter.open_spending).label(
+                        "military_open"
+                    ),
+                    func.sum(
+                        func.coalesce(
+                            ReportClassifiedSpendingPerChapter.chapter_classified_spending,
+                            ReportClassifiedSpendingPerChapter.estimated_classified_spending,
+                            literal(0.0),
+                        )
+                    ).label("classified_value"),
+                )
+                .where(
+                    ReportClassifiedSpendingPerChapter.original_identifier.in_(military_chapters)
+                )
+                .group_by(
+                    ReportClassifiedSpendingPerChapter.year,
+                    ReportClassifiedSpendingPerChapter.month,
+                )
+                .subquery()
+            )
+
+            # REPORT rows: open military spending from the view.
+            # Both total_value and military_value carry the open amount;
+            # the transformer picks military_value for the open bar in MILITARY mode.
+            report_stmt = (
+                select(
+                    *base_columns,
+                    view_sq.c.military_open.label("total_value"),
+                    view_sq.c.military_open.label("military_value"),
+                )
+                .select_from(Budget)
+                .join(
+                    view_sq,
+                    and_(
+                        extract("year", Budget.published_at) == view_sq.c.year,
+                        extract("month", Budget.published_at) == view_sq.c.month,
+                    ),
+                )
+                .where(Budget.type == "REPORT")
+                .where(extract("month", Budget.published_at).in_(budget_config.quarterly_months))
+            )
+
+            # TOTAL rows: direct or estimated classified spending from the view.
+            # military_value = 0 so the transformer computes: classified = total_value × 1 − 0.
+            total_stmt = (
+                select(
+                    *base_columns,
+                    view_sq.c.classified_value.label("total_value"),
+                    literal(0.0).label("military_value"),
+                )
+                .select_from(Budget)
+                .join(
+                    view_sq,
+                    and_(
+                        extract("year", Budget.published_at) == view_sq.c.year,
+                        extract("month", Budget.published_at) == view_sq.c.month,
+                    ),
+                )
+                .where(Budget.type == "TOTAL")
+                .where(Budget.original_identifier.like("%EXPENSE%"))
+                .where(extract("month", Budget.published_at).in_(budget_config.quarterly_months))
+            )
+
+            union_stmt = report_stmt.union(total_stmt)
+            with get_sync_session() as session:
+                return session.execute(union_stmt).mappings().all()
 
         stmt = (
             select(

@@ -13,10 +13,10 @@ from sqlalchemy import (
     RowMapping,
     Select,
     and_,
+    case,
     extract,
     func,
     select,
-    case,
 )
 from pydantic import BaseModel
 from database import get_sync_session
@@ -26,9 +26,6 @@ from models import (
     Expense,
     LawClassifiedSpendingPerChapter,
     ReportClassifiedSpendingPerChapter,
-)
-from utils.definitions import (
-    budget_config,
 )
 
 # =============================================================================
@@ -207,16 +204,7 @@ class TreemapDataFetcher:
         stmt = (
             select(
                 Expense.id,
-                case(
-                    (
-                        and_(
-                            Budget.type == "LAW",
-                            extract("year", Budget.published_at).in_([2018, 2019]),
-                        ),
-                        Expense.value * budget_config.law_18_19_value_multiplier,
-                    ),
-                    else_=Expense.value,
-                ).label("value"),
+                Expense.value.label("value"),
                 Budget.type.label("budget_type"),
                 Dimension.id.label("dimension_id"),
                 Dimension.original_identifier.label("dimension_original_identifier"),

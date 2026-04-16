@@ -1,12 +1,12 @@
 from typing import Sequence
 import pandas as pd
 from sqlalchemy import RowMapping
-from utils.definitions import budget_config
+from utils.definitions import budget_config, SpendingTypeLiteral
 
 
 class TimeseriesTransformer:
     def _normalize_cumulative_expenses(
-        self, budgets: Sequence[RowMapping]
+        self, budgets: Sequence[RowMapping], spending_type: SpendingTypeLiteral = "ALL"
     ) -> list[dict[str, str | float | int]]:
         """Normalize cumulative quarterly expenses by subtracting the previous quarter's value.
 
@@ -23,6 +23,8 @@ class TimeseriesTransformer:
             key = (budget["published_at"].year, budget["type"])
             grouped.setdefault(key, []).append(budget)
 
+        value_key = "military_value" if spending_type == "MILITARY" else "total_value"
+
         # Process each year-type group
         for (_, _), group_budgets in grouped.items():
             # Sort by date ascending to process in chronological order
@@ -34,7 +36,7 @@ class TimeseriesTransformer:
             for budget in sorted_budgets:
                 # Convert RowMapping to mutable dict
                 normalized = dict(budget)
-                current_cumulative = budget.get("total_value", 0.0) or 0.0
+                current_cumulative = budget.get(value_key, 0.0) or 0.0
 
                 # Calculate quarterly value by subtracting previous quarter
                 quarterly_value = current_cumulative - prev_cumulative_value
@@ -51,6 +53,7 @@ class TimeseriesTransformer:
         self,
         budgets: Sequence[RowMapping],
         normalize: bool,
+        spending_type: SpendingTypeLiteral = "ALL",
     ) -> pd.DataFrame:
         """Transform law budget rows into a dataframe suitable for Timeseries visualization."""
         if not budgets:
@@ -60,10 +63,13 @@ class TimeseriesTransformer:
         # and set new value as Classified Spending
         budgets_corrected: Sequence[RowMapping] | list[dict[str, str | float | int]] = budgets
         if normalize:
-            budgets_corrected = self._normalize_cumulative_expenses(budgets)
+            budgets_corrected = self._normalize_cumulative_expenses(budgets, spending_type)
+
+        # Use military_value for the OPEN bar when filtering for military spending.
+        open_value_key = "military_value" if spending_type == "MILITARY" else "total_value"
 
         expenses = [
-            budget["total_value"] for budget in budgets_corrected if budget["type"] != "TOTAL"
+            budget[open_value_key] for budget in budgets_corrected if budget["type"] != "TOTAL"
         ]
         dates = [
             budget["published_at"] for budget in budgets_corrected if budget["type"] != "TOTAL"
@@ -93,8 +99,14 @@ class TimeseriesTransformer:
 
             total_value: float = budget["total_value"] * multiplicator  # type: ignore
 
-            value: float = corresponding_budget["total_value"] if corresponding_budget else 0.0  # type: ignore
-            classified_expense = total_value - value
+            # For MILITARY mode, classified is pre-computed in total_value by the fetch layer
+            # (TOTAL_military_chapters × multiplier − all_open_military_chapters), so open_value = 0.
+            # For ALL spending type, subtract the corresponding budget's open spending as usual.
+            if spending_type == "MILITARY":
+                open_value: float = 0.0
+            else:
+                open_value = float(corresponding_budget[open_value_key] or 0.0)  # type: ignore
+            classified_expense = total_value - open_value
             budget_id = budget["id"]
             df = pd.concat(
                 [
@@ -118,10 +130,15 @@ class TimeseriesTransformer:
 
         return df
 
-    def transform_data(self, budgets: Sequence[RowMapping], normalize: bool = True) -> pd.DataFrame:
+    def transform_data(
+        self,
+        budgets: Sequence[RowMapping],
+        normalize: bool = True,
+        spending_type: SpendingTypeLiteral = "ALL",
+    ) -> pd.DataFrame:
         """Transform raw rows into a dataframe suitable for Timeseries visualization."""
         if not budgets:
             return pd.DataFrame()
-        df = self._transform_budget_totals(budgets, normalize)
+        df = self._transform_budget_totals(budgets, normalize, spending_type)
 
         return df

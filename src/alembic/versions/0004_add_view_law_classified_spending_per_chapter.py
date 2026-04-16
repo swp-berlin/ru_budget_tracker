@@ -30,8 +30,6 @@ def _build_view_select():
     Classified spending per chapter = TOTAL(LAW) × 1000 − open LAW spending per chapter.
     LAW values for 2018–2019 are halved because the source data doubles them.
     """
-    law_years_condition = cast(func.strftime("%Y", Budget.published_at), Integer).in_([2018, 2019])
-
     # ── CTE 1: open (published) LAW spending per chapter ──────────────────────────
     open_year = cast(func.strftime("%Y", Budget.published_at), Integer).label("year")
     open_cte = (
@@ -40,15 +38,7 @@ def _build_view_select():
             Dimension.original_identifier.label("original_identifier"),
             Dimension.name.label("chapter_name"),
             Dimension.name_translated.label("chapter_name_translated"),
-            func.sum(
-                case(
-                    (
-                        law_years_condition,
-                        func.abs(Expense.value) * budget_config.law_18_19_value_multiplier,
-                    ),
-                    else_=func.abs(Expense.value),
-                )
-            ).label("open_value"),
+            func.sum(func.abs(Expense.value)).label("open_value"),
         )
         .select_from(Budget)
         .join(Expense, Budget.id == Expense.budget_id)
@@ -56,7 +46,9 @@ def _build_view_select():
         .join(Dimension, assoc_table.c.dimension_id == Dimension.id)
         .where(Budget.type == "LAW")
         .where(Dimension.type == "CHAPTER")
-        .group_by(open_year, Dimension.original_identifier, Dimension.name, Dimension.name_translated)
+        .group_by(
+            open_year, Dimension.original_identifier, Dimension.name, Dimension.name_translated
+        )
         .cte("open_spending")
     )
 
@@ -79,7 +71,9 @@ def _build_view_select():
         .where(Budget.type == "TOTAL")
         .where(Budget.original_identifier.like("%LAW%"))
         .where(Dimension.type == "CHAPTER")
-        .group_by(total_year, Dimension.original_identifier, Dimension.name, Dimension.name_translated)
+        .group_by(
+            total_year, Dimension.original_identifier, Dimension.name, Dimension.name_translated
+        )
         .cte("total_spending")
     )
 

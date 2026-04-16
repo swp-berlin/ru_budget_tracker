@@ -21,6 +21,7 @@ Usage:
 import sys
 import json
 import hashlib
+import logging
 import argparse
 from pathlib import Path
 from datetime import datetime
@@ -35,6 +36,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from database.sessions import get_sync_session
 from models import Budget, Expense, Dimension, assoc_table
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -234,7 +238,7 @@ def find_problematic_expenses(expense_dims_df: pd.DataFrame) -> Dict[str, List[D
     - one_dimension: expenses with only one dimension
     - missing_types: expenses missing expected dimension types
     """
-    problems = {
+    problems: Dict[str, List[Dict]] = {
         "zero_dimensions": [],
         "one_dimension": [],
         "missing_types": [],
@@ -345,7 +349,7 @@ def calculate_summary_statistics(
 
     # Ministry sums per budget
     ministry_sums_df = get_expense_sums_by_dimension(session, "MINISTRY")
-    ministry_sums = defaultdict(dict)
+    ministry_sums: Dict[str, Dict] = defaultdict(dict)
     for _, row in ministry_sums_df.iterrows():
         ministry_sums[row["budget_identifier"]][row["dimension_identifier"]] = {
             "name": row["dimension_name"][:50] if row["dimension_name"] else "",
@@ -354,7 +358,7 @@ def calculate_summary_statistics(
 
     # Chapter sums per budget
     chapter_sums_df = get_expense_sums_by_dimension(session, "CHAPTER")
-    chapter_sums = defaultdict(dict)
+    chapter_sums: Dict[str, Dict] = defaultdict(dict)
     for _, row in chapter_sums_df.iterrows():
         chapter_sums[row["budget_identifier"]][row["dimension_identifier"]] = {
             "name": row["dimension_name"][:50] if row["dimension_name"] else "",
@@ -630,40 +634,40 @@ def main():
     log_path = output_dir / f"sanity_check_{timestamp}.log"
     json_path = output_dir / f"sanity_check_{timestamp}.json"
 
-    print(f"Running sanity checks...")
-    print(f"Output directory: {output_dir.absolute()}")
+    logger.info("Running sanity checks...")
+    logger.info(f"Output directory: {output_dir.absolute()}")
 
     with get_sync_session() as session:
         # Fetch data
-        print("  Fetching budgets...")
+        logger.info("Fetching budgets...")
         budgets_df = get_all_budgets(session)
 
         if budgets_df.empty:
-            print("No budgets found in database!")
+            logger.warning("No budgets found in database!")
             return
 
-        print(f"  Found {len(budgets_df)} budgets")
+        logger.info(f"Found {len(budgets_df)} budgets")
 
-        print("  Fetching expense dimension counts...")
+        logger.info("Fetching expense dimension counts...")
         expense_dims_df = get_expense_dimension_counts(session)
-        print(f"  Found {len(expense_dims_df)} expenses")
+        logger.info(f"Found {len(expense_dims_df)} expenses")
 
-        print("  Fetching expense dimension types...")
+        logger.info("Fetching expense dimension types...")
         expense_types_df = get_expense_dimension_types(session)
 
-        print("  Fetching dimension coverage...")
+        logger.info("Fetching dimension coverage...")
         coverage_df = get_dimension_coverage_by_budget(session)
 
-        print("  Fetching totals...")
+        logger.info("Fetching totals...")
         totals = get_total_counts(session)
 
         # Analyze
-        print("  Analyzing for issues...")
+        logger.info("Analyzing for issues...")
         problems = find_problematic_expenses(expense_dims_df)
         missing_types = find_missing_dimension_types(expense_types_df)
 
         # Generate log
-        print("  Generating log...")
+        logger.info("Generating log...")
         log_lines = generate_log_content(
             budgets_df,
             expense_dims_df,
@@ -674,10 +678,10 @@ def main():
             totals,
         )
         write_log(log_path, log_lines)
-        print(f"  Log saved to: {log_path}")
+        logger.info(f"Log saved to: {log_path}")
 
         # Generate JSON summary
-        print("  Generating summary statistics...")
+        logger.info("Generating summary statistics...")
         summary_stats = calculate_summary_statistics(
             session, budgets_df, expense_dims_df, coverage_df
         )
@@ -697,27 +701,27 @@ def main():
 
         with open(json_path, "w", encoding="utf-8") as f:
             json.dump(summary_stats, f, indent=2, ensure_ascii=False)
-        print(f"  JSON saved to: {json_path}")
+        logger.info(f"JSON saved to: {json_path}")
 
-        # Print summary
-        print("\n" + "=" * 60)
-        print("SANITY CHECK COMPLETE")
-        print("=" * 60)
-        print(f"Checksum: {summary_stats['checksum']}")
-        print(f"Budgets: {totals['budgets']}")
-        print(f"Expenses: {totals['expenses']}")
-        print(f"Dimensions: {totals['dimensions']}")
-
+        # Summary
         total_issues = (
             len(problems["zero_dimensions"]) + len(problems["one_dimension"]) + len(missing_types)
         )
+        logger.info("=" * 60)
+        logger.info("SANITY CHECK COMPLETE")
+        logger.info("=" * 60)
+        logger.info(f"Checksum: {summary_stats['checksum']}")
+        logger.info(f"Budgets: {totals['budgets']}")
+        logger.info(f"Expenses: {totals['expenses']}")
+        logger.info(f"Dimensions: {totals['dimensions']}")
+
         if total_issues == 0:
-            print("\n✓ No issues found!")
+            logger.info("No issues found!")
         else:
-            print(f"\n⚠ Found {total_issues} issues:")
-            print(f"  - Expenses with 0 dimensions: {len(problems['zero_dimensions'])}")
-            print(f"  - Expenses with 1 dimension: {len(problems['one_dimension'])}")
-            print(f"  - Missing expected types: {len(missing_types)}")
+            logger.warning(f"Found {total_issues} issues:")
+            logger.warning(f"  - Expenses with 0 dimensions: {len(problems['zero_dimensions'])}")
+            logger.warning(f"  - Expenses with 1 dimension: {len(problems['one_dimension'])}")
+            logger.warning(f"  - Missing expected types: {len(missing_types)}")
 
 
 if __name__ == "__main__":

@@ -206,22 +206,21 @@ def generate_figure(
             xaxis=dict(hoverformat="%Y", tickangle=-45),
         )
 
-    # Set custom hover templates for each trace
-    # First trace is regular budget data (LAW or REPORT)
-    if len(fig.data) > 0:  # type: ignore
-        fig.data[0].customdata = [[unit_label] for _ in df["dates"]]
-        fig.data[
-            0
-        ].hovertemplate = "<b>%{x}</b><br>Value: %{y:,.1f} %{customdata[0]}<br><extra></extra>"
+    # Set custom hover templates per trace, matched by name for robustness.
+    classified_label = "Classified (estimated)" if spending_type == "MILITARY" else "CLASSIFIED"
+    for trace in fig.data:  # type: ignore
+        n = len(trace.x) if trace.x is not None else 0
+        trace.customdata = [[unit_label]] * n
+        if trace.name == "OPEN":
+            trace.hovertemplate = (
+                "<b>%{x}</b><br>Value: %{y:,.1f} %{customdata[0]}<br><extra></extra>"
+            )
+        elif trace.name == "CLASSIFIED":
+            trace.hovertemplate = (
+                "<b>%{x}</b><br>Value: %{y:,.1f} %{customdata[0]} (classified)<br><extra></extra>"
+            )
+            trace.name = classified_label
 
-    # Second trace is classified spending (only present when TOTAL budget exists)
-    if len(fig.data) > 1:  # type: ignore
-        fig.data[1].customdata = [[unit_label] for _ in df["dates"]]
-        fig.data[
-            1
-        ].hovertemplate = (
-            "<b>%{x}</b><br>Value: %{y:,.1f} %{customdata[0]} (classified)<br><extra></extra>"
-        )
     return fig
 
 

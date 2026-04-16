@@ -72,6 +72,36 @@ class ReportClassifiedSpendingPerChapter(Base):
     estimated_classified_spending: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
+class LawMilitaryOpenSpendingPerChapter(Base):
+    """
+    Read-only ORM model backed by v_law_military_open_spending_per_chapter.
+
+    Aggregates all military open spending from LAW budgets per (budget_id, chapter).
+    Military expenses are identified using the full treemap definition:
+      - CHAPTER = '02'
+      - PROGRAMM LIKE '31%'
+      - MINISTRY = '187'
+      - CHAPTER = '03' AND MINISTRY = '180'  (combination)
+
+    The 2018–2019 halving correction is applied.
+
+    Do not use with Base.metadata.create_all(); the view is managed by Alembic.
+    """
+
+    __tablename__ = "v_law_military_open_spending_per_chapter"
+    __table_args__ = {"info": {"is_view": True}}
+
+    budget_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    original_identifier: Mapped[str] = mapped_column(String, primary_key=True)
+
+    chapter_name: Mapped[str] = mapped_column(String)
+    chapter_name_translated: Mapped[str | None] = mapped_column(String, nullable=True)
+    open_spending: Mapped[float] = mapped_column(Float)
+    # Populated only for chapters 02 (National Defense) and 10 (Social Policy),
+    # where the entire chapter is military so the classified total is meaningful.
+    classified_spending: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
 class MilitaryClassifiedSpendingPerChapter(Base):
     """
     Read-only ORM model backed by v_military_classified_spending_per_chapter.

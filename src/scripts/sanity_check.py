@@ -9,6 +9,7 @@ Usage:
 """
 
 import sys
+import logging
 from pathlib import Path
 from datetime import datetime
 
@@ -21,6 +22,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from settings import settings
 from database.sessions import get_sync_session
 from models import Budget, Expense, Dimension, assoc_table
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
 
 
 def get_expenses_by_dimension_type(session, dimension_type: str) -> pd.DataFrame:
@@ -137,7 +141,7 @@ def calculate_and_log_sums():
         if budgets_df.empty:
             lines.append("No budgets found in database.")
             write_log(log_file, lines)
-            print(f"Log saved to: {log_file.absolute()}")
+            logger.info(f"Log saved to: {log_file.absolute()}")
             return
 
         lines.append(f"\nFound {len(budgets_df)} budget(s):")
@@ -238,7 +242,7 @@ def calculate_and_log_sums():
 
     # Write to file
     write_log(log_file, lines)
-    print(f"Log saved to: {log_file.absolute()}")
+    logger.info(f"Log saved to: {log_file.absolute()}")
 
 
 if __name__ == "__main__":
