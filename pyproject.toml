@@ -37,7 +37,7 @@ package = false
 # - Line length of 100 characters
 # - T20: print() and pprint() should not be used in production code
 line-length = 100
-select = ["T20"]
+lint.select = ["T20"]
 
 [tool.mypy]
 python_version = "3.14"

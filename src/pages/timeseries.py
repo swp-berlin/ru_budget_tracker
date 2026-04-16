@@ -62,20 +62,29 @@ unit_labels = {
 def _calculate_values(
     df: pd.DataFrame, budget_id: int, unit: UnitLiteral, budget_type: BudgetTypeLiteral
 ) -> pd.DataFrame:
-    for index, row in df.iterrows():
-        budget_date = date.fromisoformat(row["dates"].date().isoformat())
-        calculator = Calculator(
-            budget_id=budget_id,
-            unit=unit,
-            date=budget_date,
-            budget_type=budget_type,
-        )
-        try:
-            df.at[index, "expenses"] = calculator.calculate(row["expenses"])  # type: ignore
-        except ValueError:
-            # drop rows with calculation errors (e.g., missing data for the date/unit)
-            df = df.drop(index)
+    # Cache one Calculator per unique date (was one per row) and collect drops to apply at the end.
+    _calculator_cache: dict[date, Calculator] = {}
+    rows_to_drop: list = []
 
+    for index, row in df.iterrows():
+        try:
+            budget_date = row["dates"].date()
+        except (AttributeError, ValueError):
+            # NaT or unparseable dates — drop the row (matches original behaviour).
+            rows_to_drop.append(index)
+            continue
+
+        if budget_date not in _calculator_cache:
+            _calculator_cache[budget_date] = Calculator(
+                budget_id=budget_id, unit=unit, date=budget_date, budget_type=budget_type
+            )
+        try:
+            df.at[index, "expenses"] = _calculator_cache[budget_date].calculate(row["expenses"])
+        except ValueError:
+            rows_to_drop.append(index)
+
+    if rows_to_drop:
+        df = df.drop(rows_to_drop)
     return df
 
 
@@ -117,9 +126,9 @@ def fetch_timeseries_data(
         "PERCENT_YEAR_TO_DATE_SPENDING",
         "PERCENT_YEAR_TO_DATE_REVENUE",
     ]:
-        df = transformer.transform_data(budgets, normalize=True)
+        df = transformer.transform_data(budgets, normalize=True, spending_type=spending_type)
     else:
-        df = transformer.transform_data(budgets, normalize=False)
+        df = transformer.transform_data(budgets, normalize=False, spending_type=spending_type)
     # Use apply to calculate expenses for each row in a vectorized way
     budget_type: BudgetTypeLiteral = next(
         (row["type"] for row in budgets if row["type"] in ["LAW", "REPORT"]), "LAW"
@@ -129,7 +138,7 @@ def fetch_timeseries_data(
         df = _shape_for_period(df, period)
     df = _calculate_values(df, budget_id, unit, budget_type)
     # Rename LAW and REPORT to OPEN for clearer legend labeling in the timeseries view.
-    df["types"] = df["types"].apply(lambda x: "OPEN" if x != "CLASSIFIED" else x)
+    df["types"] = df["types"].where(df["types"] == "CLASSIFIED", "OPEN")
     return df, type, budget_type
 
 

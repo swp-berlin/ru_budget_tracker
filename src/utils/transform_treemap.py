@@ -302,8 +302,10 @@ class TreemapTransformer:
         if line_length is not None:
             for col in df.columns:
                 if "NAME" in col:
-                    df[col] = df[col].apply(
-                        lambda x, w=line_length: "<br>".join(wrap(str(x), width=w)) if x else x
+                    df[col] = (
+                        df[col]
+                        .str.wrap(line_length)
+                        .str.replace("\n", "<br>", regex=False)
                     )
 
         # Normalize empty strings to None for Plotly compatibility.
@@ -357,10 +359,9 @@ class TreemapTransformer:
 
             if line_length is not None:
                 for key in list(classified_entry):
-                    if "NAME" in key and isinstance(classified_entry[key], str):
-                        classified_entry[key] = "<br>".join(
-                            wrap(classified_entry[key], width=line_length)
-                        )  # type: ignore[arg-type]
+                    val = classified_entry[key]
+                    if "NAME" in key and isinstance(val, str):
+                        classified_entry[key] = "<br>".join(wrap(val, width=line_length))
 
             new_entries.append(classified_entry)
 

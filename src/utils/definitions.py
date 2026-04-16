@@ -52,7 +52,7 @@ class ViewByConfig(BaseModel):
         ("Program", "PROGRAM"),
     ]
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def map(self) -> dict[str, str]:
         return {v: l for l, v in self.options}
@@ -80,7 +80,7 @@ class PeriodConfig(BaseModel):
         ("Q1-Q4", "Q4"),
     ]
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def map(self) -> dict[str, str]:
         return {v: l for l, v in self.options}
@@ -161,7 +161,8 @@ class _MilitarySpendingConfig(BaseModel):
             "CHAPTER": "^03$",
         }
     ]
-
+    # This is only important for coloring, when in "Military Only" mode
+    # Do not use in queries
     custom_patterns: dict[str, Pattern] = {
         "CHAPTER": compile(r"^10$"),
     }
@@ -217,7 +218,7 @@ class _ColorsConfig(BaseModel):
     ]
 
     # Color mapping for CHAPTERs based on the official color coding in the original dashboard.
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def color_mapping_chapters(self) -> dict[str, str]:
         return {

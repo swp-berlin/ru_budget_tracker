@@ -119,15 +119,22 @@ class TimeseriesDataFetcher:
                 )
             )
         for combination in MilitarySpending.combination_patterns_sql:
-            combination_conditions = []
-            for dim, pattern in combination.items():
-                combination_conditions.append(
-                    and_(
-                        Dimension.type == dim,
-                        Dimension.original_identifier.op("REGEXP")(pattern),
-                    )
-                )
-            military_conditions.append(and_(*combination_conditions))
+            # Each combination requires an expense to have dimensions matching ALL conditions
+            # simultaneously (e.g. MINISTRY=180 AND CHAPTER=03 on different dimension rows).
+            # A single JOIN row can only hold one Dimension.type, so AND-ing type conditions
+            # directly is always False. Instead, intersect per-dimension expense_id subqueries
+            # so that only expenses with ALL required dimension rows are matched.
+            part_queries = [
+                select(assoc_table.c.expense_id)
+                .join(Dimension, assoc_table.c.dimension_id == Dimension.id)
+                .where(and_(Dimension.type == dim, Dimension.original_identifier.op("REGEXP")(pattern)))
+                for dim, pattern in combination.items()
+            ]
+            if part_queries:
+                combo_sq = part_queries[0]
+                for pq in part_queries[1:]:
+                    combo_sq = combo_sq.intersect(pq)
+                military_conditions.append(Expense.id.in_(combo_sq))
 
         return military_conditions
 
@@ -150,15 +157,19 @@ class TimeseriesDataFetcher:
                 Expense.id.label("expense_id"),
                 Expense.budget_id.label("budget_id"),
                 func.abs(Expense.value).label("value"),  # Ensure no negative values in sums.
-                # Include case when statment to categorize expense as military or non-military based on dimension patterns.
-                case(
-                    (
-                        or_(
-                            *military_conditions,
+                # Use MAX so that if ANY dimension of the expense matches military patterns,
+                # the expense is classified as military. Without MAX the GROUP BY would pick
+                # an arbitrary dimension row, almost always returning 0.
+                func.max(
+                    case(
+                        (
+                            or_(
+                                *military_conditions,
+                            ),
+                            func.abs(Expense.value),
                         ),
-                        func.abs(Expense.value).label("value"),
-                    ),
-                    else_=0,
+                        else_=0,
+                    )
                 ).label("military_value"),
             )
             .select_from(Expense)
@@ -308,7 +319,79 @@ class TimeseriesDataFetcher:
         )
 
         if self.spending_type == "MILITARY":
-            total_chapter_stmt = total_chapter_stmt.where(Dimension.original_identifier.like("02%"))
+            # For MILITARY classified we need:
+            #   classified = Σ_chapter( TOTAL_chapter × 1000 − LAW_all_open_chapter )
+            # for military chapters (02 direct, 10 via custom_patterns).
+            #
+            # We can't derive this from the existing TOTAL row (which would subtract
+            # military_open instead of all-open, causing over-counting).  Instead, pre-compute
+            # the entire classified sum in SQL and store it as:
+            #   total_value = classified_sum / 1000
+            # so the transformer recovers: total_value × 1000 − 0 = classified_sum.
+            military_chapter_filter = or_(
+                Dimension.original_identifier.op("REGEXP")(
+                    MilitarySpending.simple_patterns_sql["CHAPTER"]
+                ),
+                Dimension.original_identifier.op("REGEXP")(
+                    MilitarySpending.custom_patterns["CHAPTER"].pattern
+                ),
+            )
+
+            # Subquery: sum of ALL open expenses for military chapters per year.
+            # Apply 0.5 for 2018–2019 where LAW values are doubled in the source data.
+            law_chapter_open_sq = (
+                select(
+                    extract("year", Budget.published_at).label("year"),
+                    func.sum(
+                        case(
+                            (
+                                extract("year", Budget.published_at).in_([2018, 2019]),
+                                func.abs(Expense.value) * budget_config.law_18_19_value_multiplier,
+                            ),
+                            else_=func.abs(Expense.value),
+                        )
+                    ).label("chapter_open"),
+                )
+                .select_from(Budget)
+                .join(Expense, Budget.id == Expense.budget_id)
+                .join(assoc_table, Expense.id == assoc_table.c.expense_id)
+                .join(Dimension, assoc_table.c.dimension_id == Dimension.id)
+                .where(Budget.type == "LAW")
+                .where(Dimension.type == "CHAPTER")
+                .where(military_chapter_filter)
+                .group_by(extract("year", Budget.published_at))
+                .subquery()
+            )
+
+            # Replace the generic TOTAL query with one that encodes the pre-computed classified.
+            # military_value is set to 0 so the transformer subtracts nothing.
+            total_chapter_stmt = (
+                select(
+                    *base_columns,
+                    (
+                        (
+                            func.sum(func.abs(Expense.value))
+                            * budget_config.law_total_value_multiplier
+                            - func.max(law_chapter_open_sq.c.chapter_open)
+                        )
+                        / budget_config.law_total_value_multiplier
+                    ).label("total_value"),
+                    literal(0.0).label("military_value"),
+                )
+                .select_from(Budget)
+                .join(Expense, Budget.id == Expense.budget_id, isouter=True)
+                .join(assoc_table, Expense.id == assoc_table.c.expense_id, isouter=True)
+                .join(Dimension, assoc_table.c.dimension_id == Dimension.id, isouter=True)
+                .join(
+                    law_chapter_open_sq,
+                    extract("year", Budget.published_at) == law_chapter_open_sq.c.year,
+                )
+                .where(Budget.type == "TOTAL")
+                .where(Budget.original_identifier.like("%LAW%"))
+                .where(Dimension.type == "CHAPTER")
+                .where(military_chapter_filter)
+                .group_by(Budget.id, Budget.original_identifier, Budget.type)
+            )
 
         union_stmt = law_ministry_stmt.union(total_chapter_stmt)
 
@@ -332,10 +415,19 @@ class TimeseriesDataFetcher:
 
         military_conditions = self._build_military_spending_condition()
 
-        expenses_subquery = self._build_expense_subquery(military_conditions)
-
         stmt = (
-            select(*base_columns, func.sum(func.abs(Expense.value)).label("total_value"))
+            select(
+                *base_columns,
+                func.sum(func.abs(Expense.value)).label("total_value"),
+                func.sum(
+                    func.abs(
+                        case(
+                            (or_(*military_conditions), Expense.value),
+                            else_=0,
+                        )
+                    )
+                ).label("military_value"),
+            )
             .select_from(Budget)
             .join(Expense, Budget.id == Expense.budget_id, isouter=True)
             .join(Expense.dimensions, isouter=True)
@@ -390,25 +482,31 @@ class TimeseriesDataFetcher:
         return result, budget_type
 
     def _fetch_chapter_original_identifier(self, dimension_id: int) -> str | None:
-        """Walk up the dimension hierarchy to find the ancestor CHAPTER's original_identifier."""
-        current_id = dimension_id
-        for _ in range(10):  # max depth safeguard
-            stmt = select(
-                Dimension.id,
-                Dimension.parent_id,
-                Dimension.type,
-                Dimension.original_identifier,
-            ).where(Dimension.id == current_id)
-            with get_sync_session() as session:
-                row = session.execute(stmt).mappings().one_or_none()
-            if row is None:
-                return None
-            if row["type"] == "CHAPTER":
-                return str(row["original_identifier"])
-            if row["parent_id"] is None:
-                return None
-            current_id = row["parent_id"]
-        return None
+        """Walk up the dimension hierarchy to find the ancestor CHAPTER's original_identifier.
+
+        Uses a single recursive CTE instead of one query per ancestor level.
+        """
+        base_stmt = select(
+            Dimension.id.label("id"),
+            Dimension.parent_id.label("parent_id"),
+            Dimension.type.label("type"),
+            Dimension.original_identifier.label("original_identifier"),
+        ).where(Dimension.id == dimension_id)
+
+        ancestors_cte = base_stmt.cte("ancestors", recursive=True)
+
+        recursive_stmt = select(
+            Dimension.id.label("id"),
+            Dimension.parent_id.label("parent_id"),
+            Dimension.type.label("type"),
+            Dimension.original_identifier.label("original_identifier"),
+        ).join(ancestors_cte, Dimension.id == ancestors_cte.c.parent_id)
+
+        full_cte = ancestors_cte.union_all(recursive_stmt)
+        final_stmt = select(full_cte).where(full_cte.c.type == "CHAPTER").limit(1)
+
+        rows = _execute_query(final_stmt, unique=False)
+        return str(rows[0]["original_identifier"]) if rows else None
 
     def _fetch_total_law_expenses_for_chapter(self, chapter_orig_id: str) -> Sequence[RowMapping]:
         """Fetch TOTAL LAW budget expenses for a specific chapter to enable classified spending calculation."""

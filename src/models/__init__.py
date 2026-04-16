@@ -6,6 +6,7 @@ from models.budget import (
 )
 from models.conversion_rate import ConversionRate
 from models.base import Base
+from models.classified_spending_views import LawClassifiedSpendingPerChapter, ReportClassifiedSpendingPerChapter
 
 __all__ = [
     "Base",
@@ -14,4 +15,6 @@ __all__ = [
     "Dimension",
     "ConversionRate",
     "assoc_table",
+    "LawClassifiedSpendingPerChapter",
+    "ReportClassifiedSpendingPerChapter",
 ]
