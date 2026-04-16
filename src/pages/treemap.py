@@ -155,12 +155,23 @@ def generate_figure(
     parent_percentages, root_percentages = _compute_percentages(parents, values)
 
     # Safely read Plotly ids/labels (may be numpy arrays).
+    # Build a label→orig_id mapping for PROGRAM_0 so colors are language-agnostic.
+    # Both the Russian and translated labels map to the same orig_id.
+    program_label_to_orig_id: dict[str, str] = {}
+    if viewby == "PROGRAM" and "PROGRAM_0_ORIG_ID" in df.columns:
+        for name_col in ("PROGRAM_0_NAME", "PROGRAM_0_NAME_TRANSLATED"):
+            if name_col in df.columns:
+                for label, orig_id in zip(df[name_col], df["PROGRAM_0_ORIG_ID"]):
+                    if label and orig_id and pd.notna(label) and pd.notna(orig_id):
+                        program_label_to_orig_id[str(label)] = str(orig_id)
+
     # Generate list of colors for each node based on classified status, node_id and spending type
     colors = create_treemap_colors(
         node_ids,
         budget_types,
         spending_type,
         viewby,
+        program_label_to_orig_id or None,
     )
     # Combine existing customdata with new percentage data and node ids for hover and click interactions.
     # Attach custom data for hover to every node, including id for click selection.

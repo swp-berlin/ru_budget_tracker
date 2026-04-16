@@ -2,8 +2,8 @@
 Miscellaneous utility functions
 """
 
+import colorsys
 import hashlib
-import random
 
 import pandas as pd
 
@@ -28,15 +28,24 @@ def create_treemap_colors(
     budget_types: list[str],
     spending_type: SpendingTypeLiteral,
     viewby: ViewByDimensionTypeLiteral,
+    program_label_to_orig_id: dict[str, str] | None = None,
 ) -> list[str]:
     """Return marker colors for treemap nodes with ministry/root rules applied."""
 
-    def _stable_random_filler_color(key: str) -> str:
-        """Pick a filler color using a deterministic random seed derived from key."""
+    def _stable_deterministic_color(key: str) -> str:
+        """Generate a unique, deterministic pastel color for a key via HSL.
+
+        Uses the SHA-256 hash of the key to derive a hue that is evenly spread
+        across the full 360° colour wheel, while keeping saturation and lightness
+        fixed so that all generated colours have a consistent, readable tone.
+        The same key always produces the same hex colour regardless of which
+        budget is being viewed.
+        """
         seed_bytes = hashlib.sha256(key.encode("utf-8")).digest()
-        rng = random.Random(int.from_bytes(seed_bytes[:8], "big"))
-        # Use a seeded RNG so the same key always maps to the same palette entry.
-        return rng.choice(Colors.color_mapping_filler)
+        hue_int = int.from_bytes(seed_bytes[:2], "big")  # 0–65535
+        hue = hue_int / 65536.0  # 0.0–1.0, maps uniformly over the colour wheel
+        r, g, b = colorsys.hls_to_rgb(hue, l=0.72, s=0.50)
+        return f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
 
     def _node_id_to_orig_ids(node_id: str) -> tuple[list[str], str]:
         """Transforms a node_id into a list of original IDs by
@@ -86,8 +95,17 @@ def create_treemap_colors(
             color = Colors.color_mapping_chapters.get(chapter_id, Colors.ROOT_WHITE)
 
         if viewby == "PROGRAM" and len(node_original_id_list) >= 2:
-            main_program_id = node_original_id_list[1]
-            color = _stable_random_filler_color(main_program_id)
+            # Program labels are plain names without an orig_id prefix (unlike CHAPTER/MINISTRY).
+            # Use the full PROGRAM_0 path segment to look up the language-agnostic orig_id so
+            # that the color stays identical when the UI language changes.
+            path_parts = node_id.split("/")
+            program_label = path_parts[1] if len(path_parts) > 1 else node_id
+            main_program_key = (
+                program_label_to_orig_id.get(program_label, program_label)
+                if program_label_to_orig_id
+                else program_label
+            )
+            color = _stable_deterministic_color(main_program_key)
 
         # Classified nodes should be gray.
         if "CLASSIFIED" in budget_type.upper():

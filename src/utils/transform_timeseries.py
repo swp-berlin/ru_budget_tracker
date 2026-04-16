@@ -36,7 +36,11 @@ class TimeseriesTransformer:
             for budget in sorted_budgets:
                 # Convert RowMapping to mutable dict
                 normalized = dict(budget)
-                current_cumulative = budget.get(value_key, 0.0) or 0.0
+                # TOTAL rows store pre-computed classified spending in total_value
+                # (military_value is explicitly 0 in the fetch query for TOTAL rows).
+                # Always read total_value for TOTAL rows regardless of spending_type.
+                read_key = "total_value" if budget.get("type") == "TOTAL" else value_key
+                current_cumulative = budget.get(read_key, 0.0) or 0.0
 
                 # Calculate quarterly value by subtracting previous quarter
                 quarterly_value = current_cumulative - prev_cumulative_value

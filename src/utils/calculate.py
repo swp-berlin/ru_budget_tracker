@@ -81,29 +81,29 @@ class Calculator:
             )
 
         if self.unit == "PERCENT_GDP_YEAR_TO_DATE":
-            # For year-to-date, match the month and day of the period start date
-            # to the quarter-end dates in the conversion rates
-            month_to_months_mapping = {
-                (1, 2, 3): {1, 3},
-                (4, 5, 6): {1, 3, 4, 6},
-                (7, 8, 9): {1, 3, 4, 6, 7, 9},
-                (10, 11, 12): {1, 3, 4, 6, 7, 9, 10, 12},
-            }
-            valid_months = set()
-            for months, valid in month_to_months_mapping.items():
-                if period_start_date.month in months:
-                    valid_months = valid
-                    break
+            # For year-to-date, sum only the quarterly GDP entries up to the current period.
+            # Quarter-end months are 3 (Q1), 6 (Q2), 9 (Q3), 12 (Q4).
+            # LAW budgets are yearly (published_at is the start of the year), so always
+            # use the full-year set of quarters regardless of the published_at month.
+            if self.budget_type == "LAW":
+                valid_months = {3, 6, 9, 12}
+            else:
+                month_to_months_mapping = {
+                    (1, 2, 3): {3},
+                    (4, 5, 6): {3, 6},
+                    (7, 8, 9): {3, 6, 9},
+                    (10, 11, 12): {3, 6, 9, 12},
+                }
+                valid_months = set()
+                for months, valid in month_to_months_mapping.items():
+                    if period_start_date.month in months:
+                        valid_months = valid
+                        break
 
             select_stmt = select_stmt.where(
-                or_(
-                    and_(
-                        ConversionRate.name.like("%_q_"),
-                        extract("month", ConversionRate.ended_at).in_(valid_months),
-                        extract("year", ConversionRate.ended_at) == period_start_date.year,
-                    ),
-                    ConversionRate.name.like("%20___estimate"),
-                )
+                ConversionRate.name.like("%_q_"),
+                extract("month", ConversionRate.ended_at).in_(valid_months),
+                extract("year", ConversionRate.ended_at) == period_start_date.year,
             )
 
         with get_sync_session() as session:
@@ -174,21 +174,24 @@ class Calculator:
             latest_budget = max(relevant_total_budgets, key=lambda b: b.published_at, default=None)
             spending_cumulative = latest_budget.value if latest_budget else 0.0
         if self.unit == "PERCENT_YEAR_TO_DATE_SPENDING" and self.budget_type == "REPORT":
-            # For REPORT and year-to-date spending, we want the latest monthly total budget available in the report that matches the month of
-            # the period start date
+            # Match by month — exact dates may differ between REPORT and TOTAL EXPENSE budgets,
+            # which would cause CLASSIFIED rows (dated from TOTAL EXPENSE budgets) to look up a
+            # spending value of 0 and get dropped in _calculate_values.
             spending_cumulative = next(
-                (b.value for b in relevant_total_budgets if b.published_at == period_start_date),
+                (
+                    b.value
+                    for b in relevant_total_budgets
+                    if b.published_at.month == period_start_date.month
+                ),
                 0.0,
             )
             if period_start_date.month > 3:
-                previous_spending_date = period_start_date.replace(
-                    month=period_start_date.month - 3
-                )
+                previous_month = period_start_date.month - 3
                 previous_spending_value = next(
                     (
                         b.value
                         for b in relevant_total_budgets
-                        if b.published_at == previous_spending_date
+                        if b.published_at.month == previous_month
                     ),
                     0.0,
                 )
@@ -243,24 +246,34 @@ class Calculator:
         ]
         if not relevant_total_budgets:
             return 0.0  # If no revenue budgets found, return 0 to avoid division errors later
-        relevant_date = period_start_date
         if self.budget_type == "LAW":
             relevant_date = max([b.published_at for b in relevant_total_budgets])
-
-        revenue_value = next(
-            (b.value for b in relevant_total_budgets if b.published_at == relevant_date), 0.0
-        )
-        if self.budget_type == "REPORT" and period_start_date.month > 3:
-            previous_revenue_date = period_start_date.replace(month=period_start_date.month - 3)
-            previous_revenue_value = next(
+            revenue_value = next(
+                (b.value for b in relevant_total_budgets if b.published_at == relevant_date), 0.0
+            )
+        else:
+            # For REPORT, match by month — exact dates may differ between EXPENSE and REVENUE
+            # budgets, which would cause CLASSIFIED rows (dated from TOTAL EXPENSE budgets) to
+            # look up a revenue value of 0 and get dropped in _calculate_values.
+            revenue_value = next(
                 (
                     b.value
                     for b in relevant_total_budgets
-                    if b.published_at == previous_revenue_date
+                    if b.published_at.month == period_start_date.month
                 ),
                 0.0,
             )
-            revenue_value -= previous_revenue_value
+            if period_start_date.month > 3:
+                previous_month = period_start_date.month - 3
+                previous_revenue_value = next(
+                    (
+                        b.value
+                        for b in relevant_total_budgets
+                        if b.published_at.month == previous_month
+                    ),
+                    0.0,
+                )
+                revenue_value -= previous_revenue_value
 
         Calculator._revenue_cache[cache_key] = revenue_value
         return revenue_value
