@@ -139,8 +139,15 @@ def shape_for_spending_type(
                     classified_mask |= df[col].astype(str).str.match(pattern.pattern, na=False)
         classified_mask &= df["BUDGET_TYPE"] == "CLASSIFIED"
 
+        # Synthetic REPORT classified tile: CHAPTER_ORIG_ID is "CLASSIFIED_CHAPTER"
+        # (a placeholder that doesn't match any real pattern). Include it explicitly
+        # so the aggregated military classified estimate appears in military mode.
+        synthetic_report_classified_mask = (df["BUDGET_TYPE"] == "CLASSIFIED") & (
+            df["CHAPTER_ORIG_ID"].astype(str).str.startswith("CLASSIFIED_")
+        )
+
         df_military = (
-            df[single_mask | combo_mask | classified_mask]
+            df[single_mask | combo_mask | classified_mask | synthetic_report_classified_mask]
             .drop_duplicates()
             .reset_index(drop=True)
             .copy()

@@ -316,29 +316,54 @@ class TreemapTransformer:
             if new_entries:
                 df = pd.concat([df, pd.DataFrame(new_entries)], ignore_index=True)
 
-        elif cs.budget_type == "REPORT" and cs.total_classified > 0:
+        elif cs.budget_type == "REPORT":
+            if self.spending_type == "MILITARY" and cs.military_classified > 0:
+                value = cs.military_classified
+                share_pct = cs.military_classified_share * 100
+                ministry_name = (
+                    f"Classified Spending (estimated as {share_pct:.1f}%"
+                    f" of total classified spending)"
+                )
+            elif cs.total_classified > 0:
+                value = cs.total_classified
+                ministry_name = "Classified Spending"
+            else:
+                return df
+
             root_row: dict[str, int | float | str | None] = {
-                "VALUE": cs.total_classified,
+                "VALUE": value,
                 "BUDGET_TYPE": "CLASSIFIED",
                 "ROOT": "Federal Budget",
                 "MINISTRY_DIM_ID": CLASSIFIED_PARENT_ID,
                 "MINISTRY_ORIG_ID": "CLASSIFIED_PARENT",
-                "MINISTRY_NAME": "Classified Spending",
-                "MINISTRY_NAME_TRANSLATED": "Classified Spending",
+                "MINISTRY_NAME": ministry_name,
+                "MINISTRY_NAME_TRANSLATED": ministry_name,
                 "CHAPTER_DIM_ID": CLASSIFIED_DIMENSION_ID_OFFSET + 1,
                 "CHAPTER_ORIG_ID": "CLASSIFIED_CHAPTER",
-                "CHAPTER_NAME": "Classified Spending",
-                "CHAPTER_NAME_TRANSLATED": "Classified Spending",
+                "CHAPTER_NAME": ministry_name,
+                "CHAPTER_NAME_TRANSLATED": ministry_name,
                 "SUBCHAPTER_DIM_ID": CLASSIFIED_DIMENSION_ID_OFFSET + 2,
                 "SUBCHAPTER_ORIG_ID": "CLASSIFIED_SUBCHAPTER",
-                "SUBCHAPTER_NAME": "Classified Spending",
-                "SUBCHAPTER_NAME_TRANSLATED": "Classified Spending",
+                "SUBCHAPTER_NAME": ministry_name,
+                "SUBCHAPTER_NAME_TRANSLATED": ministry_name,
             }
+            if line_length is not None:
+                for key in (
+                    "MINISTRY_NAME",
+                    "MINISTRY_NAME_TRANSLATED",
+                    "CHAPTER_NAME",
+                    "CHAPTER_NAME_TRANSLATED",
+                    "SUBCHAPTER_NAME",
+                    "SUBCHAPTER_NAME_TRANSLATED",
+                ):
+                    val = root_row[key]
+                    if isinstance(val, str):
+                        root_row[key] = "<br>".join(wrap(val, width=line_length))
             for idx in range(0, 3):
                 root_row[f"PROGRAM_{idx}_DIM_ID"] = CLASSIFIED_DIMENSION_ID_OFFSET + 3 + idx
                 root_row[f"PROGRAM_{idx}_ORIG_ID"] = "CLASSIFIED_PROGRAM_" + str(idx)
-                root_row[f"PROGRAM_{idx}_NAME"] = "Classified Spending"
-                root_row[f"PROGRAM_{idx}_NAME_TRANSLATED"] = "Classified Spending"
+                root_row[f"PROGRAM_{idx}_NAME"] = root_row["MINISTRY_NAME"]
+                root_row[f"PROGRAM_{idx}_NAME_TRANSLATED"] = root_row["MINISTRY_NAME_TRANSLATED"]
             df = pd.concat([df, pd.DataFrame([root_row])], ignore_index=True)
 
         return df

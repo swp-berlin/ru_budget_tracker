@@ -100,6 +100,41 @@ class LawMilitaryOpenSpendingPerChapter(Base):
     # Populated only for chapters 02 (National Defense) and 10 (Social Policy),
     # where the entire chapter is military so the classified total is meaningful.
     classified_spending: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Share of this chapter's classified spending out of the total classified for the budget.
+    # NULL for chapters without classified data (e.g. Chapter 03 via Ministry-180).
+    classified_share_of_budget: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
+class ReportMilitaryOpenSpendingPerChapter(Base):
+    """
+    Read-only ORM model backed by v_report_military_open_spending_per_chapter.
+
+    Aggregates all military open spending from REPORT budgets per (budget_id, chapter).
+    Military expenses are identified using the full treemap definition:
+      - CHAPTER = '02'
+      - PROGRAMM LIKE '31%'
+      - MINISTRY = '187'
+      - CHAPTER = '03' AND MINISTRY = '180'  (combination)
+
+    Do not use with Base.metadata.create_all(); the view is managed by Alembic.
+    """
+
+    __tablename__ = "v_report_military_open_spending_per_chapter"
+    __table_args__ = {"info": {"is_view": True}}
+
+    budget_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    original_identifier: Mapped[str] = mapped_column(String, primary_key=True)
+
+    chapter_name: Mapped[str] = mapped_column(String)
+    chapter_name_translated: Mapped[str | None] = mapped_column(String, nullable=True)
+    open_spending: Mapped[float] = mapped_column(Float)
+    # Populated only for chapters 02 (National Defense) and 10 (Social Policy),
+    # where the entire chapter is military so the classified total is meaningful.
+    # Computed as total_budget_classified × law_classified_share (LAW-share allocation).
+    classified_spending: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # The chapter's share of total classified from the corresponding annual LAW budget.
+    # Constant per chapter per year. NULL for chapters without classified data.
+    classified_share_of_budget: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
 class MilitaryClassifiedSpendingPerChapter(Base):

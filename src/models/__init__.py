@@ -11,6 +11,7 @@ from models.classified_spending_views import (
     LawMilitaryOpenSpendingPerChapter,
     MilitaryClassifiedSpendingPerChapter,
     ReportClassifiedSpendingPerChapter,
+    ReportMilitaryOpenSpendingPerChapter,
 )
 
 __all__ = [
@@ -24,4 +25,5 @@ __all__ = [
     "LawMilitaryOpenSpendingPerChapter",
     "MilitaryClassifiedSpendingPerChapter",
     "ReportClassifiedSpendingPerChapter",
+    "ReportMilitaryOpenSpendingPerChapter",
 ]

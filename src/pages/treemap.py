@@ -108,7 +108,11 @@ def transform_treemap_data(
         (row["budget_type"] for row in dimensions if row["budget_type"] in ["LAW", "REPORT"]), "LAW"
     )
     transformer = TreemapTransformer(
-        dimensions, programs, classified, max_line_lenght=character_limit
+        dimensions,
+        programs,
+        classified,
+        spending_type=spending_type,
+        max_line_lenght=character_limit,
     )
     df = transformer.transform_data()
     # Calculate values based on unit, budget, and published_at

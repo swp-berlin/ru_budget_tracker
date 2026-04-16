@@ -27,8 +27,8 @@ from models import (
     Budget,
     Dimension,
     Expense,
-    LawClassifiedSpendingPerChapter,
-    ReportClassifiedSpendingPerChapter,
+    LawMilitaryOpenSpendingPerChapter,
+    ReportMilitaryOpenSpendingPerChapter,
     assoc_table,
 )
 from utils.definitions import (
@@ -308,52 +308,54 @@ class TimeseriesDataFetcher:
         )
 
         if self.spending_type == "MILITARY":
-            # Use the pre-computed view for military chapters (02 = National Defense, 10 = Social).
-            # The view already handles the 2018–2019 multiplier correction and computes:
-            #   classified_spending = total_spending − open_spending
-            military_chapters = ["02", "10"]
-
-            view_agg = (
-                select(
-                    LawClassifiedSpendingPerChapter.year,
-                    func.sum(LawClassifiedSpendingPerChapter.open_spending).label("military_open"),
-                    func.sum(LawClassifiedSpendingPerChapter.classified_spending).label(
-                        "military_classified"
-                    ),
-                )
-                .where(LawClassifiedSpendingPerChapter.original_identifier.in_(military_chapters))
-                .group_by(LawClassifiedSpendingPerChapter.year)
-                .subquery()
-            )
-
-            # LAW rows: open military spending from the view.
-            # Both total_value and military_value carry the same open amount;
-            # the transformer picks military_value for the open bar in MILITARY mode.
+            # Use the pre-computed military view which already aggregates all military
+            # patterns (Chapter 02, PROGRAMM 31%, Ministry 187, Chapter 03 + Ministry 180).
+            # LAW rows: sum open_spending per budget from the view.
             law_stmt = (
                 select(
                     *base_columns,
-                    view_agg.c.military_open.label("total_value"),
-                    view_agg.c.military_open.label("military_value"),
+                    func.sum(LawMilitaryOpenSpendingPerChapter.open_spending).label("total_value"),
+                    func.sum(LawMilitaryOpenSpendingPerChapter.open_spending).label(
+                        "military_value"
+                    ),
                 )
                 .select_from(Budget)
-                .join(view_agg, extract("year", Budget.published_at) == view_agg.c.year)
+                .join(
+                    LawMilitaryOpenSpendingPerChapter,
+                    Budget.id == LawMilitaryOpenSpendingPerChapter.budget_id,
+                )
                 .where(Budget.type == "LAW")
+                .group_by(*base_columns)
             )
 
-            # TOTAL rows: pre-computed classified spending from the view.
-            # Divide by the multiplier so the transformer restores the correct value:
-            #   classified = (military_classified / 1000) × 1000 = military_classified
+            # Aggregate classified_spending by year (only chapters 02+10 have non-NULL values).
+            view_year_agg = (
+                select(
+                    extract("year", Budget.published_at).label("year"),
+                    func.sum(LawMilitaryOpenSpendingPerChapter.classified_spending).label(
+                        "classified_sum"
+                    ),
+                )
+                .select_from(LawMilitaryOpenSpendingPerChapter)
+                .join(Budget, LawMilitaryOpenSpendingPerChapter.budget_id == Budget.id)
+                .where(Budget.type == "LAW")
+                .group_by(extract("year", Budget.published_at))
+                .subquery()
+            )
+
+            # TOTAL rows: divide by multiplier so the transformer restores the correct value:
+            #   classified = (classified_sum / 1000) × 1000 = classified_sum
             # military_value = 0 so the transformer subtracts nothing.
             total_stmt = (
                 select(
                     *base_columns,
                     (
-                        view_agg.c.military_classified / budget_config.law_total_value_multiplier
+                        view_year_agg.c.classified_sum / budget_config.law_total_value_multiplier
                     ).label("total_value"),
                     literal(0.0).label("military_value"),
                 )
                 .select_from(Budget)
-                .join(view_agg, extract("year", Budget.published_at) == view_agg.c.year)
+                .join(view_year_agg, extract("year", Budget.published_at) == view_year_agg.c.year)
                 .where(Budget.type == "TOTAL")
                 .where(Budget.original_identifier.like("%LAW%"))
             )
@@ -385,72 +387,62 @@ class TimeseriesDataFetcher:
         military_conditions = self._build_military_spending_condition()
 
         if self.spending_type == "MILITARY":
-            # Use the pre-computed view for chapters 02 (National Defense) and 10 (Social),
-            # matching the same chapter set used for LAW military budgets.
-            # Prefer chapter_classified_spending (direct, available 2018-2021) and fall back
-            # to estimated_classified_spending (LAW-share estimate, used from 2022 onward).
-            # Aggregate both chapters so the subquery has one row per (year, month).
-            military_chapters = ["02", "10"]
-            view_sq = (
+            # Use the pre-computed military view which aggregates all military patterns
+            # per (budget_id, chapter). REPORT rows: sum open_spending per budget.
+            report_stmt = (
                 select(
-                    ReportClassifiedSpendingPerChapter.year,
-                    ReportClassifiedSpendingPerChapter.month,
-                    func.sum(ReportClassifiedSpendingPerChapter.open_spending).label(
-                        "military_open"
+                    *base_columns,
+                    func.sum(ReportMilitaryOpenSpendingPerChapter.open_spending).label(
+                        "total_value"
                     ),
-                    func.sum(
-                        func.coalesce(
-                            ReportClassifiedSpendingPerChapter.chapter_classified_spending,
-                            ReportClassifiedSpendingPerChapter.estimated_classified_spending,
-                            literal(0.0),
-                        )
-                    ).label("classified_value"),
+                    func.sum(ReportMilitaryOpenSpendingPerChapter.open_spending).label(
+                        "military_value"
+                    ),
                 )
-                .where(
-                    ReportClassifiedSpendingPerChapter.original_identifier.in_(military_chapters)
+                .select_from(Budget)
+                .join(
+                    ReportMilitaryOpenSpendingPerChapter,
+                    Budget.id == ReportMilitaryOpenSpendingPerChapter.budget_id,
                 )
+                .where(Budget.type == "REPORT")
+                .where(extract("month", Budget.published_at).in_(budget_config.quarterly_months))
+                .group_by(*base_columns)
+            )
+
+            # Aggregate classified_spending by (year, month) from the REPORT military view
+            # (only chapters 02+10 have non-NULL classified_spending values).
+            view_period_agg = (
+                select(
+                    extract("year", Budget.published_at).label("year"),
+                    extract("month", Budget.published_at).label("month"),
+                    func.sum(ReportMilitaryOpenSpendingPerChapter.classified_spending).label(
+                        "classified_sum"
+                    ),
+                )
+                .select_from(ReportMilitaryOpenSpendingPerChapter)
+                .join(Budget, ReportMilitaryOpenSpendingPerChapter.budget_id == Budget.id)
+                .where(Budget.type == "REPORT")
                 .group_by(
-                    ReportClassifiedSpendingPerChapter.year,
-                    ReportClassifiedSpendingPerChapter.month,
+                    extract("year", Budget.published_at), extract("month", Budget.published_at)
                 )
                 .subquery()
             )
 
-            # REPORT rows: open military spending from the view.
-            # Both total_value and military_value carry the open amount;
-            # the transformer picks military_value for the open bar in MILITARY mode.
-            report_stmt = (
-                select(
-                    *base_columns,
-                    view_sq.c.military_open.label("total_value"),
-                    view_sq.c.military_open.label("military_value"),
-                )
-                .select_from(Budget)
-                .join(
-                    view_sq,
-                    and_(
-                        extract("year", Budget.published_at) == view_sq.c.year,
-                        extract("month", Budget.published_at) == view_sq.c.month,
-                    ),
-                )
-                .where(Budget.type == "REPORT")
-                .where(extract("month", Budget.published_at).in_(budget_config.quarterly_months))
-            )
-
-            # TOTAL rows: direct or estimated classified spending from the view.
-            # military_value = 0 so the transformer computes: classified = total_value × 1 − 0.
+            # TOTAL rows: classified spending pre-computed from the view.
+            # report_total_value_multiplier = 1, so classified = total_value × 1 − 0.
+            # military_value = 0 so the transformer subtracts nothing.
             total_stmt = (
                 select(
                     *base_columns,
-                    view_sq.c.classified_value.label("total_value"),
+                    view_period_agg.c.classified_sum.label("total_value"),
                     literal(0.0).label("military_value"),
                 )
                 .select_from(Budget)
                 .join(
-                    view_sq,
+                    view_period_agg,
                     and_(
-                        extract("year", Budget.published_at) == view_sq.c.year,
-                        extract("month", Budget.published_at) == view_sq.c.month,
+                        extract("year", Budget.published_at) == view_period_agg.c.year,
+                        extract("month", Budget.published_at) == view_period_agg.c.month,
                     ),
                 )
                 .where(Budget.type == "TOTAL")

@@ -26,6 +26,7 @@ from models import (
     Expense,
     LawClassifiedSpendingPerChapter,
     ReportClassifiedSpendingPerChapter,
+    ReportMilitaryOpenSpendingPerChapter,
 )
 
 # =============================================================================
@@ -55,12 +56,17 @@ class ClassifiedSpendingData(BaseModel):
     """Classified spending data ready for treemap rendering.
 
     For LAW budgets: per-chapter rows are populated.
-    For REPORT budgets: only total_classified is set.
+    For REPORT budgets: total_classified is set; military_classified and
+    military_classified_share are set for military-mode rendering.
     """
 
     budget_type: str  # "LAW" or "REPORT"
     chapters: list[ClassifiedChapterRow] = []
     total_classified: float = 0.0
+    # REPORT military mode: sum of estimated classified for military chapters (02, 10).
+    military_classified: float = 0.0
+    # Fraction of total classified attributable to military chapters (from LAW budget shares).
+    military_classified_share: float = 0.0
 
 
 # =============================================================================
@@ -291,9 +297,24 @@ class TreemapDataFetcher:
         )
         with get_sync_session() as session:
             total = session.execute(total_stmt).scalar_one_or_none()
+
+        # Military mode: sum estimated classified and share across military chapters.
+        military_stmt = select(
+            func.sum(ReportMilitaryOpenSpendingPerChapter.classified_spending).label(
+                "military_classified"
+            ),
+            func.sum(ReportMilitaryOpenSpendingPerChapter.classified_share_of_budget).label(
+                "military_share"
+            ),
+        ).where(ReportMilitaryOpenSpendingPerChapter.budget_id == budget_id)
+        with get_sync_session() as session:
+            mil = session.execute(military_stmt).one_or_none()
+
         return ClassifiedSpendingData(
             budget_type="REPORT",
             total_classified=float(total) if total is not None else 0.0,
+            military_classified=float(mil[0]) if mil and mil[0] is not None else 0.0,
+            military_classified_share=float(mil[1]) if mil and mil[1] is not None else 0.0,
         )
 
     def _fetch_treemap_programs_recursive(
