@@ -19,7 +19,7 @@ from dash import (
 from dash.exceptions import PreventUpdate
 from sqlalchemy import RowMapping
 
-from utils.fetch_treemap import TreemapDataFetcher
+from utils.fetch_treemap import ClassifiedSpendingData, TreemapDataFetcher
 from utils.transform_treemap import TreemapTransformer
 from utils.calculate import Calculator
 from utils.helper import (
@@ -85,15 +85,15 @@ def _compute_percentages(
 @lru_cache(maxsize=5)
 def fetch_treemap_data(
     budget_id: int,
-) -> tuple[Sequence[RowMapping], Sequence[RowMapping], date]:
+) -> tuple[Sequence[RowMapping], Sequence[RowMapping], ClassifiedSpendingData, date]:
     """Fetch and transform treemap data for the current filters."""
     data_fetcher = TreemapDataFetcher()
     published_at = data_fetcher.get_published_at_date(budget_id)
-    dimensions, programs = data_fetcher.fetch_data(
+    dimensions, programs, classified = data_fetcher.fetch_data(
         budget_id=budget_id,
     )
 
-    return dimensions, programs, published_at
+    return dimensions, programs, classified, published_at
 
 
 @lru_cache(maxsize=5)
@@ -103,11 +103,13 @@ def transform_treemap_data(
     unit: UnitLiteral,
     character_limit: int = 70,
 ) -> pd.DataFrame:
-    dimensions, programs, published_at = fetch_treemap_data(budget_id)
+    dimensions, programs, classified, published_at = fetch_treemap_data(budget_id)
     budget_type: BudgetTypeLiteral = next(
         (row["budget_type"] for row in dimensions if row["budget_type"] in ["LAW", "REPORT"]), "LAW"
     )
-    transformer = TreemapTransformer(dimensions, programs, max_line_lenght=character_limit)
+    transformer = TreemapTransformer(
+        dimensions, programs, classified, max_line_lenght=character_limit
+    )
     df = transformer.transform_data()
     # Calculate values based on unit, budget, and published_at
     calculator = Calculator(unit, budget_id, published_at, budget_type)

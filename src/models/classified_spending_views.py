@@ -1,6 +1,8 @@
+from datetime import date
+
 from models.base import Base
 
-from sqlalchemy import Float, Integer, String
+from sqlalchemy import Date, Float, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 
@@ -60,4 +62,42 @@ class ReportClassifiedSpendingPerChapter(Base):
     open_spending: Mapped[float] = mapped_column(Float)
     total_budget_classified: Mapped[float] = mapped_column(Float)
     law_classified_share: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Direct per-chapter TOTAL-EXPENSE value; NULL for years without chapter breakdowns (2022+).
+    chapter_total_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Direct classified spending for this chapter: chapter_total_value − open_spending; NULL from 2022+.
+    chapter_classified_spending: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Share of total classified attributable to this chapter from direct TOTAL data; NULL when above is NULL.
+    chapter_classified_share: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Fallback estimate: total_budget_classified × law_classified_share.
+    estimated_classified_spending: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
+class MilitaryClassifiedSpendingPerChapter(Base):
+    """
+    Read-only ORM model backed by v_military_classified_spending_per_chapter.
+
+    Covers both LAW and REPORT budgets, filtered to military chapters (02 and 10).
+    Provides open, classified, and estimated classified spending per budget and chapter.
+
+    - classified_spending: always populated for LAW; populated for REPORT 2018–2021 only.
+    - estimated_classified_spending: NULL for LAW; LAW-share fallback for REPORT 2022+.
+
+    Do not use with Base.metadata.create_all(); the view is managed by Alembic.
+    """
+
+    __tablename__ = "v_military_classified_spending_per_chapter"
+    __table_args__ = {"info": {"is_view": True}}
+
+    # Composite primary key: one row per budget × chapter.
+    budget_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    original_identifier: Mapped[str] = mapped_column(String, primary_key=True)
+
+    budget_type: Mapped[str] = mapped_column(String)
+    published_at: Mapped[date] = mapped_column(Date)
+    chapter_name: Mapped[str] = mapped_column(String)
+    chapter_name_translated: Mapped[str | None] = mapped_column(String, nullable=True)
+    open_spending: Mapped[float] = mapped_column(Float)
+    # Direct classified spending; always set for LAW, set for REPORT 2018–2021, else NULL.
+    classified_spending: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Fallback estimate used when direct data is unavailable; NULL for LAW rows.
     estimated_classified_spending: Mapped[float | None] = mapped_column(Float, nullable=True)

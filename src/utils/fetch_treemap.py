@@ -15,12 +15,18 @@ from sqlalchemy import (
     and_,
     extract,
     func,
-    or_,
     select,
     case,
 )
+from pydantic import BaseModel
 from database import get_sync_session
-from models import Budget, Dimension, Expense
+from models import (
+    Budget,
+    Dimension,
+    Expense,
+    LawClassifiedSpendingPerChapter,
+    ReportClassifiedSpendingPerChapter,
+)
 from utils.definitions import (
     budget_config,
 )
@@ -31,6 +37,33 @@ from utils.definitions import (
 
 # Valid dimension types for treemap hierarchy
 TREEMAP_DIMENSION_TYPES = ["MINISTRY", "CHAPTER", "SUBCHAPTER", "PROGRAM"]
+
+
+# =============================================================================
+# Models
+# =============================================================================
+
+
+class ClassifiedChapterRow(BaseModel):
+    """Classified spending data for a single budget chapter."""
+
+    original_identifier: str
+    chapter_name: str
+    chapter_name_translated: str | None
+    classified_spending: float
+    dimension_id: int | None  # Real Dimension.id for click-through; None if no match found.
+
+
+class ClassifiedSpendingData(BaseModel):
+    """Classified spending data ready for treemap rendering.
+
+    For LAW budgets: per-chapter rows are populated.
+    For REPORT budgets: only total_classified is set.
+    """
+
+    budget_type: str  # "LAW" or "REPORT"
+    chapters: list[ClassifiedChapterRow] = []
+    total_classified: float = 0.0
 
 
 # =============================================================================
@@ -170,12 +203,7 @@ class TreemapDataFetcher:
 
         Returns:
             Sequence of dimension row mappings with budget and dimension info.
-
-        Raises:
-            ValueError: If no relevant budgets are found.
         """
-        initial_budget, totals_budget = self.fetch_relevant_budgets(budget_id=budget_id)
-
         stmt = (
             select(
                 Expense.id,
@@ -198,32 +226,87 @@ class TreemapDataFetcher:
             )
             .join(Expense.dimensions, isouter=True)
             .join(Expense.budget, isouter=True)
+            .where(Budget.id == budget_id)
+            .where(Dimension.type.in_(TREEMAP_DIMENSION_TYPES))
         )
 
-        if initial_budget.type == "LAW":
-            stmt = stmt.where(
-                or_(
+        return _execute_query(stmt, unique=False)
+
+    def fetch_classified_spending(self, budget_id: int) -> ClassifiedSpendingData:
+        """
+        Fetch classified spending data from pre-computed views.
+
+        Replaces the Python-side classified spending calculation by reading from
+        v_law_classified_spending_per_chapter or v_report_classified_spending_per_chapter.
+
+        Args:
+            budget_id: The budget ID to fetch classified spending for.
+
+        Returns:
+            ClassifiedSpendingData with per-chapter rows (LAW) or aggregate total (REPORT).
+        """
+        meta_stmt = select(Budget.type, Budget.published_at).where(Budget.id == budget_id)
+        with get_sync_session() as session:
+            meta = session.execute(meta_stmt).one_or_none()
+        if meta is None:
+            raise ValueError(f"Budget with ID {budget_id} not found.")
+        budget_type, published_at = meta.type, meta.published_at
+        year = published_at.year
+
+        if budget_type == "LAW":
+            stmt = (
+                select(
+                    LawClassifiedSpendingPerChapter.original_identifier,
+                    LawClassifiedSpendingPerChapter.chapter_name,
+                    LawClassifiedSpendingPerChapter.chapter_name_translated,
+                    LawClassifiedSpendingPerChapter.classified_spending,
+                    func.min(Dimension.id).label("dimension_id"),
+                )
+                .join(
+                    Dimension,
                     and_(
-                        Budget.id == initial_budget.id, Dimension.type.in_(TREEMAP_DIMENSION_TYPES)
-                    ),
-                    and_(
-                        Budget.id == totals_budget.id,
+                        Dimension.original_identifier
+                        == LawClassifiedSpendingPerChapter.original_identifier,
                         Dimension.type == "CHAPTER",
                     ),
+                    isouter=True,
+                )
+                .where(LawClassifiedSpendingPerChapter.year == year)
+                .where(LawClassifiedSpendingPerChapter.classified_spending > 0)
+                .group_by(
+                    LawClassifiedSpendingPerChapter.original_identifier,
+                    LawClassifiedSpendingPerChapter.chapter_name,
+                    LawClassifiedSpendingPerChapter.chapter_name_translated,
+                    LawClassifiedSpendingPerChapter.classified_spending,
                 )
             )
-
-        elif initial_budget.type == "REPORT":
-            stmt = stmt.where(
-                or_(
-                    and_(
-                        Budget.id == initial_budget.id, Dimension.type.in_(TREEMAP_DIMENSION_TYPES)
-                    ),
-                    and_(Budget.id == totals_budget.id, Dimension.type.is_(None)),
+            rows = _execute_query(stmt, unique=False)
+            chapters = [
+                ClassifiedChapterRow(
+                    original_identifier=r["original_identifier"],
+                    chapter_name=r["chapter_name"],
+                    chapter_name_translated=r["chapter_name_translated"],
+                    classified_spending=float(r["classified_spending"]),
+                    dimension_id=r["dimension_id"],
                 )
-            )
+                for r in rows
+            ]
+            return ClassifiedSpendingData(budget_type="LAW", chapters=chapters)
 
-        return _execute_query(stmt, unique=False)
+        # REPORT: read the aggregate total classified for this period from the view.
+        month = published_at.month
+        total_stmt = (
+            select(ReportClassifiedSpendingPerChapter.total_budget_classified)
+            .where(ReportClassifiedSpendingPerChapter.year == year)
+            .where(ReportClassifiedSpendingPerChapter.month == month)
+            .limit(1)
+        )
+        with get_sync_session() as session:
+            total = session.execute(total_stmt).scalar_one_or_none()
+        return ClassifiedSpendingData(
+            budget_type="REPORT",
+            total_classified=float(total) if total is not None else 0.0,
+        )
 
     def _fetch_treemap_programs_recursive(
         self, leaf_program_ids: list[int]
@@ -281,7 +364,7 @@ class TreemapDataFetcher:
     def fetch_data(
         self,
         budget_id: int | None = None,
-    ) -> tuple[Sequence[RowMapping], Sequence[RowMapping]]:
+    ) -> tuple[Sequence[RowMapping], Sequence[RowMapping], ClassifiedSpendingData]:
         """
         Fetch all data needed for treemap visualization.
 
@@ -289,10 +372,10 @@ class TreemapDataFetcher:
             budget_id: The budget ID to fetch data for.
 
         Returns:
-            Tuple of (dimensions, programs).
+            Tuple of (dimensions, programs, classified_spending).
         """
         if budget_id is None:
-            return [], []
+            return [], [], ClassifiedSpendingData(budget_type="LAW")
 
         # Fetch dimensions and calculate sums
         dimensions = self._fetch_treemap_dimensions(budget_id=budget_id)
@@ -301,4 +384,6 @@ class TreemapDataFetcher:
         program_ids = [r["dimension_id"] for r in dimensions if r["dimension_type"] == "PROGRAM"]
         programs = self._fetch_treemap_programs_recursive(program_ids)
 
-        return dimensions, programs
+        classified = self.fetch_classified_spending(budget_id=budget_id)
+
+        return dimensions, programs, classified

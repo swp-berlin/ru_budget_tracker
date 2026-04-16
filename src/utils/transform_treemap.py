@@ -7,8 +7,8 @@ from sqlalchemy import RowMapping
 from utils.definitions import (
     SpendingTypeLiteral,
     MilitarySpending,
-    budget_config,
 )
+from utils.fetch_treemap import ClassifiedSpendingData
 
 # Classified spending dimension IDs
 CLASSIFIED_DIMENSION_ID_OFFSET = 1_000_000  # Offset to avoid ID conflicts with real dimensions
@@ -20,6 +20,7 @@ class TreemapTransformer:
         self,
         dimensions: Sequence[RowMapping],
         programs: Sequence[RowMapping],
+        classified_spending: ClassifiedSpendingData,
         spending_type: SpendingTypeLiteral = "ALL",
         max_line_lenght: int | None = 30,
     ) -> None:
@@ -34,6 +35,7 @@ class TreemapTransformer:
         self.spending_type = spending_type
         self.dimensions = dimensions
         self.programs = programs
+        self.classified_spending = classified_spending
         self.max_line_length = max_line_lenght
 
     def _calculate_program_hierarchy(self, programs: Sequence[RowMapping]) -> dict[int, list[int]]:
@@ -79,58 +81,6 @@ class TreemapTransformer:
         leave_mapping = {path[0]: path[::-1] for path in program_paths}
 
         return leave_mapping
-
-    def _calculate_difference_for_classified(
-        self,
-        expense_dimensions: Sequence[RowMapping],
-    ) -> tuple[list[dict[str, str | float | int]], float]:
-        """Calculate the difference between TOTAL and LAW budgets for Classified Spending."""
-        difference_rows: list[dict[str, str | float | int]] = []
-        difference_value_budget = 0.0
-        totals: list[RowMapping] = []
-        chapter_expense_mapping: dict[str, dict[str, float | RowMapping]] = {}
-        budget_sum_value: float = 0.0
-        budget_type = None
-        for row in expense_dimensions:
-            if row.get("budget_type") == "TOTAL":
-                totals.append(row)
-                continue
-            if budget_type is None:
-                budget_type = row.get("budget_type")
-            if row["dimension_type"] == "CHAPTER":
-                chapter_expense_mapping.setdefault(
-                    row["dimension_original_identifier"],
-                    {
-                        "value": 0.0,
-                        "row": row,
-                    },
-                )
-                chapter_expense_mapping[row["dimension_original_identifier"]]["value"] += row.get(
-                    "value", 0.0
-                )
-                budget_sum_value += row.get("value", 0.0)
-
-        # LAW Totals are split across chapters, so we can calculate the difference per chapter
-        # REPORT Totals only have 1 row, so we calculate the difference between the 1 TOTAL
-        # and the sum of the chapters
-        for row in totals:
-            multiplier: float = budget_config.law_total_value_multiplier
-            if budget_type == "REPORT":
-                multiplier = budget_config.report_total_value_multiplier
-            if row["dimension_type"] is None:
-                total_value = row.get("value", 0.0)
-                difference_value_budget = total_value * multiplier - budget_sum_value
-            if row["dimension_type"] == "CHAPTER":
-                chapter_id = row["dimension_original_identifier"]
-                total_value = row.get("value", 0.0)
-                chapter_value = chapter_expense_mapping.get(chapter_id, {}).get("value", 0.0)
-                difference_value = total_value * multiplier - chapter_value
-                if difference_value > 0:
-                    difference_row = dict(row)
-                    difference_row["value"] = difference_value
-                    difference_rows.append(difference_row)
-
-        return difference_rows, difference_value_budget
 
     def _check_if_military(
         self,
@@ -302,11 +252,7 @@ class TreemapTransformer:
         if line_length is not None:
             for col in df.columns:
                 if "NAME" in col:
-                    df[col] = (
-                        df[col]
-                        .str.wrap(line_length)
-                        .str.replace("\n", "<br>", regex=False)
-                    )
+                    df[col] = df[col].str.wrap(line_length).str.replace("\n", "<br>", regex=False)
 
         # Normalize empty strings to None for Plotly compatibility.
         df = df.replace(to_replace={"": None})
@@ -317,60 +263,62 @@ class TreemapTransformer:
         self,
         df: pd.DataFrame,
     ) -> pd.DataFrame:
-        """Add Classified Spending calculated from difference between TOTAL and LAW budgets."""
-        difference_rows, difference_budget_value = self._calculate_difference_for_classified(
-            self.dimensions
-        )
-        budget_type = "REPORT" if len(difference_rows) == 0 else "LAW"
-
-        # Collect all new rows first, then concat once to avoid O(n²) repeated concats.
+        """Add Classified Spending rows sourced from pre-computed classified spending views."""
+        cs = self.classified_spending
         new_entries: list[dict] = []
         line_length = self.max_line_length
 
-        for row in difference_rows:
-            chapter_orig_id = row["dimension_original_identifier"]
-            expense_id = row["id"]
-            expense_value = row.get("value", 0.0)
-            classified_entry: dict[str, int | float | str | None] = {
-                "VALUE": expense_value,
-                "BUDGET_TYPE": "CLASSIFIED",
-                "ROOT": "Federal Budget",
-                "IS_MILITARY": None,
-                "MINISTRY_DIM_ID": CLASSIFIED_PARENT_ID,
-                "MINISTRY_ORIG_ID": "CLASSIFIED_PARENT",
-                "MINISTRY_NAME": "Classified Spending",
-                "MINISTRY_NAME_TRANSLATED": "Classified Spending",
-                "CHAPTER_DIM_ID": row["dimension_id"],
-                "CHAPTER_ORIG_ID": row["dimension_original_identifier"],
-                "CHAPTER_NAME": row["dimension_name"],
-                "CHAPTER_NAME_TRANSLATED": row["dimension_name_translated"],
-                "SUBCHAPTER_DIM_ID": CLASSIFIED_DIMENSION_ID_OFFSET + int(expense_id),
-                "SUBCHAPTER_ORIG_ID": f"CLASSIFIED_{chapter_orig_id}",
-                "SUBCHAPTER_NAME": "Classified Spending",
-                "SUBCHAPTER_NAME_TRANSLATED": "Classified Spending",
-            }
-            for idx in range(0, 3):
-                classified_entry[f"PROGRAM_{idx}_DIM_ID"] = CLASSIFIED_DIMENSION_ID_OFFSET + int(
-                    expense_id
+        if cs.budget_type == "LAW":
+            for chapter in cs.chapters:
+                orig_id = chapter.original_identifier
+                # Synthetic sub-ID derived from original_identifier (e.g. "02" → 1_000_002).
+                synthetic_id = CLASSIFIED_DIMENSION_ID_OFFSET + int(orig_id.lstrip("0") or "0")
+                # Prefix with original_identifier to match the format used by
+                # _build_dimension_name_column (e.g. "02 Национальная оборона").
+                chapter_name = f"{orig_id} {chapter.chapter_name}"
+                chapter_name_translated = (
+                    f"{orig_id} {chapter.chapter_name_translated}"
+                    if chapter.chapter_name_translated
+                    else chapter_name
                 )
-                classified_entry[f"PROGRAM_{idx}_ORIG_ID"] = f"CLASSIFIED_{chapter_orig_id}"
-                classified_entry[f"PROGRAM_{idx}_NAME"] = "Classified Spending"
-                classified_entry[f"PROGRAM_{idx}_NAME_TRANSLATED"] = "Classified Spending"
+                classified_entry: dict[str, int | float | str | None] = {
+                    "VALUE": chapter.classified_spending,
+                    "BUDGET_TYPE": "CLASSIFIED",
+                    "ROOT": "Federal Budget",
+                    "IS_MILITARY": None,
+                    "MINISTRY_DIM_ID": CLASSIFIED_PARENT_ID,
+                    "MINISTRY_ORIG_ID": "CLASSIFIED_PARENT",
+                    "MINISTRY_NAME": "Classified Spending",
+                    "MINISTRY_NAME_TRANSLATED": "Classified Spending",
+                    "CHAPTER_DIM_ID": chapter.dimension_id,
+                    "CHAPTER_ORIG_ID": orig_id,
+                    "CHAPTER_NAME": chapter_name,
+                    "CHAPTER_NAME_TRANSLATED": chapter_name_translated,
+                    "SUBCHAPTER_DIM_ID": synthetic_id,
+                    "SUBCHAPTER_ORIG_ID": f"CLASSIFIED_{orig_id}",
+                    "SUBCHAPTER_NAME": "Classified Spending",
+                    "SUBCHAPTER_NAME_TRANSLATED": "Classified Spending",
+                }
+                for idx in range(0, 3):
+                    classified_entry[f"PROGRAM_{idx}_DIM_ID"] = synthetic_id
+                    classified_entry[f"PROGRAM_{idx}_ORIG_ID"] = f"CLASSIFIED_{orig_id}"
+                    classified_entry[f"PROGRAM_{idx}_NAME"] = "Classified Spending"
+                    classified_entry[f"PROGRAM_{idx}_NAME_TRANSLATED"] = "Classified Spending"
 
-            if line_length is not None:
-                for key in list(classified_entry):
-                    val = classified_entry[key]
-                    if "NAME" in key and isinstance(val, str):
-                        classified_entry[key] = "<br>".join(wrap(val, width=line_length))
+                if line_length is not None:
+                    for key in list(classified_entry):
+                        val = classified_entry[key]
+                        if "NAME" in key and isinstance(val, str):
+                            classified_entry[key] = "<br>".join(wrap(val, width=line_length))
 
-            new_entries.append(classified_entry)
+                new_entries.append(classified_entry)
 
-        if new_entries:
-            df = pd.concat([df, pd.DataFrame(new_entries)], ignore_index=True)
+            if new_entries:
+                df = pd.concat([df, pd.DataFrame(new_entries)], ignore_index=True)
 
-        if budget_type == "REPORT":
-            root_row = {
-                "VALUE": difference_budget_value,
+        elif cs.budget_type == "REPORT" and cs.total_classified > 0:
+            root_row: dict[str, int | float | str | None] = {
+                "VALUE": cs.total_classified,
                 "BUDGET_TYPE": "CLASSIFIED",
                 "ROOT": "Federal Budget",
                 "MINISTRY_DIM_ID": CLASSIFIED_PARENT_ID,
@@ -386,7 +334,6 @@ class TreemapTransformer:
                 "SUBCHAPTER_NAME": "Classified Spending",
                 "SUBCHAPTER_NAME_TRANSLATED": "Classified Spending",
             }
-            # PROGRAM levels
             for idx in range(0, 3):
                 root_row[f"PROGRAM_{idx}_DIM_ID"] = CLASSIFIED_DIMENSION_ID_OFFSET + 3 + idx
                 root_row[f"PROGRAM_{idx}_ORIG_ID"] = "CLASSIFIED_PROGRAM_" + str(idx)
