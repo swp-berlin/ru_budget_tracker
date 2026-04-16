@@ -6,10 +6,10 @@ Imputes missing current/next year using last available data.
 
 Usage:
     from parsers import fetch_ppp_rates, fetch_ppp_data, save_ppp_csv, fetch_ppp_api_data
-    
+
     # Get ConversionRate objects for DB
     rates = fetch_ppp_rates()
-    
+
     # Save raw data to CSV
     ppp_data = fetch_ppp_data()
     save_ppp_csv(ppp_data)
@@ -29,6 +29,8 @@ logger = logging.getLogger(__name__)
 
 COUNTRY = "RUS"
 INDICATOR = "PA.NUS.PPP"
+
+
 def _resolve_csv_path() -> Path:
     """Locate src/data/.../ppp.csv regardless of execution location."""
     target_suffix = Path("data") / "import_files" / "conversion_tables" / "ppp" / "ppp.csv"
@@ -81,35 +83,39 @@ def save_ppp_csv(ppp_data: Dict[int, float], path: Path | None = None) -> Path:
 def fetch_ppp_rates(target_year: int | None = None) -> List[ConversionRate]:
     """
     Fetch PPP rates and create ConversionRate entries.
-    
+
     Imputes target_year and target_year+1 if not available, using last available year.
     Naming: ppp_{year} for actual, ppp_{year}_imputed_{source_year} for imputed.
     """
     if target_year is None:
         target_year = date.today().year
-    
+
     ppp_data = fetch_ppp_data()
     if not ppp_data:
         raise ValueError("No PPP data available")
-    
+
     last_year = max(ppp_data.keys())
     rates = []
-    
+
     for year, value in sorted(ppp_data.items()):
-        rates.append(ConversionRate(
-            name=f"ppp_{year}",
-            value=value,
-            started_at=date(year, 1, 1),
-            ended_at=date(year, 12, 31),
-        ))
-    
-    for year in (target_year, target_year + 1):
-        if year not in ppp_data:
-            rates.append(ConversionRate(
-                name=f"ppp_{year}_imputed_{last_year}",
-                value=ppp_data[last_year],
+        rates.append(
+            ConversionRate(
+                name=f"ppp_{year}",
+                value=value,
                 started_at=date(year, 1, 1),
                 ended_at=date(year, 12, 31),
-            ))
-    
+            )
+        )
+
+    for year in (target_year, target_year + 1):
+        if year not in ppp_data:
+            rates.append(
+                ConversionRate(
+                    name=f"ppp_{year}_imputed_{last_year}",
+                    value=ppp_data[last_year],
+                    started_at=date(year, 1, 1),
+                    ended_at=date(year, 12, 31),
+                )
+            )
+
     return rates

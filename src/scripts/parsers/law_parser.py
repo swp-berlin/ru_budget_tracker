@@ -31,15 +31,14 @@ logger = logging.getLogger(__name__)
 # Chapter name replacements for consistency across years
 # Format: {old_name: new_name}
 CHAPTER_NAME_REPLACEMENTS = {
-    "Обслуживание государственного (муниципального) долга": 
-        "Обслуживание государственного и муниципального долга",
+    "Обслуживание государственного (муниципального) долга": "Обслуживание государственного и муниципального долга",
 }
 
 
 def normalize_chapter_name(name: str) -> str:
     """
     Normalize chapter names for consistency across different law years.
-    
+
     Some chapters have slightly different names in different years
     (e.g., law_2020 uses parentheses instead of 'и').
     """
@@ -60,7 +59,7 @@ def parse_law_budget(file_path: Path) -> Budget:
 def parse_law_dimensions(merged_rows: List[MergedRow]) -> List[Dimension]:
     """
     Parse dimensions from merged rows (LAW-specific logic).
-    
+
     Creates: MINISTRY, CHAPTER, SUBCHAPTER, PROGRAM, EXPENSE_TYPE
     """
     dimensions: List[Dimension] = []
@@ -77,68 +76,80 @@ def parse_law_dimensions(merged_rows: List[MergedRow]) -> List[Dimension]:
         # PROGRAM (without expense_type)
         if row.program_code and not row.expense_type_code:
             parent_id = _find_parent_program(row.program_code, find_dim)
-            dimensions.append(Dimension(
-                original_identifier=row.program_code,
-                type="PROGRAM",
-                name=name,
-                name_translated=None,
-                parent_id=parent_id,
-            ))
+            dimensions.append(
+                Dimension(
+                    original_identifier=row.program_code,
+                    type="PROGRAM",
+                    name=name,
+                    name_translated=None,
+                    parent_id=parent_id,
+                )
+            )
 
         # SUBCHAPTER
         if row.subchapter_code and not row.program_code:
             subchapter_id = f"{row.chapter_code}{row.subchapter_code}"
-            dimensions.append(Dimension(
-                original_identifier=subchapter_id,
-                type="SUBCHAPTER",
-                name=name,
-                name_translated=None,
-                parent_id=row.chapter_code,
-            ))
+            dimensions.append(
+                Dimension(
+                    original_identifier=subchapter_id,
+                    type="SUBCHAPTER",
+                    name=name,
+                    name_translated=None,
+                    parent_id=row.chapter_code,
+                )
+            )
 
         # CHAPTER
         if row.chapter_code and not row.subchapter_code and not row.program_code:
             chapter_name = normalize_chapter_name(name)  # Normalize for consistency
-            dimensions.append(Dimension(
-                original_identifier=row.chapter_code,
-                type="CHAPTER",
-                name=chapter_name,
-                name_translated=None,
-                parent_id=None,
-            ))
+            dimensions.append(
+                Dimension(
+                    original_identifier=row.chapter_code,
+                    type="CHAPTER",
+                    name=chapter_name,
+                    name_translated=None,
+                    parent_id=None,
+                )
+            )
 
         # MINISTRY
         if row.ministry_code and not row.chapter_code and not row.program_code:
-            dimensions.append(Dimension(
-                original_identifier=row.ministry_code,
-                type="MINISTRY",
-                name=name,
-                name_translated=None,
-                parent_id=None,
-            ))
+            dimensions.append(
+                Dimension(
+                    original_identifier=row.ministry_code,
+                    type="MINISTRY",
+                    name=name,
+                    name_translated=None,
+                    parent_id=None,
+                )
+            )
 
         # EXPENSE_TYPE
         if row.expense_type_code:
             expense_name = extract_expense_type_name(name)
-            dimensions.append(Dimension(
-                original_identifier=row.expense_type_code,
-                type="EXPENSE_TYPE",
-                name=expense_name,
-                name_translated=None,
-                parent_id=None,
-            ))
+            dimensions.append(
+                Dimension(
+                    original_identifier=row.expense_type_code,
+                    type="EXPENSE_TYPE",
+                    name=expense_name,
+                    name_translated=None,
+                    parent_id=None,
+                )
+            )
 
             # PROGRAM with expense_type (most specific)
             if row.program_code:
                 program_id = f"{row.program_code}-{row.expense_type_code}"
                 parent_id = _find_parent_program(row.program_code, find_dim)
-                dimensions.append(Dimension(
-                    original_identifier=program_id,
-                    type="PROGRAM",
-                    name=name,
-                    name_translated=None,
-                    parent_id=parent_id,
-                ))
+                dimensions.append(
+                    Dimension(
+                        original_identifier=program_id,
+                        type="PROGRAM",
+                        name=name,
+                        name_translated=None,
+                        parent_id=parent_id,
+                    )
+                )
 
     logger.info(f"Parsed {len(dimensions)} dimensions")
     return dimensions
@@ -147,24 +158,24 @@ def parse_law_dimensions(merged_rows: List[MergedRow]) -> List[Dimension]:
 def _find_parent_program(program_code: str, find_dim) -> Optional[str]:
     """Find parent program by walking up the hierarchy (character-based)."""
     code = program_code.strip()
-    
+
     if len(code) <= 1:
         return None
-    
+
     # Try progressively longer prefixes, return the longest match
     longest_match = None
     for length in range(1, len(code)):
         candidate = code[:length]
         if find_dim(candidate, "PROGRAM"):
             longest_match = candidate
-    
+
     return longest_match
 
 
 def parse_law_expenses(merged_rows: List[MergedRow], dimensions: List[Dimension]) -> List[Expense]:
     """
     Create expenses from merged rows and link to dimensions.
-    
+
     Only rows with expense_type_code AND value become expenses.
     """
     # Build lookup: (type, identifier) -> Dimension
@@ -216,9 +227,9 @@ def parse_law_expenses(merged_rows: List[MergedRow], dimensions: List[Dimension]
 def parse_law_file(file_path: Path) -> Tuple[Budget, List[Dimension], List[Expense]]:
     """
     Parse a LAW file completely.
-    
+
     This is the main entry point - reads the file ONCE and returns everything.
-    
+
     Returns:
         (budget, dimensions, expenses)
     """
@@ -244,6 +255,8 @@ def parse_law_file(file_path: Path) -> Tuple[Budget, List[Dimension], List[Expen
     # 6. Parse expenses
     expenses = parse_law_expenses(merged_rows, dimensions)
 
-    logger.info(f"Parsed: {budget.original_identifier}, {len(dimensions)} dimensions, {len(expenses)} expenses")
+    logger.info(
+        f"Parsed: {budget.original_identifier}, {len(dimensions)} dimensions, {len(expenses)} expenses"
+    )
 
     return budget, dimensions, expenses

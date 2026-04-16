@@ -34,91 +34,11 @@
   min-width: 180px;
 }
 
-/* Budget toggle: ellipsize label text but always show caret */
-#menu-budget .dropdown-toggle {
-  display: inline-block;
-  /* allow text-overflow to apply reliably */
-  position: relative;
-  /* anchor caret positioning */
-  overflow: hidden;
-  /* hide overflowed label text */
-  white-space: nowrap;
-  /* prevent wrapping */
-  text-overflow: ellipsis;
-  /* show ellipsis for long labels */
-  padding-right: 28px;
-  /* reserve space for caret */
-}
-
-/* Keep caret visible by absolutely positioning it inside the toggle */
-#menu-budget .dropdown-toggle::after {
-  position: absolute;
-  right: 10px;
-  /* align to the right padding */
-  top: 50%;
-  transform: translateY(-50%);
-  margin-left: 0;
-  /* neutralize bootstrap spacing */
-}
-
-/* View-by toggle: ellipsize + fixed caret */
-#menu-viewby .dropdown-toggle {
-  display: inline-block;
-  /* ensure ellipsis works */
-  position: relative;
-  /* anchor caret */
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  padding-right: 28px;
-  /* space for caret */
-}
-
-#menu-viewby .dropdown-toggle::after {
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  margin-left: 0;
-}
-
-/* Period toggle: ellipsize + fixed caret */
-#menu-period .dropdown-toggle {
-  display: inline-block;
-  position: relative;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  padding-right: 28px;
-}
-
-#menu-period .dropdown-toggle::after {
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  margin-left: 0;
-}
-
-/* Spending-type toggle: ellipsize + fixed caret */
-#menu-spending-type .dropdown-toggle {
-  display: inline-block;
-  position: relative;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  padding-right: 28px;
-}
-
-#menu-spending-type .dropdown-toggle::after {
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  margin-left: 0;
-}
-
-/* Unit toggle: ellipsize + fixed caret */
+/* All menu toggles: ellipsize label text but always show caret */
+#menu-budget .dropdown-toggle,
+#menu-viewby .dropdown-toggle,
+#menu-period .dropdown-toggle,
+#menu-spending-type .dropdown-toggle,
 #menu-unit .dropdown-toggle {
   display: inline-block;
   position: relative;
@@ -128,6 +48,11 @@
   padding-right: 28px;
 }
 
+/* Keep caret visible by absolutely positioning it inside the toggle */
+#menu-budget .dropdown-toggle::after,
+#menu-viewby .dropdown-toggle::after,
+#menu-period .dropdown-toggle::after,
+#menu-spending-type .dropdown-toggle::after,
 #menu-unit .dropdown-toggle::after {
   position: absolute;
   right: 10px;

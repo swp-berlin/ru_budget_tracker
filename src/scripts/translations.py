@@ -321,7 +321,10 @@ def translate_missing_names(
     completed = 0
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(translate_names_batch, batch, client): i for i, batch in enumerate(batches)}
+        futures = {
+            executor.submit(translate_names_batch, batch, client): i
+            for i, batch in enumerate(batches)
+        }
 
         for future in as_completed(futures):
             batch_num = futures[future] + 1
@@ -329,7 +332,9 @@ def translate_missing_names(
                 batch_translations = future.result()
                 new_translations.update(batch_translations)
                 completed += 1
-                logger.info(f"Completed batch {batch_num}/{total_batches} ({completed}/{total_batches} done)")
+                logger.info(
+                    f"Completed batch {batch_num}/{total_batches} ({completed}/{total_batches} done)"
+                )
             except Exception as e:
                 logger.error(f"Batch {batch_num} failed: {e}")
 
@@ -413,7 +418,9 @@ def main():
         logger.info(f"Existing translations in CSV: {len(existing_translations)}")
         logger.info(f"Names needing translation: {len(missing_names)}")
         logger.info(f"Batch size: {args.batch_size}, Workers: {args.workers}")
-        logger.info(f"Estimated batches: {(len(missing_names) + args.batch_size - 1) // args.batch_size}")
+        logger.info(
+            f"Estimated batches: {(len(missing_names) + args.batch_size - 1) // args.batch_size}"
+        )
 
         if missing_names:
             logger.info("\nSample of names to translate (first 10):")

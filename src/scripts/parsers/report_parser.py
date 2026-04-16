@@ -44,21 +44,22 @@ REPORT_SHEET_NAME = "2.1"
 
 # Column indices in report files (0-indexed)
 REPORT_COLUMNS = {
-    "name": 0,           # Наименование показателя
-    "row_code": 1,       # Код стро-ки
-    "ministry": 2,       # Глав-ный распо-рядитель
-    "chapter_full": 3,   # Р, Пр (contains chapter + subchapter as XXYY)
-    "program": 4,        # ЦСР
-    "expense_type": 5,   # ВР
-    "value_law": 6,      # Бюджетные ассигнования по закону
-    "value_adjusted": 7, # Бюджетные ассигнования с учетом изменений
-    "value_executed": 8, # Исполнено
+    "name": 0,  # Наименование показателя
+    "row_code": 1,  # Код стро-ки
+    "ministry": 2,  # Глав-ный распо-рядитель
+    "chapter_full": 3,  # Р, Пр (contains chapter + subchapter as XXYY)
+    "program": 4,  # ЦСР
+    "expense_type": 5,  # ВР
+    "value_law": 6,  # Бюджетные ассигнования по закону
+    "value_adjusted": 7,  # Бюджетные ассигнования с учетом изменений
+    "value_executed": 8,  # Исполнено
 }
 
 
 # =============================================================================
 # BUDGET PARSING
 # =============================================================================
+
 
 def parse_report_budget(file_path: Path) -> Budget:
     """Parse budget metadata from a REPORT file."""
@@ -69,6 +70,7 @@ def parse_report_budget(file_path: Path) -> Budget:
 # =============================================================================
 # EXCEL READING
 # =============================================================================
+
 
 def read_report_excel(file_path: Path) -> pd.DataFrame:
     """
@@ -133,6 +135,7 @@ def find_data_start_row(df: pd.DataFrame) -> int:
 # ROW PARSING
 # =============================================================================
 
+
 def is_valid_row(row: pd.Series) -> bool:
     """
     Check if row should be processed.
@@ -140,7 +143,7 @@ def is_valid_row(row: pd.Series) -> bool:
     Returns True if:
     - expense_type is empty (dimension name rows like ministry, chapter)
     - expense_type is divisible by 100 (aggregated expense rows)
-    
+
     Returns False if expense_type exists but is not divisible by 100.
     """
     expense_type = row.iloc[REPORT_COLUMNS["expense_type"]]
@@ -148,7 +151,7 @@ def is_valid_row(row: pd.Series) -> bool:
     # Empty expense type is valid (dimension name rows)
     if pd.isna(expense_type):
         return True
-    
+
     try:
         et_val = int(float(expense_type))
         # Only accept expense types divisible by 100
@@ -186,7 +189,7 @@ def is_expense_row(row: pd.Series) -> bool:
 def parse_chapter_code(chapter_full: str) -> Tuple[Optional[str], Optional[str]]:
     """
     Parse chapter code from the combined Р, Пр column.
-    
+
     The 4-digit code structure:
     - If ends with "00" (e.g., "0100") → it's a chapter only, return chapter="01", subchapter=None
     - If doesn't end with "00" (e.g., "0110") → it's a subchapter, return chapter="01", subchapter="0110"
@@ -199,11 +202,11 @@ def parse_chapter_code(chapter_full: str) -> Tuple[Optional[str], Optional[str]]
         return chapter_full, None
 
     chapter_code = chapter_full[:2]
-    
+
     # If the code ends with "00", it's a chapter-level code (no subchapter)
     if len(chapter_full) == 4 and chapter_full.endswith("00"):
         return chapter_code, None
-    
+
     # Otherwise it's a subchapter
     subchapter_code = chapter_full if len(chapter_full) > 2 else None
 
@@ -213,44 +216,44 @@ def parse_chapter_code(chapter_full: str) -> Tuple[Optional[str], Optional[str]]
 def parse_program_code(program_full: str) -> Optional[str]:
     """
     Parse program code by stripping trailing all-zero segments.
-    
+
     10-character structure: XX X XX XXXXX (2+1+2+5)
     Segments: [0:2], [2:3], [3:5], [5:10]
-    
+
     Strip trailing segments that are ALL zeros from right to left.
-    
+
     Examples:
         "0100000000" → "01" (strip "00000", "00", "0")
         "0110000000" → "011" (strip "00000", "00", but "1" is not zeros)
         "0110400000" → "01104" (strip "00000", but "04" is not all zeros)
         "0110490000" → "0110490000" (no stripping, "90000" is not all zeros)
-    
+
     Returns: Stripped program code, or None if invalid/empty
     """
     if not program_full:
         return None
-    
+
     program_full = str(program_full).strip()
-    
+
     if len(program_full) != 10:
         return program_full  # Return as-is if not 10 chars
-    
+
     # Split into segments: XX X XX XXXXX
     segments = [
-        program_full[0:2],   # 2 chars
-        program_full[2:3],   # 1 char
-        program_full[3:5],   # 2 chars
+        program_full[0:2],  # 2 chars
+        program_full[2:3],  # 1 char
+        program_full[3:5],  # 2 chars
         program_full[5:10],  # 5 chars
     ]
-    
+
     # Strip trailing all-zero segments from right to left
-    while segments and all(c == '0' for c in segments[-1]):
+    while segments and all(c == "0" for c in segments[-1]):
         segments.pop()
-    
+
     if not segments:
         return None
-    
-    return ''.join(segments)
+
+    return "".join(segments)
 
 
 def extract_row_data(row: pd.Series) -> Optional[Dict]:
@@ -265,7 +268,7 @@ def extract_row_data(row: pd.Series) -> Optional[Dict]:
         - expense_type_code (None for dimension-only rows)
         - value (executed amount, None for dimension-only rows)
         - name
-    
+
     Returns None for rows that should be skipped (non-100-divisible expense types).
     """
     # Skip rows with expense types not divisible by 100
@@ -322,22 +325,25 @@ def extract_row_data(row: pd.Series) -> Optional[Dict]:
 # DIMENSION CREATION (from report data)
 # =============================================================================
 
-def _find_parent_program(program_code: str, dim_lookup: Dict[Tuple[str, str], Dimension]) -> Optional[str]:
+
+def _find_parent_program(
+    program_code: str, dim_lookup: Dict[Tuple[str, str], Dimension]
+) -> Optional[str]:
     """
     Find parent program by checking progressively shorter prefixes.
-    
+
     For program code "01302", check if "0130", "013", "01" exist as programs.
     Returns the longest matching parent identifier, or None.
     """
     if not program_code or len(program_code) <= 2:
         return None
-    
+
     # Try progressively shorter prefixes
     for length in range(len(program_code) - 1, 1, -1):
         candidate = program_code[:length]
-        if (("PROGRAM", candidate) in dim_lookup):
+        if ("PROGRAM", candidate) in dim_lookup:
             return candidate
-    
+
     return None
 
 
@@ -357,7 +363,9 @@ def create_dimensions_from_report_rows(
     dimensions: List[Dimension] = []
     dim_lookup: Dict[Tuple[str, str], Dimension] = {}
 
-    def add_dimension(dim_type: str, identifier: str, name: Optional[str], parent_id: Optional[str] = None):
+    def add_dimension(
+        dim_type: str, identifier: str, name: Optional[str], parent_id: Optional[str] = None
+    ):
         """Add dimension if not already present."""
         key = (dim_type, identifier)
         if key in dim_lookup:
@@ -381,7 +389,7 @@ def create_dimensions_from_report_rows(
     # - PROGRAM (without expense_type): has program_code, no expense_type_code
     # - EXPENSE_TYPE: has expense_type_code
     # - PROGRAM (with expense_type): has program_code AND expense_type_code
-    
+
     for row_data in parsed_rows:
         ministry_code = row_data["ministry_code"]
         chapter_code = row_data["chapter_code"]
@@ -427,13 +435,14 @@ def create_dimensions_from_report_rows(
 # EXPENSE CREATION
 # =============================================================================
 
+
 def create_expenses_from_report_rows(
     parsed_rows: List[Dict],
     dim_lookup: Dict[Tuple[str, str], Dimension],
 ) -> List[Expense]:
     """
     Create Expense objects from parsed rows, linking to dimensions.
-    
+
     Only rows with expense_type_code AND value become expenses.
     """
     expenses: List[Expense] = []
@@ -493,6 +502,7 @@ def create_expenses_from_report_rows(
 # =============================================================================
 # MAIN PARSING FUNCTION
 # =============================================================================
+
 
 def parse_report_file(
     file_path: Path,

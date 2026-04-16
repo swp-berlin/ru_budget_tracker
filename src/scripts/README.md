@@ -26,28 +26,33 @@ Since some of the Excel files can be corrupt, run the fixer first:
 
 ### Commands
 
+All import steps are available as `make` targets from the project root. Run them in order:
+
 ```bash
-# 1) Clean up corrupted xlsx/xls files
-uv run python scripts/fix_corrupt_excel_files.py
+# 1) Fix corrupt xlsx/xls files before importing
+make import-fix
 
-# 2) Import budgets (laws + reports)
-uv run python scripts/import.py budget --type all
+# 2) Import all budget laws and reports
+make import-budget
 
-# this will read in the totals for the respective budgets from the Finance Ministry 
+# Optionally filter by year:
+make import-budget years="2023 2024"
+
+# 3) Import totals (report totals or law totals) — path is required
 # Report totals (monthly budget execution, xlsx):
-uv run python scripts/import.py totals data/import_files/raw/totals/total_report_2026.xlsx
+make import-totals totals=data/import_files/raw/totals/total_report_2026.xlsx
 
 # Law totals (annual budget law, csv):
-uv run python scripts/import.py totals data/import_files/raw/totals/total_law_2026.csv
+make import-totals totals=data/import_files/raw/totals/total_law_2026.csv
 
-# 4) Import GDP (auto-discover from raw/conversion_tables/gdp/...)
-uv run python scripts/import.py gdp
+# 4) Import GDP conversion data (auto-discovers files under raw/conversion_tables/gdp/)
+make import-gdp
 
-# 4) Import PPP (from WorldBank API)
-uv run python scripts/import.py ppp
+# 5) Import PPP conversion data from World Bank API
+make import-ppp
 
-# 5) Run translation pipeline (translates unseen dimension names)
-uv run python scripts/translations.py --batch-size 25
+# 6) Run translation pipeline (translates unseen dimension names)
+make import-translations
 ```
 
 ### Data Model

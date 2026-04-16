@@ -1,6 +1,6 @@
 import io
 import logging
-from typing import Any
+from typing import Any, cast
 from datetime import date
 
 import dash_bootstrap_components as dbc
@@ -208,18 +208,19 @@ def generate_figure(
 
     # Set custom hover templates per trace, matched by name for robustness.
     classified_label = "CLASSIFIED (EST.)" if spending_type == "MILITARY" else "CLASSIFIED"
-    for trace in fig.data:  # type: ignore
-        n = len(trace.x) if trace.x is not None else 0
-        trace.customdata = [[unit_label]] * n
-        if trace.name == "OPEN":
-            trace.hovertemplate = (
+    for trace in fig.data:
+        bar = cast(go.Bar, trace)
+        n = len(bar.x) if isinstance(bar.x, (list, tuple)) else 0
+        bar.customdata = [[unit_label]] * n
+        if bar.name == "OPEN":
+            bar.hovertemplate = (
                 "<b>%{x}</b><br>Value: %{y:,.1f} %{customdata[0]}<br><extra></extra>"
             )
-        elif trace.name == "CLASSIFIED":
-            trace.hovertemplate = (
+        elif bar.name == "CLASSIFIED":
+            bar.hovertemplate = (
                 "<b>%{x}</b><br>Value: %{y:,.1f} %{customdata[0]} (CLASSIFIED)<br><extra></extra>"
             )
-            trace.name = classified_label
+            bar.name = classified_label
 
     return fig
 

@@ -92,17 +92,3 @@
     font-family: 'Source Sans 3';
     /* inline SVG icons */
 }
-
-/* Ensure inner spans (used for tooltips) inherit the dark text color */
-#menu-budget .dropdown-item span,
-#menu-viewby .dropdown-item span,
-#menu-period .dropdown-item span,
-#menu-spending-type .dropdown-item span,
-#menu-unit .dropdown-item span,
-#menu-budget .dropdown-toggle span,
-#menu-viewby .dropdown-toggle span,
-#menu-period .dropdown-toggle span,
-#menu-spending-type .dropdown-toggle span,
-#menu-unit .dropdown-toggle span {
-    color: #333333 !important;
-}

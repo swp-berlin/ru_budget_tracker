@@ -145,7 +145,7 @@ toolbar = html.Div(
                                     ],
                                     id="btn-switch-graphs",
                                     title="Switch to Time Series View",
-                                    href="/timeseries",
+                                    href=get_relative_path("/timeseries"),
                                 ),
                                 # Share button
                                 dbc.Button(
@@ -206,7 +206,7 @@ toolbar = html.Div(
                                     ),
                                     id="btn-about",
                                     title="About This Project",
-                                    href="/about",
+                                    href=get_relative_path("/about"),
                                 ),
                             ],
                             direction="horizontal",

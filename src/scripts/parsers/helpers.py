@@ -275,10 +275,10 @@ def deduplicate_dimensions(dimensions_list: List[Dimension]) -> List[Dimension]:
     # Check for same identifier with different names (data quality warning)
     identifier_names: Dict[tuple, List[str]] = {}
     for dim in dimensions_list:
-        key = (dim.original_identifier, dim.type, dim.parent_id)
-        if key not in identifier_names:
-            identifier_names[key] = []
-        identifier_names[key].append(dim.name)
+        id_key = (dim.original_identifier, dim.type, dim.parent_id)
+        if id_key not in identifier_names:
+            identifier_names[id_key] = []
+        identifier_names[id_key].append(dim.name)
 
     for (identifier, dim_type, parent_id), names in identifier_names.items():
         unique_names = set(names)

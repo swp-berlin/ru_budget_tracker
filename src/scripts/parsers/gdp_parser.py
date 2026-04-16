@@ -70,12 +70,14 @@ def create_quarterly_rates(df: pd.DataFrame) -> List[ConversionRate]:
             continue
 
         start = date(year, (q - 1) * 3 + 1, 1)
-        rates.append(ConversionRate(
-            name=f"gdp_{year}_q{q}{suffix}",
-            value=val,
-            started_at=start,
-            ended_at=start + relativedelta(months=3, days=-1),
-        ))
+        rates.append(
+            ConversionRate(
+                name=f"gdp_{year}_q{q}{suffix}",
+                value=val,
+                started_at=start,
+                ended_at=start + relativedelta(months=3, days=-1),
+            )
+        )
     return rates
 
 
@@ -87,7 +89,9 @@ def parse_minekonom_yearly(file_path: Path) -> pd.DataFrame:
     return df[["year", "value"]]
 
 
-def create_yearly_rates(quarterly_df: pd.DataFrame, minekonom_df: pd.DataFrame) -> List[ConversionRate]:
+def create_yearly_rates(
+    quarterly_df: pd.DataFrame, minekonom_df: pd.DataFrame
+) -> List[ConversionRate]:
     """Create yearly ConversionRate entries by aggregating quarterly + Minekonom estimates."""
     yearly = (
         quarterly_df[quarterly_df["value"].notna()]
@@ -104,12 +108,14 @@ def create_yearly_rates(quarterly_df: pd.DataFrame, minekonom_df: pd.DataFrame) 
     for _, row in combined.sort_values("year").iterrows():
         year = int(row["year"])
         suffix = "_estimate" if year > last_actual else ""
-        rates.append(ConversionRate(
-            name=f"gdp_{year}{suffix}",
-            value=row["value"],
-            started_at=date(year, 1, 1),
-            ended_at=date(year, 12, 31),
-        ))
+        rates.append(
+            ConversionRate(
+                name=f"gdp_{year}{suffix}",
+                value=row["value"],
+                started_at=date(year, 1, 1),
+                ended_at=date(year, 12, 31),
+            )
+        )
     return rates
 
 
