@@ -43,6 +43,22 @@ def _item_span(label: str, selected: bool) -> html.Span:
 
 
 @callback(
+    Output("store-selected-id", "data", allow_duplicate=True),
+    Input("url", "pathname"),
+    State("url", "search"),
+    prevent_initial_call=True,
+)
+def clear_selected_id_on_treemap_nav(pathname: str | None, search: str | None):
+    """Clear selected node when navigating to the treemap without a focus param."""
+    if pathname != get_relative_path("/"):
+        raise PreventUpdate
+    params = parse_qs(search.lstrip("?")) if search else {}
+    if "focus" in params:
+        raise PreventUpdate
+    return None
+
+
+@callback(
     Output("btn-switch-graphs", "href"),
     Output("btn-switch-graphs", "children"),
     Output("btn-switch-graphs", "title"),
