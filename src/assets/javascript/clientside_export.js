@@ -104,6 +104,8 @@ Object.assign(window.dash_clientside.clientside, {
       const width = graphDiv.offsetWidth || 800;
       const height = graphDiv.offsetHeight || 600;
       const scale = 2;
+      // Footer strip added below the plot so the watermark never overlaps chart content.
+      const footerPx = 24;
 
       const svgElement = graphDiv.querySelector('svg.main-svg');
       if (!svgElement) {
@@ -112,40 +114,84 @@ Object.assign(window.dash_clientside.clientside, {
         return now.toISOString();
       }
 
-      const svgClone = svgElement.cloneNode(true);
-      const svgWidth = parseInt(svgElement.getAttribute('width')) || width;
-      const svgHeight = parseInt(svgElement.getAttribute('height')) || height;
+      // Use rendered dimensions as the coordinate space; only width/height are scaled up.
+      // Setting viewBox to the scaled values would shrink content to the top-left quarter.
+      const svgRect = svgElement.getBoundingClientRect();
+      const origW = Math.round(svgRect.width);
+      const origH = Math.round(svgRect.height);
+      const svgWidth = origW * scale;
+      const svgHeight = origH * scale;
 
-      // Embed Google Font for correct text rendering in exported image
+      // Record computed visibility/opacity for infolayer children (title, legend, etc.)
+      // before cloning so CSS-driven state is baked into the serialised SVG as inline styles.
+      const infoEl = svgElement.querySelector('g.infolayer');
+      const infoStyles = new Map();
+      if (infoEl) {
+        infoEl.querySelectorAll('*').forEach((el, i) => {
+          const cs = window.getComputedStyle(el);
+          infoStyles.set(i, { visibility: cs.visibility, opacity: cs.opacity, display: cs.display });
+        });
+      }
+
+      const svgClone = svgElement.cloneNode(true);
+
+      // Apply baked-in visibility to infolayer clone so legend / title render.
+      const infoClone = svgClone.querySelector('g.infolayer');
+      if (infoClone) {
+        const cloneEls = infoClone.querySelectorAll('*');
+        infoStyles.forEach((s, i) => {
+          const el = cloneEls[i];
+          if (!el) return;
+          el.style.visibility = s.visibility;
+          el.style.opacity = s.opacity;
+          el.style.display = s.display;
+        });
+      }
+
+      svgClone.setAttribute('width', svgWidth);
+      svgClone.setAttribute('height', svgHeight);
+      svgClone.setAttribute('viewBox', `0 0 ${origW} ${origH}`);
+      svgClone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+
+      // Embed Google Font so chart text renders with Source Sans 3.
       const styleEl = document.createElementNS('http://www.w3.org/2000/svg', 'style');
-      styleEl.textContent = '@import url("https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap"); text, tspan { font-family: "Source Sans 3", sans-serif !important; }';
+      styleEl.textContent =
+        '@import url("https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap");' +
+        'text, tspan { font-family: "Source Sans 3", sans-serif !important; }';
       svgClone.insertBefore(styleEl, svgClone.firstChild);
 
       svgClone.querySelectorAll('text, tspan').forEach((el) => {
         el.setAttribute('font-family', '"Source Sans 3", sans-serif');
       });
 
-      const watermark = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      watermark.setAttribute('x', svgWidth - 10);
-      watermark.setAttribute('y', svgHeight - 8);
-      watermark.setAttribute('text-anchor', 'end');
-      watermark.setAttribute('font-family', '"Source Sans 3", sans-serif');
-      watermark.setAttribute('font-size', '12');
-      watermark.setAttribute('fill', '#333333');
-      watermark.textContent = `Stiftung Wissenschaft und Politik (SWP), ${now.getFullYear()} | CC BY 4.0`;
-      svgClone.appendChild(watermark);
-
-      svgClone.setAttribute('width', svgWidth);
-      svgClone.setAttribute('height', svgHeight);
-      svgClone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-
       const svgString = new XMLSerializer().serializeToString(svgClone);
 
-      // Create a hidden element to trigger font loading
-      const fontLoader = document.createElement('div');
-      fontLoader.style.cssText = 'position:absolute;left:-9999px;font-family:"Source Sans 3",sans-serif;';
-      fontLoader.textContent = 'Font loader';
-      document.body.appendChild(fontLoader);
+      // Pull title / y-axis label text and layout metrics from Plotly's internal state.
+      // These elements are often missing from the raw SVG clone because Plotly applies
+      // CSS-based visibility that is lost on serialisation.  Drawing them on canvas
+      // after the SVG image is composited is the most reliable alternative.
+      const fl = graphDiv._fullLayout || {};
+      const rawTitle = fl.title?.text ?? (typeof graphDiv.layout?.title === 'string' ? graphDiv.layout.title : graphDiv.layout?.title?.text) ?? '';
+      const rawYTitle = fl.yaxis?.title?.text ?? (typeof graphDiv.layout?.yaxis?.title === 'string' ? graphDiv.layout.yaxis.title : graphDiv.layout?.yaxis?.title?.text) ?? '';
+      const sz = fl._size || {};
+      const ml = (sz.l || 60) * scale;
+      const mt = (sz.t || 50) * scale;
+      const pw = (sz.w || width - 90) * scale;
+      const ph = (sz.h || height - 75) * scale;
+
+      // Read actual rendered font sizes from live SVG elements so text scales
+      // correctly at any zoom level or screen size.
+      const readPx = (selector, fallback) => {
+        const el = svgElement.querySelector(selector);
+        if (!el) return fallback;
+        const fs = parseFloat(window.getComputedStyle(el).fontSize);
+        return isNaN(fs) ? fallback : fs;
+      };
+      const titleFontPx = readPx('.g-gtitle text', fl.title?.font?.size || fl.font?.size || 14);
+      const axisFontPx = readPx('.ytitle', fl.yaxis?.title?.font?.size || fl.font?.size || 12);
+      const legendFontPx = readPx('.legend text', fl.font?.size || 12);
+
+      const totalHeight = svgHeight + footerPx * scale; // svgHeight = origH * scale
 
       const fontLoadPromise = document.fonts?.load
         ? Promise.all([
@@ -156,17 +202,99 @@ Object.assign(window.dash_clientside.clientside, {
 
       fontLoadPromise.then(() => {
         const canvas = document.createElement('canvas');
-        canvas.width = svgWidth * scale;
-        canvas.height = svgHeight * scale;
+        canvas.width = svgWidth;   // origW * scale
+        canvas.height = totalHeight;
         const ctx = canvas.getContext('2d');
-        ctx.scale(scale, scale);
         ctx.fillStyle = 'white';
-        ctx.fillRect(0, 0, svgWidth, svgHeight);
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         const img = new Image();
         img.onload = () => {
-          ctx.drawImage(img, 0, 0);
-          document.body.removeChild(fontLoader);
+          ctx.drawImage(img, 0, 0, svgWidth, svgHeight);
+
+          // Draw title, y-axis label, and legend via canvas so they are always present
+          // regardless of SVG infolayer CSS visibility issues.
+          const titleSize = titleFontPx * scale;
+          const axisSize = axisFontPx * scale;
+          const legendSize = legendFontPx * scale;
+          const textColor = fl.font?.color || '#444444';
+
+          if (rawTitle) {
+            ctx.font = `${titleSize}px "Source Sans 3", sans-serif`;
+            ctx.fillStyle = fl.title?.font?.color || textColor;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(rawTitle, ml + pw / 2, mt / 2);
+          }
+
+          if (rawYTitle) {
+            ctx.save();
+            ctx.font = `${axisSize}px "Source Sans 3", sans-serif`;
+            ctx.fillStyle = fl.yaxis?.title?.font?.color || textColor;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.translate(ml / 2, mt + ph / 2);
+            ctx.rotate(-Math.PI / 2);
+            ctx.fillText(rawYTitle, 0, 0);
+            ctx.restore();
+          }
+
+          // Legend — drawn from trace data, positioned to match the Plotly layout.
+          const legendTraces = (graphDiv.data || []).filter(
+            (t) => t.showlegend !== false && t.name && t.visible !== false,
+          );
+          if (legendTraces.length > 0 && fl.showlegend !== false) {
+            const swatchW = 12 * scale;
+            const swatchH = 12 * scale;
+            const swatchGap = 5 * scale;   // gap between swatch and label
+            const itemGap = 20 * scale;    // gap between legend items
+
+            ctx.font = `${legendSize}px "Source Sans 3", sans-serif`;
+
+            const items = legendTraces.map((t) => ({
+              label: t.name,
+              color: t.marker?.color || t.line?.color || '#888888',
+              labelW: ctx.measureText(t.name).width,
+            }));
+            const totalLegendW =
+              items.reduce((sum, it) => sum + swatchW + swatchGap + it.labelW, 0) +
+              (items.length - 1) * itemGap;
+
+            // Prefer Plotly's computed pixel offset; fall back to layout calculation.
+            const legOffX = fl.legend?._offsetX != null ? fl.legend._offsetX * scale : null;
+            const legOffY = fl.legend?._offsetY != null ? fl.legend._offsetY * scale : null;
+
+            const legendCX = legOffX != null ? legOffX + (fl.legend?._width || 0) * scale / 2 : ml + pw / 2;
+            const legendTopY =
+              legOffY != null
+                ? legOffY
+                : mt + ph + Math.abs((fl.legend?.y ?? -0.2)) * ph - swatchH;
+
+            let curX = legendCX - totalLegendW / 2;
+            const swatchY = legendTopY;
+
+            items.forEach((item) => {
+              ctx.fillStyle = item.color;
+              ctx.fillRect(curX, swatchY, swatchW, swatchH);
+              ctx.fillStyle = textColor;
+              ctx.textAlign = 'left';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(item.label, curX + swatchW + swatchGap, swatchY + swatchH / 2);
+              curX += swatchW + swatchGap + item.labelW + itemGap;
+            });
+          }
+
+          // Watermark
+          ctx.font = `${12 * scale}px "Source Sans 3", sans-serif`;
+          ctx.fillStyle = '#333333';
+          ctx.textAlign = 'right';
+          ctx.textBaseline = 'alphabetic';
+          ctx.fillText(
+            `Stiftung Wissenschaft und Politik (SWP), ${now.getFullYear()} | CC BY 4.0`,
+            canvas.width - 10 * scale,
+            canvas.height - 8 * scale,
+          );
+
           canvas.toBlob((pngBlob) => {
             const downloadUrl = URL.createObjectURL(pngBlob);
             const link = document.createElement('a');
@@ -181,13 +309,12 @@ Object.assign(window.dash_clientside.clientside, {
         };
         img.onerror = (err) => {
           console.error('[Download] SVG to image failed:', err);
-          document.body.removeChild(fontLoader);
           window.Plotly.downloadImage(graphDiv, { format: 'png', width: width * scale, height: height * scale, filename });
         };
         img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgString)));
       }).catch((err) => {
-        console.error('[Download] Font loading failed:', err);
-        document.body.removeChild(fontLoader);
+        console.error('[Download] Export failed:', err);
+        window.Plotly.downloadImage(graphDiv, { format: 'png', width: width * scale, height: height * scale, filename });
       });
 
       return now.toISOString();

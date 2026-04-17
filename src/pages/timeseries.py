@@ -175,13 +175,13 @@ def generate_figure(
     # Layout adjustments
     # Change font to Source Sans 3 and make it wrapped
     fig.update_layout(
-        margin=dict(t=25, l=60, r=30, b=50, autoexpand=True),
+        margin=dict(t=50, l=80, r=30, b=10, autoexpand=True),
         font=dict(family="Source Sans 3"),
         title=title,  # Ensure the title reflects treemap selections and filters.
         legend=dict(
             orientation="h",
             yanchor="bottom",
-            y=-0.20,
+            y=-0.15,
             xanchor="center",
             x=0.5,
             maxheight=0.1,  # Comment maxheight to see legend take up 0.5 of plotting area
@@ -214,7 +214,7 @@ def generate_figure(
     classified_label = "CLASSIFIED (EST.)" if spending_type == "MILITARY" else "CLASSIFIED"
     for trace in fig.data:
         bar = cast(go.Bar, trace)
-        n = len(bar.x) if bar.x is not None else 0
+        n = len(bar.x) if bar.x is not None else 0  # type: ignore
         bar.customdata = [[unit_label]] * n
         if bar.name == "OPEN":
             bar.hovertemplate = (
@@ -297,7 +297,9 @@ def layout(**other_kwargs) -> html.Div:
         # Graph to display the timeseries
         [
             # Hidden treemap graph keeps cross-page callbacks satisfied.
-            dcc.Graph(id="treemap-graph", style={"display": "none"}),
+            dcc.Graph(
+                id="treemap-graph", style={"display": "none", "height": "100%", "width": "100%"}
+            ),
             # Loading spinner overlay, hidden once the graph is ready.
             html.Div(
                 html.Div(className="treemap-spinner"),
@@ -313,7 +315,7 @@ def layout(**other_kwargs) -> html.Div:
             dcc.Graph(
                 id="timeseries-graph",
                 config=TIMESERIES_CONFIG,
-                style={"visibility": "hidden"},
+                style={"visibility": "hidden", "height": "100%", "width": "100%"},
             ),
         ],
         style={"width": "100%", "height": "90vh", "position": "relative"},

@@ -416,7 +416,6 @@ Object.assign(window.dash_clientside.clientside, {
   applyTreemapTextInset: function (figure) {
     if (!figure?.data?.length) return window.dash_clientside.no_update;
 
-    const H_INSET = 5;
 
     function scheduleInset(initialDelay) {
       let tries = 0;
@@ -430,12 +429,10 @@ Object.assign(window.dash_clientside.clientside, {
         }
 
         let rendered = false;
-        plotDiv.querySelectorAll('g.slice').forEach((slice) => {
-          const surface = slice.querySelector('path.surface');
-          if (surface) {
-            try { if (surface.getBBox().width > 0) rendered = true; } catch (e) { }
-          }
-        });
+        const firstSurface = plotDiv.querySelector('g.slice path.surface');
+        if (firstSurface) {
+          try { if (firstSurface.getBBox().width > 0) rendered = true; } catch (e) { }
+        }
         if (!rendered) {
           if (tries < 30) setTimeout(tryApply, 100);
           return;
@@ -443,22 +440,14 @@ Object.assign(window.dash_clientside.clientside, {
 
         if (!plotDiv._textInsetBound) {
           plotDiv._textInsetBound = true;
-          // Plotly fires events via an internal emitter, not DOM CustomEvents, so
-          // addEventListener('plotly_restyle') never fires for tile clicks.
-          // Use a MutationObserver on the treemap layer's path `d` attributes instead.
-          // Plotly rewrites `d` on every re-render; we never touch `d` (only `transform`),
-          // so there is no risk of an infinite loop.
           const treemapLayer = plotDiv.querySelector('.treemaplayer');
           if (treemapLayer) {
             let insetAnimating = false;
             const tileObserver = new MutationObserver(() => {
-              // On the very first mutation of each animation burst, fire scheduleInset
-              // immediately so text is corrected as early as possible.
               if (!insetAnimating) {
                 insetAnimating = true;
                 scheduleInset(0);
               }
-              // Also re-apply once tiles have fully settled for a pixel-perfect result.
               clearTimeout(plotDiv._textInsetTimer);
               plotDiv._textInsetTimer = setTimeout(() => {
                 insetAnimating = false;
@@ -474,70 +463,57 @@ Object.assign(window.dash_clientside.clientside, {
           }
         }
 
-        // Constrain overflowing text by appending scale() to Plotly's SVG transform.
-        // Plotly centers g.slicetext at the tile center via translate(tx, ty), so
-        // appending scale(ratio, 1) compresses symmetrically around that center.
-        // We avoid CSS transforms entirely — they override SVG attribute transforms
-        // and cause text to lose its tile-center position.
+        const THRESHOLD = 3;
+        const MARGIN = 2;
         plotDiv.querySelectorAll('g.slice').forEach((slice) => {
           const surface = slice.querySelector('path.surface');
           if (!surface) return;
           const gText = slice.querySelector('g.slicetext');
           if (!gText) return;
 
-          // Clear any CSS transforms from previous runs so measurements are clean.
-          gText.style.transform = '';
-          gText.style.transformOrigin = '';
+          const textEls = gText.querySelectorAll('text');
 
-          // Strip the exact transform string we appended last time (stored in a data
-          // attribute) so we always measure against Plotly's unmodified transform.
-          const currentTransform = gText.getAttribute('transform') || '';
-          const prevAppended = gText.getAttribute('data-text-scale') || '';
-          let cleanTransform;
-          if (prevAppended && currentTransform.endsWith(prevAppended)) {
-            cleanTransform = currentTransform.slice(0, currentTransform.length - prevAppended.length).trim();
-          } else {
-            // Fallback for first run or mismatched state: strip a bare trailing scale().
-            cleanTransform = currentTransform
-              .replace(/\s*scale\(\s*[\d.eE+-]+\s*,\s*[\d.eE+-]+\s*\)\s*$/, '')
-              .trim();
-          }
-          gText.setAttribute('transform', cleanTransform);
+          // Reset any previous font-size override to get natural measurements.
+          textEls.forEach((el) => { el.style.fontSize = ''; });
 
-          const surfaceRect = surface.getBoundingClientRect();
-          const textRect = gText.getBoundingClientRect();
-          const targetLeft = surfaceRect.left + H_INSET;
-          const targetRight = surfaceRect.right - H_INSET;
+          const sr = surface.getBoundingClientRect();
+          if (sr.width <= 0 || sr.height <= 0) return;
 
-          if (textRect.left >= targetLeft && textRect.right <= targetRight) {
-            gText.removeAttribute('data-text-scale');
-            return;
-          }
+          // Union of all <text> elements in viewport coordinates.
+          let tLeft = Infinity, tRight = -Infinity, tTop = Infinity, tBottom = -Infinity;
+          textEls.forEach((el) => {
+            const r = el.getBoundingClientRect();
+            if (r.width > 0 && r.height > 0) {
+              if (r.left   < tLeft)   tLeft   = r.left;
+              if (r.right  > tRight)  tRight  = r.right;
+              if (r.top    < tTop)    tTop    = r.top;
+              if (r.bottom > tBottom) tBottom = r.bottom;
+            }
+          });
+          if (tLeft === Infinity || tRight <= tLeft || tBottom <= tTop) return;
 
-          // Anchor the scale to the text's natural left edge (clamped to the left inset
-          // boundary). Scaling around this point keeps the left edge visually fixed so
-          // compressed text starts at the same relative position as uncompressed text.
-          const anchorVP = Math.max(textRect.left, targetLeft);
-          const ratio = (targetRight - anchorVP) / textRect.width;
-          if (ratio >= 1 || ratio <= 0) {
-            gText.removeAttribute('data-text-scale');
-            return;
-          }
+          const halfW = (tRight  - tLeft) / 2;
+          const halfH = (tBottom - tTop)  / 2;
+          const cx    = tLeft + halfW;
+          const cy    = tTop  + halfH;
 
-          // Build a scale transform around the anchor point converted to local SVG
-          // coordinates via the CTM.
-          let scaleTransform;
-          const ctm = gText.getCTM();
-          if (ctm && ctm.a !== 0) {
-            const localAnchor = (anchorVP - ctm.e) / ctm.a;
-            scaleTransform = `translate(${localAnchor},0) scale(${ratio},1) translate(${-localAnchor},0)`;
-          } else {
-            scaleTransform = `scale(${ratio},1)`;
-          }
+          // Only scale if text overflows by more than a few pixels (avoids sub-pixel false positives).
+          if (tLeft >= sr.left - THRESHOLD && tRight <= sr.right + THRESHOLD && tBottom <= sr.bottom + THRESHOLD) return;
 
-          const appended = (cleanTransform ? ' ' : '') + scaleTransform;
-          gText.setAttribute('data-text-scale', appended);
-          gText.setAttribute('transform', cleanTransform + appended);
+          // Compute ratio to fit with a small margin — only constrain sides that actually overflow.
+          let ratio = 1;
+          if (tLeft   < sr.left)   ratio = Math.min(ratio, (cx - sr.left   - MARGIN) / halfW);
+          if (tRight  > sr.right)  ratio = Math.min(ratio, (sr.right  - MARGIN - cx) / halfW);
+          if (tTop    < sr.top)    ratio = Math.min(ratio, (cy - sr.top    - MARGIN) / halfH);
+          if (tBottom > sr.bottom) ratio = Math.min(ratio, (sr.bottom - MARGIN - cy) / halfH);
+
+          if (ratio >= 1 || ratio <= 0) return;
+
+          // Reduce font-size proportionally — text stays at its SVG x/y anchor, no transform drift.
+          textEls.forEach((el) => {
+            const sz = parseFloat(window.getComputedStyle(el).fontSize);
+            if (sz > 0) el.style.fontSize = `${sz * ratio}px`;
+          });
         });
       }
 

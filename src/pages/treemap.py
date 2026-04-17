@@ -101,18 +101,13 @@ def transform_treemap_data(
     budget_id: int,
     spending_type: SpendingTypeLiteral,
     unit: UnitLiteral,
-    character_limit: int = 70,
 ) -> pd.DataFrame:
     dimensions, programs, classified, published_at = fetch_treemap_data(budget_id)
     budget_type: BudgetTypeLiteral = next(
         (row["budget_type"] for row in dimensions if row["budget_type"] in ["LAW", "REPORT"]), "LAW"
     )
     transformer = TreemapTransformer(
-        dimensions,
-        programs,
-        classified,
-        spending_type=spending_type,
-        max_line_lenght=character_limit,
+        dimensions, programs, classified, spending_type=spending_type, char_limit=70
     )
     df = transformer.transform_data()
     # Calculate values based on unit, budget, and published_at
@@ -141,6 +136,7 @@ def generate_figure(
         values="VALUE",
         hover_data=None,
         custom_data=["BUDGET_TYPE"],
+        title=" ",  # Placeholder, important for download
     )
 
     # Extract the necessary data from the treemap trace to compute percentages
@@ -190,8 +186,10 @@ def generate_figure(
     )
 
     # Layout adjustments
-    # Change font to Source Sans 3 and make it wrapped
     fig.update_layout(
+        autosize=True,
+        width=None,  # don't hardcode width
+        height=None,  # don't hardcode height
         margin=dict(t=20, l=10, r=10, b=10),
         font=dict(family="Source Sans 3", color="#444444"),
         transition=dict(duration=300, easing="linear"),
@@ -257,7 +255,11 @@ def layout(**other_kwargs) -> html.Div:
         # Graph to display the treemap
         [
             # Hidden timeseries graph keeps cross-page callbacks satisfied.
-            dcc.Graph(id="timeseries-graph", style={"display": "none"}),
+            dcc.Graph(
+                id="timeseries-graph",
+                responsive=True,
+                style={"display": "none", "height": "100%", "width": "100%"},
+            ),
             # Loading spinner overlay, hidden once the graph is ready.
             html.Div(
                 html.Div(className="treemap-spinner"),
@@ -271,9 +273,10 @@ def layout(**other_kwargs) -> html.Div:
                 },
             ),
             dcc.Graph(
+                responsive=True,
                 id="treemap-graph",
                 config=TREEMAP_CONFIG,
-                style={"visibility": "hidden"},
+                style={"visibility": "hidden", "height": "100%", "width": "100%"},
             ),
         ],
         style={"width": "100%", "height": "90vh", "position": "relative"},

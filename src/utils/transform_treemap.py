@@ -12,6 +12,14 @@ from utils.fetch_treemap import ClassifiedSpendingData
 
 # Classified spending dimension IDs
 CLASSIFIED_DIMENSION_ID_OFFSET = 1_000_000  # Offset to avoid ID conflicts with real dimensions
+
+
+def _wrap_label(label: str | None, limit: int = 50) -> str | None:
+    if not label or len(label) <= limit:
+        return label
+    return "<br>".join(wrap(label, width=limit))
+
+
 CLASSIFIED_PARENT_ID = -999_999  # Synthetic ID for aggregated classified parent node
 
 
@@ -22,7 +30,7 @@ class TreemapTransformer:
         programs: Sequence[RowMapping],
         classified_spending: ClassifiedSpendingData,
         spending_type: SpendingTypeLiteral = "ALL",
-        max_line_lenght: int | None = 30,
+        char_limit: int = 70,
     ) -> None:
         # Ensure an intuitive ordering: MINISTRY -> CHAPTER -> SUBCHAPTER -> PROGRAM_*
         # CLASSIFIED_PARENT is at top level (sibling to MINISTRY), CLASSIFIED is under it
@@ -36,7 +44,7 @@ class TreemapTransformer:
         self.dimensions = dimensions
         self.programs = programs
         self.classified_spending = classified_spending
-        self.max_line_length = max_line_lenght
+        self.limit = char_limit
 
     def _calculate_program_hierarchy(self, programs: Sequence[RowMapping]) -> dict[int, list[int]]:
         """Calculate all paths from root to leaves in the hierarchy graph.
@@ -247,12 +255,10 @@ class TreemapTransformer:
         str_cols = [c for c in df.columns if c != "VALUE"]
         df[str_cols] = df[str_cols].astype(str).replace("nan", None).replace("None", None)
 
-        # Add line breaks to long names if max_line_length is set.
-        line_length = self.max_line_length
-        if line_length is not None:
-            for col in df.columns:
-                if "NAME" in col:
-                    df[col] = df[col].str.wrap(line_length).str.replace("\n", "<br>", regex=False)
+        # Insert <br> into labels longer than 50 characters.
+        for col in df.columns:
+            if "NAME" in col:
+                df[col] = df[col].apply(_wrap_label, args=(self.limit,))
 
         # Normalize empty strings to None for Plotly compatibility.
         df = df.replace(to_replace={"": None})
@@ -266,7 +272,6 @@ class TreemapTransformer:
         """Add Classified Spending rows sourced from pre-computed classified spending views."""
         cs = self.classified_spending
         new_entries: list[dict] = []
-        line_length = self.max_line_length
 
         if cs.budget_type == "LAW":
             for chapter in cs.chapters:
@@ -305,12 +310,6 @@ class TreemapTransformer:
                     classified_entry[f"PROGRAM_{idx}_NAME"] = "Classified Spending"
                     classified_entry[f"PROGRAM_{idx}_NAME_TRANSLATED"] = "Classified Spending"
 
-                if line_length is not None:
-                    for key in list(classified_entry):
-                        val = classified_entry[key]
-                        if "NAME" in key and isinstance(val, str):
-                            classified_entry[key] = "<br>".join(wrap(val, width=line_length))
-
                 new_entries.append(classified_entry)
 
             if new_entries:
@@ -347,18 +346,6 @@ class TreemapTransformer:
                 "SUBCHAPTER_NAME": ministry_name,
                 "SUBCHAPTER_NAME_TRANSLATED": ministry_name,
             }
-            if line_length is not None:
-                for key in (
-                    "MINISTRY_NAME",
-                    "MINISTRY_NAME_TRANSLATED",
-                    "CHAPTER_NAME",
-                    "CHAPTER_NAME_TRANSLATED",
-                    "SUBCHAPTER_NAME",
-                    "SUBCHAPTER_NAME_TRANSLATED",
-                ):
-                    val = root_row[key]
-                    if isinstance(val, str):
-                        root_row[key] = "<br>".join(wrap(val, width=line_length))
             for idx in range(0, 3):
                 root_row[f"PROGRAM_{idx}_DIM_ID"] = CLASSIFIED_DIMENSION_ID_OFFSET + 3 + idx
                 root_row[f"PROGRAM_{idx}_ORIG_ID"] = "CLASSIFIED_PROGRAM_" + str(idx)
