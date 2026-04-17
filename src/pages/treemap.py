@@ -192,8 +192,8 @@ def generate_figure(
     # Layout adjustments
     # Change font to Source Sans 3 and make it wrapped
     fig.update_layout(
-        margin=dict(t=15, l=10, r=10, b=10),
-        font=dict(family="Source Sans 3"),
+        margin=dict(t=20, l=10, r=10, b=10),
+        font=dict(family="Source Sans 3", color="#444444"),
         transition=dict(duration=300, easing="linear"),
     )
 
@@ -473,7 +473,7 @@ def download_treemap_data(
     Returns:
         dict[str, Any]: The data for download.
     """
-    if pathname != "/":
+    if pathname != get_relative_path("/"):
         raise PreventUpdate
     df = transform_treemap_data(
         budget_id=budget_id,
