@@ -42,7 +42,7 @@ RUN apt-get update && \
 
 
 # Create non-root user
-RUN groupadd -r appuser && useradd -r -g appuser appuser && \
+RUN groupadd -r appuser && useradd -r -g appuser -m appuser && \
     chown -R appuser:appuser /app
 USER appuser
 
