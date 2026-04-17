@@ -71,7 +71,7 @@ Object.assign(window.dash_clientside.clientside, {
       if (!n_clicks) return window.dash_clientside.no_update;
 
       let graphId, filenamePrefix;
-      if (!pathname || pathname === '/') {
+      if (!pathname || pathname === '/' || pathname.endsWith('/')) {
         graphId = 'treemap-graph';
         filenamePrefix = 'treemap';
       } else if (pathname.endsWith('/timeseries')) {
