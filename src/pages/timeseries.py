@@ -171,7 +171,7 @@ def generate_figure(
     # Layout adjustments
     # Change font to Source Sans 3 and make it wrapped
     fig.update_layout(
-        margin=dict(t=25, l=60, r=30, b=50),
+        margin=dict(t=25, l=60, r=30, b=50, autoexpand=True),
         font=dict(family="Source Sans 3"),
         title=title,  # Ensure the title reflects treemap selections and filters.
         legend=dict(
