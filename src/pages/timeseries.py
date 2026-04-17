@@ -106,6 +106,7 @@ def fetch_timeseries_data(
     unit: UnitLiteral = "ABSOLUTE",
     period: PeriodLiteral = "ALL",
     selected_dimension: dict[str, int | str] | None = None,
+    classified_only: bool = False,
 ) -> tuple[pd.DataFrame, str, BudgetTypeLiteral]:
     """Fetch and transform treemap data for the current filters."""
     data_fetcher = TimeseriesDataFetcher(spending_type)
@@ -137,8 +138,11 @@ def fetch_timeseries_data(
     if budget_type == "REPORT":
         df = _shape_for_period(df, period)
     df = _calculate_values(df, budget_id, unit, budget_type)
+    df["expenses"] = df["expenses"].clip(lower=0)
     # Rename LAW and REPORT to OPEN for clearer legend labeling in the timeseries view.
     df["types"] = df["types"].where(df["types"] == "CLASSIFIED", "OPEN")
+    if classified_only:
+        df = df.loc[df["types"] == "CLASSIFIED"]
     return df, type, budget_type
 
 
@@ -346,12 +350,21 @@ def update_figure_from_filters(
 
     # Fetch and render using the selected values from stores
     selected_dimension = node_map.get(selected_node_id) if selected_node_id and node_map else None
+    classified_only = False
+    if selected_dimension and "CLASSIFIED" in str(
+        selected_dimension.get("dimension_original_identifier", "")
+    ):
+        classified_only = True
+        # Use the parent chapter's dimension for the API filter.
+        parent_path = "/".join(selected_node_id.split("/")[:-1]) if selected_node_id else None
+        selected_dimension = node_map.get(parent_path) if parent_path and node_map else None
     df, _, budget_type = fetch_timeseries_data(
         budget_id=budget_id,
         spending_type=spending_type,
         unit=unit,
         period=period,
         selected_dimension=selected_dimension,
+        classified_only=classified_only,
     )
     # Build a title based on the treemap selection and spending-type filter.
     title = _format_timeseries_title(selected_node_id, spending_type)
@@ -400,17 +413,25 @@ def download_timeseries_data(
     Returns:
         dict[str, Any]: The data for download.
     """
-    if pathname != "/timeseries":
+    if pathname != get_relative_path("/timeseries"):
         raise PreventUpdate
     if budget_id is None:
         raise PreventUpdate
     selected_dimension = node_map.get(selected_node_id) if selected_node_id and node_map else None
+    classified_only = False
+    if selected_dimension and "CLASSIFIED" in str(
+        selected_dimension.get("dimension_original_identifier", "")
+    ):
+        classified_only = True
+        parent_path = "/".join(selected_node_id.split("/")[:-1]) if selected_node_id else None
+        selected_dimension = node_map.get(parent_path) if parent_path and node_map else None
     df, _, budget_type = fetch_timeseries_data(
         budget_id=budget_id,
         spending_type=spending_type,
         unit=unit,
         period=period,
         selected_dimension=selected_dimension,
+        classified_only=classified_only,
     )
 
     value_col = get_unit_label(unit)
@@ -423,18 +444,29 @@ def download_timeseries_data(
 
     download_df = df[["dates", "expenses", "types"]].copy()
     download_df["Period"] = download_df["dates"].apply(_format_period)
-    pivoted = (
-        download_df.groupby(["Period", "types"])["expenses"]
-        .sum()
-        .round(2)
-        .unstack(fill_value=0)
-        .reindex(columns=["OPEN", "CLASSIFIED"], fill_value=0)
-        .reset_index()
-        .rename(columns={"OPEN": f"Open ({value_col})", "CLASSIFIED": f"Classified ({value_col})"}),
-    )[0]
-    pivoted[f"Total ({value_col})"] = (
-        pivoted[f"Open ({value_col})"] + pivoted[f"Classified ({value_col})"]
-    ).round(2)
+    if classified_only:
+        pivoted = (
+            download_df.groupby("Period")["expenses"]
+            .sum()
+            .round(2)
+            .reset_index()
+            .rename(columns={"expenses": f"Classified ({value_col})"})
+        )
+    else:
+        pivoted = (
+            download_df.groupby(["Period", "types"])["expenses"]
+            .sum()
+            .round(2)
+            .unstack(fill_value=0)
+            .reindex(columns=["OPEN", "CLASSIFIED"], fill_value=0)
+            .reset_index()
+            .rename(
+                columns={"OPEN": f"Open ({value_col})", "CLASSIFIED": f"Classified ({value_col})"}
+            ),
+        )[0]
+        pivoted[f"Total ({value_col})"] = (
+            pivoted[f"Open ({value_col})"] + pivoted[f"Classified ({value_col})"]
+        ).round(2)
 
     buf = io.BytesIO()
     pivoted.to_csv(buf, sep=";", index=False, encoding="utf-8-sig")

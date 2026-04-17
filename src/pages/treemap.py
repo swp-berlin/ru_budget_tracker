@@ -117,7 +117,7 @@ def transform_treemap_data(
     df = transformer.transform_data()
     # Calculate values based on unit, budget, and published_at
     calculator = Calculator(unit, budget_id, published_at, budget_type)
-    df["VALUE"] = calculator.calculate_series(df["VALUE"])
+    df["VALUE"] = calculator.calculate_series(df["VALUE"]).clip(lower=0)
     return df
 
 
