@@ -13,6 +13,7 @@ from models.classified_spending_views import (
     ReportClassifiedSpendingPerChapter,
     ReportMilitaryOpenSpendingPerChapter,
 )
+from models.treemap_cache import treemap_expense_hierarchy, MAX_PROGRAM_LEVELS
 
 __all__ = [
     "Base",
@@ -26,4 +27,6 @@ __all__ = [
     "MilitaryClassifiedSpendingPerChapter",
     "ReportClassifiedSpendingPerChapter",
     "ReportMilitaryOpenSpendingPerChapter",
+    "treemap_expense_hierarchy",
+    "MAX_PROGRAM_LEVELS",
 ]

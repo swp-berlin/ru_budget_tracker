@@ -41,13 +41,18 @@ app.validation_layout = validation_layout
 
 def _prewarm_treemap_cache() -> None:
     try:
-        from utils.fetch_treemap import fetch_budgets_for_dropdown
+        from utils.fetch_treemap import (
+            fetch_budgets_for_dropdown,
+            fetch_treemap_hierarchy,
+            populate_treemap_hierarchy,
+        )
         from pages.treemap import fetch_treemap_data, transform_treemap_data
 
         budgets = fetch_budgets_for_dropdown()
         if not budgets:
             return
         budget_id = budgets[0]["id"]
+        populate_treemap_hierarchy(budget_id)
         fetch_treemap_data(budget_id)
         transform_treemap_data(budget_id, "ALL", "ABSOLUTE")
         logger.info("Treemap cache pre-warmed for budget_id=%s", budget_id)

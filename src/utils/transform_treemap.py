@@ -355,6 +355,15 @@ class TreemapTransformer:
 
         return df
 
+    def transform_from_flat(self, flat_rows: Sequence[RowMapping]) -> pd.DataFrame:
+        """Fast path: build DataFrame from pre-computed table rows, skipping networkx."""
+        df = pd.DataFrame(flat_rows)
+        df = df.drop(columns=["id", "expense_id", "budget_id"], errors="ignore")
+        df["ROOT"] = "Federal Budget"
+        df["VALUE"] = df["VALUE"].astype(float)
+        df = self._add_classified_expenses(df)
+        return df
+
     @lru_cache(maxsize=5)
     def transform_data(
         self,

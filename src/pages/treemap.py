@@ -19,7 +19,7 @@ from dash import (
 from dash.exceptions import PreventUpdate
 from sqlalchemy import RowMapping
 
-from utils.fetch_treemap import ClassifiedSpendingData, TreemapDataFetcher
+from utils.fetch_treemap import ClassifiedSpendingData, TreemapDataFetcher, fetch_treemap_hierarchy
 from utils.transform_treemap import TreemapTransformer
 from utils.calculate import Calculator
 from utils.helper import (
@@ -111,8 +111,11 @@ def transform_treemap_data(
     transformer = TreemapTransformer(
         dimensions, programs, classified, spending_type=spending_type, char_limit=45
     )
-    df = transformer.transform_data()
-    # Calculate values based on unit, budget, and published_at
+    flat_rows = fetch_treemap_hierarchy(budget_id)
+    if flat_rows:
+        df = transformer.transform_from_flat(flat_rows)
+    else:
+        df = transformer.transform_data()
     calculator = Calculator(unit, budget_id, published_at, budget_type)
     df["VALUE"] = calculator.calculate_series(df["VALUE"]).clip(lower=0)
     return df
