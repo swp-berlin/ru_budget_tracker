@@ -280,11 +280,12 @@ class TreemapTransformer:
                 synthetic_id = CLASSIFIED_DIMENSION_ID_OFFSET + int(orig_id.lstrip("0") or "0")
                 # Prefix with original_identifier to match the format used by
                 # _build_dimension_name_column (e.g. "02 Национальная оборона").
-                chapter_name = f"{orig_id} {chapter.chapter_name}"
-                chapter_name_translated = (
+                chapter_name = _wrap_label(f"{orig_id} {chapter.chapter_name}", self.limit)
+                chapter_name_translated = _wrap_label(
                     f"{orig_id} {chapter.chapter_name_translated}"
                     if chapter.chapter_name_translated
-                    else chapter_name
+                    else chapter_name,
+                    self.limit,
                 )
                 classified_entry: dict[str, int | float | str | None] = {
                     "VALUE": chapter.classified_spending,
@@ -319,9 +320,10 @@ class TreemapTransformer:
             if self.spending_type == "MILITARY" and cs.military_classified > 0:
                 value = cs.military_classified
                 share_pct = cs.military_classified_share * 100
-                ministry_name = (
+                ministry_name = _wrap_label(
                     f"Classified Spending (estimated as {share_pct:.1f}%"
-                    f" of total classified spending)"
+                    f" of total classified spending)",
+                    self.limit,
                 )
             elif cs.total_classified > 0:
                 value = cs.total_classified

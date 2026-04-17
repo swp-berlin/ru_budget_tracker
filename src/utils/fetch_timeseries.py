@@ -5,7 +5,7 @@ This module provides the TimeseriesDataFetcher class for fetching and preparing
 budget data for timeseries (bar chart) visualization.
 """
 
-from typing import Sequence
+from typing import ClassVar, Sequence
 from datetime import date
 from functools import lru_cache
 
@@ -48,6 +48,9 @@ from utils.fetch_treemap import _execute_query
 
 class TimeseriesDataFetcher:
     """Fetches and prepares data for bar chart (timeseries) visualization."""
+
+    _execution_budget_cache: ClassVar[dict[str, Sequence[RowMapping]]] = {}
+    _law_budget_cache: ClassVar[dict[str, Sequence[RowMapping]]] = {}
 
     def __init__(self, spending_type: SpendingTypeLiteral = "ALL") -> None:
         self.spending_type: SpendingTypeLiteral = spending_type
@@ -250,6 +253,8 @@ class TimeseriesDataFetcher:
         Returns:
             Sequence of budget expense row mappings.
         """
+        if self.spending_type in TimeseriesDataFetcher._law_budget_cache:
+            return TimeseriesDataFetcher._law_budget_cache[self.spending_type]
 
         base_columns = self._get_budget_expense_columns()
 
@@ -363,12 +368,16 @@ class TimeseriesDataFetcher:
 
             union_stmt = law_stmt.union(total_stmt)
             with get_sync_session() as session:
-                return session.execute(union_stmt).mappings().all()
+                result = session.execute(union_stmt).mappings().all()
+            TimeseriesDataFetcher._law_budget_cache[self.spending_type] = result
+            return result
 
         union_stmt = law_ministry_stmt.union(total_chapter_stmt)
 
         with get_sync_session() as session:
-            return session.execute(union_stmt).mappings().all()
+            result = session.execute(union_stmt).mappings().all()
+        TimeseriesDataFetcher._law_budget_cache[self.spending_type] = result
+        return result
 
     def _fetch_execution_budget_expenses(self) -> Sequence[RowMapping]:
         """
@@ -383,6 +392,9 @@ class TimeseriesDataFetcher:
             Returns:
                 Sequence of budget expense row mappings.
         """
+        if self.spending_type in TimeseriesDataFetcher._execution_budget_cache:
+            return TimeseriesDataFetcher._execution_budget_cache[self.spending_type]
+
         base_columns = self._get_budget_expense_columns()
 
         military_conditions = self._build_military_spending_condition()
@@ -453,7 +465,9 @@ class TimeseriesDataFetcher:
 
             union_stmt = report_stmt.union(total_stmt)
             with get_sync_session() as session:
-                return session.execute(union_stmt).mappings().all()
+                result = session.execute(union_stmt).mappings().all()
+            TimeseriesDataFetcher._execution_budget_cache[self.spending_type] = result
+            return result
 
         stmt = (
             select(
@@ -489,9 +503,9 @@ class TimeseriesDataFetcher:
         )
 
         with get_sync_session() as session:
-            results = session.execute(stmt).mappings().all()
-
-        return results
+            result = session.execute(stmt).mappings().all()
+        TimeseriesDataFetcher._execution_budget_cache[self.spending_type] = result
+        return result
 
     def fetch_budgets(self, budget_id: int) -> tuple[Sequence[RowMapping], BudgetTypeLiteral]:
         """

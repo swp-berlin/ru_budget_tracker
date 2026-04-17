@@ -62,27 +62,16 @@ unit_labels = {
 def _calculate_values(
     df: pd.DataFrame, budget_id: int, unit: UnitLiteral, budget_type: BudgetTypeLiteral
 ) -> pd.DataFrame:
-    # Cache one Calculator per unique date (was one per row) and collect drops to apply at the end.
-    _calculator_cache: dict[date, Calculator] = {}
+    df = df[df["dates"].notna()].copy()
     rows_to_drop: list = []
-
-    for index, row in df.iterrows():
+    for budget_date, group_idx in df.groupby(df["dates"].dt.date).groups.items():
+        calc = Calculator(budget_id=budget_id, unit=unit, date=budget_date, budget_type=budget_type)
         try:
-            budget_date = row["dates"].date()
-        except (AttributeError, ValueError):
-            # NaT or unparseable dates — drop the row (matches original behaviour).
-            rows_to_drop.append(index)
-            continue
-
-        if budget_date not in _calculator_cache:
-            _calculator_cache[budget_date] = Calculator(
-                budget_id=budget_id, unit=unit, date=budget_date, budget_type=budget_type
-            )
-        try:
-            df.at[index, "expenses"] = _calculator_cache[budget_date].calculate(row["expenses"])
+            df.loc[group_idx, "expenses"] = calc.calculate_series(
+                df.loc[group_idx, "expenses"]
+            ).to_numpy()
         except ValueError:
-            rows_to_drop.append(index)
-
+            rows_to_drop.extend(group_idx.tolist())
     if rows_to_drop:
         df = df.drop(rows_to_drop)
     return df
@@ -100,6 +89,9 @@ def _shape_for_period(df: pd.DataFrame, period: PeriodLiteral) -> pd.DataFrame:
     return df.loc[df["dates"].dt.month == month]
 
 
+_timeseries_cache: dict[tuple, tuple[pd.DataFrame, str, BudgetTypeLiteral]] = {}
+
+
 def fetch_timeseries_data(
     budget_id: int,
     spending_type: SpendingTypeLiteral = "ALL",
@@ -109,6 +101,12 @@ def fetch_timeseries_data(
     classified_only: bool = False,
 ) -> tuple[pd.DataFrame, str, BudgetTypeLiteral]:
     """Fetch and transform treemap data for the current filters."""
+    dim_key = tuple(sorted(selected_dimension.items())) if selected_dimension else None
+    cache_key = (budget_id, spending_type, unit, period, dim_key, classified_only)
+    if cache_key in _timeseries_cache:
+        cached_df, cached_type, cached_budget_type = _timeseries_cache[cache_key]
+        return cached_df.copy(), cached_type, cached_budget_type
+
     data_fetcher = TimeseriesDataFetcher(spending_type)
     dimension_id = None
     if selected_dimension is not None:
@@ -130,7 +128,6 @@ def fetch_timeseries_data(
         df = transformer.transform_data(budgets, normalize=True, spending_type=spending_type)
     else:
         df = transformer.transform_data(budgets, normalize=False, spending_type=spending_type)
-    # Use apply to calculate expenses for each row in a vectorized way
     budget_type: BudgetTypeLiteral = next(
         (row["type"] for row in budgets if row["type"] in ["LAW", "REPORT"]), "LAW"
     )
@@ -143,6 +140,8 @@ def fetch_timeseries_data(
     df["types"] = df["types"].where(df["types"] == "CLASSIFIED", "OPEN")
     if classified_only:
         df = df.loc[df["types"] == "CLASSIFIED"]
+
+    _timeseries_cache[cache_key] = (df.copy(), type, budget_type)
     return df, type, budget_type
 
 
