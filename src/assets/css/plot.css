@@ -1,0 +1,5 @@
+/* Allow the Plotly pathbar / chart edges to render without being clipped at the SVG boundary */
+#treemap-graph .js-plotly-plot .main-svg,
+#timeseries-graph .js-plotly-plot .main-svg {
+    overflow: visible;
+}

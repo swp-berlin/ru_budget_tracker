@@ -88,9 +88,11 @@ def fetch_treemap_data(
 ) -> tuple[Sequence[RowMapping], Sequence[RowMapping], ClassifiedSpendingData, date]:
     """Fetch and transform treemap data for the current filters."""
     data_fetcher = TreemapDataFetcher()
-    published_at = data_fetcher.get_published_at_date(budget_id)
+    budget_type, published_at = data_fetcher.get_budget_meta(budget_id)
     dimensions, programs, classified = data_fetcher.fetch_data(
         budget_id=budget_id,
+        budget_type=budget_type,
+        published_at=published_at,
     )
 
     return dimensions, programs, classified, published_at
@@ -107,7 +109,7 @@ def transform_treemap_data(
         (row["budget_type"] for row in dimensions if row["budget_type"] in ["LAW", "REPORT"]), "LAW"
     )
     transformer = TreemapTransformer(
-        dimensions, programs, classified, spending_type=spending_type, char_limit=70
+        dimensions, programs, classified, spending_type=spending_type, char_limit=45
     )
     df = transformer.transform_data()
     # Calculate values based on unit, budget, and published_at

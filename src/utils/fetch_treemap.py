@@ -134,21 +134,14 @@ def fetch_budgets_for_dropdown() -> list[dict[str, Any]]:
 class TreemapDataFetcher:
     """Fetches and prepares data for treemap visualization."""
 
-    def get_published_at_date(self, budget_id: int) -> date:
-        """
-        Fetch the published_at date for a given budget ID.
-
-        Args:
-            budget_id: The ID of the budget to fetch.
-        Returns:
-            The published_at date
-        """
-        stmt = select(Budget.published_at).where(Budget.id == budget_id)
+    def get_budget_meta(self, budget_id: int) -> tuple[str, date]:
+        """Return (budget_type, published_at) for the given budget ID."""
+        stmt = select(Budget.type, Budget.published_at).where(Budget.id == budget_id)
         with get_sync_session() as session:
-            date = session.execute(stmt).scalar_one_or_none()
-        if date is None:
+            row = session.execute(stmt).one_or_none()
+        if row is None:
             raise ValueError(f"Budget with ID {budget_id} not found.")
-        return date
+        return row.type, row.published_at
 
     def fetch_relevant_budgets(self, budget_id: int) -> tuple[Budget, Budget]:
         """
@@ -226,7 +219,12 @@ class TreemapDataFetcher:
 
         return _execute_query(stmt, unique=False)
 
-    def fetch_classified_spending(self, budget_id: int) -> ClassifiedSpendingData:
+    def fetch_classified_spending(
+        self,
+        budget_id: int,
+        budget_type: str | None = None,
+        published_at: date | None = None,
+    ) -> ClassifiedSpendingData:
         """
         Fetch classified spending data from pre-computed views.
 
@@ -235,16 +233,14 @@ class TreemapDataFetcher:
 
         Args:
             budget_id: The budget ID to fetch classified spending for.
+            budget_type: Pre-fetched budget type ("LAW" or "REPORT"); avoids a DB round-trip.
+            published_at: Pre-fetched published_at date; avoids a DB round-trip.
 
         Returns:
             ClassifiedSpendingData with per-chapter rows (LAW) or aggregate total (REPORT).
         """
-        meta_stmt = select(Budget.type, Budget.published_at).where(Budget.id == budget_id)
-        with get_sync_session() as session:
-            meta = session.execute(meta_stmt).one_or_none()
-        if meta is None:
-            raise ValueError(f"Budget with ID {budget_id} not found.")
-        budget_type, published_at = meta.type, meta.published_at
+        if budget_type is None or published_at is None:
+            budget_type, published_at = self.get_budget_meta(budget_id)
         year = published_at.year
 
         if budget_type == "LAW":
@@ -373,12 +369,16 @@ class TreemapDataFetcher:
     def fetch_data(
         self,
         budget_id: int | None = None,
+        budget_type: str | None = None,
+        published_at: date | None = None,
     ) -> tuple[Sequence[RowMapping], Sequence[RowMapping], ClassifiedSpendingData]:
         """
         Fetch all data needed for treemap visualization.
 
         Args:
             budget_id: The budget ID to fetch data for.
+            budget_type: Pre-fetched budget type to avoid a redundant DB query.
+            published_at: Pre-fetched published_at date to avoid a redundant DB query.
 
         Returns:
             Tuple of (dimensions, programs, classified_spending).
@@ -386,13 +386,13 @@ class TreemapDataFetcher:
         if budget_id is None:
             return [], [], ClassifiedSpendingData(budget_type="LAW")
 
-        # Fetch dimensions and calculate sums
         dimensions = self._fetch_treemap_dimensions(budget_id=budget_id)
 
-        # Fetch program hierarchy - extract program IDs inline to avoid extra iteration.
         program_ids = [r["dimension_id"] for r in dimensions if r["dimension_type"] == "PROGRAM"]
         programs = self._fetch_treemap_programs_recursive(program_ids)
 
-        classified = self.fetch_classified_spending(budget_id=budget_id)
+        classified = self.fetch_classified_spending(
+            budget_id=budget_id, budget_type=budget_type, published_at=published_at
+        )
 
         return dimensions, programs, classified

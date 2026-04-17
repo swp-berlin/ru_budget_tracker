@@ -416,111 +416,103 @@ Object.assign(window.dash_clientside.clientside, {
   applyTreemapTextInset: function (figure) {
     if (!figure?.data?.length) return window.dash_clientside.no_update;
 
+    const THRESHOLD = 1;
+    const MARGIN = 5;
+    const MIN_FONT_SIZE = 5;
 
-    function scheduleInset(initialDelay) {
-      let tries = 0;
+    function applyInsets(plotDiv) {
+      plotDiv.querySelectorAll('g.slice').forEach((slice) => {
+        if (slice.closest('.pathbar')) return;
+        const surface = slice.querySelector('path.surface');
+        if (!surface) return;
+        const gText = slice.querySelector('g.slicetext');
+        if (!gText) return;
 
-      function tryApply() {
-        tries++;
-        const plotDiv = document.querySelector('#treemap-graph .js-plotly-plot');
-        if (!plotDiv) {
-          if (tries < 30) setTimeout(tryApply, 100);
-          return;
-        }
+        const textEls = gText.querySelectorAll('text');
 
-        let rendered = false;
-        const firstSurface = plotDiv.querySelector('g.slice path.surface');
-        if (firstSurface) {
-          try { if (firstSurface.getBBox().width > 0) rendered = true; } catch (e) { }
-        }
-        if (!rendered) {
-          if (tries < 30) setTimeout(tryApply, 100);
-          return;
-        }
+        // Reset any previous font-size override to get natural measurements.
+        textEls.forEach((el) => { el.style.fontSize = ''; });
 
-        if (!plotDiv._textInsetBound) {
-          plotDiv._textInsetBound = true;
-          const treemapLayer = plotDiv.querySelector('.treemaplayer');
-          if (treemapLayer) {
-            let insetAnimating = false;
-            const tileObserver = new MutationObserver(() => {
-              if (!insetAnimating) {
-                insetAnimating = true;
-                scheduleInset(0);
-              }
-              clearTimeout(plotDiv._textInsetTimer);
-              plotDiv._textInsetTimer = setTimeout(() => {
-                insetAnimating = false;
-                scheduleInset();
-              }, 1);
-            });
-            tileObserver.observe(treemapLayer, {
-              subtree: true,
-              attributes: true,
-              attributeFilter: ['d'],
-            });
-            plotDiv._textInsetObserver = tileObserver;
+        const sr = surface.getBoundingClientRect();
+        if (sr.width <= 0 || sr.height <= 0) return;
+
+        // Union of all <text> elements in viewport coordinates.
+        let tLeft = Infinity, tRight = -Infinity, tTop = Infinity, tBottom = -Infinity;
+        textEls.forEach((el) => {
+          const r = el.getBoundingClientRect();
+          if (r.width > 0 && r.height > 0) {
+            if (r.left   < tLeft)   tLeft   = r.left;
+            if (r.right  > tRight)  tRight  = r.right;
+            if (r.top    < tTop)    tTop    = r.top;
+            if (r.bottom > tBottom) tBottom = r.bottom;
           }
-        }
-
-        const THRESHOLD = 3;
-        const MARGIN = 2;
-        plotDiv.querySelectorAll('g.slice').forEach((slice) => {
-          const surface = slice.querySelector('path.surface');
-          if (!surface) return;
-          const gText = slice.querySelector('g.slicetext');
-          if (!gText) return;
-
-          const textEls = gText.querySelectorAll('text');
-
-          // Reset any previous font-size override to get natural measurements.
-          textEls.forEach((el) => { el.style.fontSize = ''; });
-
-          const sr = surface.getBoundingClientRect();
-          if (sr.width <= 0 || sr.height <= 0) return;
-
-          // Union of all <text> elements in viewport coordinates.
-          let tLeft = Infinity, tRight = -Infinity, tTop = Infinity, tBottom = -Infinity;
-          textEls.forEach((el) => {
-            const r = el.getBoundingClientRect();
-            if (r.width > 0 && r.height > 0) {
-              if (r.left   < tLeft)   tLeft   = r.left;
-              if (r.right  > tRight)  tRight  = r.right;
-              if (r.top    < tTop)    tTop    = r.top;
-              if (r.bottom > tBottom) tBottom = r.bottom;
-            }
-          });
-          if (tLeft === Infinity || tRight <= tLeft || tBottom <= tTop) return;
-
-          const halfW = (tRight  - tLeft) / 2;
-          const halfH = (tBottom - tTop)  / 2;
-          const cx    = tLeft + halfW;
-          const cy    = tTop  + halfH;
-
-          // Only scale if text overflows by more than a few pixels (avoids sub-pixel false positives).
-          if (tLeft >= sr.left - THRESHOLD && tRight <= sr.right + THRESHOLD && tBottom <= sr.bottom + THRESHOLD) return;
-
-          // Compute ratio to fit with a small margin — only constrain sides that actually overflow.
-          let ratio = 1;
-          if (tLeft   < sr.left)   ratio = Math.min(ratio, (cx - sr.left   - MARGIN) / halfW);
-          if (tRight  > sr.right)  ratio = Math.min(ratio, (sr.right  - MARGIN - cx) / halfW);
-          if (tTop    < sr.top)    ratio = Math.min(ratio, (cy - sr.top    - MARGIN) / halfH);
-          if (tBottom > sr.bottom) ratio = Math.min(ratio, (sr.bottom - MARGIN - cy) / halfH);
-
-          if (ratio >= 1 || ratio <= 0) return;
-
-          // Reduce font-size proportionally — text stays at its SVG x/y anchor, no transform drift.
-          textEls.forEach((el) => {
-            const sz = parseFloat(window.getComputedStyle(el).fontSize);
-            if (sz > 0) el.style.fontSize = `${sz * ratio}px`;
-          });
         });
-      }
+        if (tLeft === Infinity || tRight <= tLeft || tBottom <= tTop) return;
 
-      setTimeout(tryApply, initialDelay ?? 10);
+        const halfW = (tRight  - tLeft) / 2;
+        const halfH = (tBottom - tTop)  / 2;
+        const cx    = tLeft + halfW;
+        const cy    = tTop  + halfH;
+
+        // Only scale if text overflows by more than a few pixels (avoids sub-pixel false positives).
+        if (tLeft >= sr.left - THRESHOLD && tRight <= sr.right + THRESHOLD && tBottom <= sr.bottom + THRESHOLD) return;
+
+        // Compute ratio to fit with a small margin — only constrain sides that actually overflow.
+        let ratio = 1;
+        if (tRight  > sr.right)  ratio = Math.min(ratio, (sr.right  - MARGIN - cx) / halfW);
+        if (tBottom > sr.bottom) ratio = Math.min(ratio, (sr.bottom - MARGIN - cy) / halfH);
+
+        if (ratio >= 1 || ratio <= 0) return;
+
+        // Reduce font-size proportionally — skip if result would be below minimum readable size.
+        textEls.forEach((el) => {
+          const sz = parseFloat(window.getComputedStyle(el).fontSize);
+          if (sz > 0 && sz * ratio >= MIN_FONT_SIZE) el.style.fontSize = `${sz * ratio}px`;
+        });
+      });
     }
 
-    scheduleInset();
+    let tries = 0;
+
+    function tryApply() {
+      tries++;
+      const plotDiv = document.querySelector('#treemap-graph .js-plotly-plot');
+      if (!plotDiv) {
+        if (tries < 30) setTimeout(tryApply, 100);
+        return;
+      }
+
+      let rendered = false;
+      const firstSurface = plotDiv.querySelector('g.slice path.surface');
+      if (firstSurface) {
+        try { if (firstSurface.getBBox().width > 0) rendered = true; } catch (e) { }
+      }
+      if (!rendered) {
+        if (tries < 30) setTimeout(tryApply, 100);
+        return;
+      }
+
+      // Reconnect observer only when Plotly has replaced the .treemaplayer element.
+      const treemapLayer = plotDiv.querySelector('.treemaplayer');
+      if (treemapLayer && plotDiv._observedTreemapLayer !== treemapLayer) {
+        if (plotDiv._textInsetObserver) plotDiv._textInsetObserver.disconnect();
+        const tileObserver = new MutationObserver(() => {
+          clearTimeout(plotDiv._textInsetTimer);
+          plotDiv._textInsetTimer = setTimeout(() => applyInsets(plotDiv), 10);
+        });
+        tileObserver.observe(treemapLayer, {
+          subtree: true,
+          attributes: true,
+          attributeFilter: ['d'],
+        });
+        plotDiv._textInsetObserver = tileObserver;
+        plotDiv._observedTreemapLayer = treemapLayer;
+      }
+
+      applyInsets(plotDiv);
+    }
+
+    setTimeout(tryApply, 10);
     return window.dash_clientside.no_update;
   },
 });

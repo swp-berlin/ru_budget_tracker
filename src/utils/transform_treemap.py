@@ -14,7 +14,7 @@ from utils.fetch_treemap import ClassifiedSpendingData
 CLASSIFIED_DIMENSION_ID_OFFSET = 1_000_000  # Offset to avoid ID conflicts with real dimensions
 
 
-def _wrap_label(label: str | None, limit: int = 50) -> str | None:
+def _wrap_label(label: str | None, limit: int = 75) -> str | None:
     if not label or len(label) <= limit:
         return label
     return "<br>".join(wrap(label, width=limit))
@@ -30,7 +30,7 @@ class TreemapTransformer:
         programs: Sequence[RowMapping],
         classified_spending: ClassifiedSpendingData,
         spending_type: SpendingTypeLiteral = "ALL",
-        char_limit: int = 70,
+        char_limit: int = 75,
     ) -> None:
         # Ensure an intuitive ordering: MINISTRY -> CHAPTER -> SUBCHAPTER -> PROGRAM_*
         # CLASSIFIED_PARENT is at top level (sibling to MINISTRY), CLASSIFIED is under it
