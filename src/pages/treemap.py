@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from functools import lru_cache
 import io
 import logging
@@ -460,6 +460,7 @@ def _build_download_df(
     Input("btn-download-csv", "n_clicks"),
     State("url", "pathname"),
     State("store-budget-id", "data"),
+    State("store-budget-options", "data"),
     State("store-viewby", "data"),
     State("store-spending-type", "data"),
     State("store-unit", "data"),
@@ -471,16 +472,12 @@ def download_treemap_data(
     n_clicks,
     pathname: str | None,
     budget_id: int,
+    budget_options: list[dict] | None,
     viewby: ViewByDimensionTypeLiteral,
     spending_type: SpendingTypeLiteral,
     unit: UnitLiteral,
     language: str = "RU",
 ) -> dict[str, Any]:
-    """
-    Callback to download the current treemap data as a csv file.
-    Returns:
-        dict[str, Any]: The data for download.
-    """
     if pathname != get_relative_path("/"):
         raise PreventUpdate
     df = transform_treemap_data(
@@ -492,6 +489,13 @@ def download_treemap_data(
     download_df = _build_download_df(
         df, spending_type=spending_type, viewby=viewby, translated=translated, unit=unit
     )
+    budget_label = next(
+        (o["label"] for o in (budget_options or []) if o["value"] == budget_id), str(budget_id)
+    )
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    sanitized = budget_label.replace(" ", "_").replace("/", "-")
+    military = "_military" if spending_type == "MILITARY" else ""
+    filename = f"treemap_{timestamp}_{sanitized}_{unit.lower()}{military}.csv"
     buf = io.BytesIO()
     download_df.to_csv(buf, sep=";", index=False, encoding="utf-8-sig")
-    return dcc.send_bytes(buf.getvalue(), "treemap_data.csv")  # type: ignore
+    return dcc.send_bytes(buf.getvalue(), filename)  # type: ignore

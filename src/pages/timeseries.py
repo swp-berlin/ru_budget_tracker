@@ -1,7 +1,7 @@
 import io
 import logging
 from typing import Any, cast
-from datetime import date
+from datetime import date, datetime
 
 import dash_bootstrap_components as dbc
 import pandas as pd
@@ -392,6 +392,7 @@ def update_figure_from_filters(
     Input("btn-download-csv", "n_clicks"),
     State("url", "pathname"),
     State("store-budget-id", "data"),
+    State("store-budget-options", "data"),
     State("store-period", "data"),
     State("store-spending-type", "data"),
     State("store-unit", "data"),
@@ -404,6 +405,7 @@ def download_timeseries_data(
     n_clicks,
     pathname: str | None,
     budget_id: int | None = None,
+    budget_options: list[dict] | None = None,
     period: PeriodLiteral = "ALL",
     spending_type: SpendingTypeLiteral = "ALL",
     unit: UnitLiteral = "ABSOLUTE",
@@ -470,9 +472,16 @@ def download_timeseries_data(
             pivoted[f"Open ({value_col})"] + pivoted[f"Classified ({value_col})"]
         ).round(2)
 
+    budget_label = next(
+        (o["label"] for o in (budget_options or []) if o["value"] == budget_id), str(budget_id)
+    )
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    sanitized = budget_label.replace(" ", "_").replace("/", "-")
+    military = "_military" if spending_type == "MILITARY" else ""
+    filename = f"timeseries_{timestamp}_{sanitized}_{unit.lower()}{military}.csv"
     buf = io.BytesIO()
     pivoted.to_csv(buf, sep=";", index=False, encoding="utf-8-sig")
-    return dcc.send_bytes(buf.getvalue(), "timeseries_data.csv")  # type: ignore
+    return dcc.send_bytes(buf.getvalue(), filename)  # type: ignore
 
 
 # Poll window width via a lightweight interval so resize events reach Dash.
