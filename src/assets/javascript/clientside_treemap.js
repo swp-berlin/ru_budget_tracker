@@ -30,13 +30,11 @@ Object.assign(window.dash_clientside.clientside, {
     // relying on Plotly's exact ID format.
     const dimId = parseInt(decodedFocusNode, 10);
     if (!isNaN(dimId) && nodeMap) {
+      // Compact nodeMap is keyed by dim_id string: {ru: path, en: path}.
       const currentLang = (language || 'RU').toUpperCase();
-      const allEntries = Object.entries(nodeMap).filter(([, info]) => info.dimension_id === dimId);
-      // Prefer the entry whose language tag matches the active language; fall back to any match.
-      const matchingEntry =
-        allEntries.find(([, info]) => info.language === currentLang) || allEntries[0];
-      if (matchingEntry) {
-        decodedFocusNode = matchingEntry[0];
+      const entry = nodeMap[String(dimId)];
+      if (entry) {
+        decodedFocusNode = currentLang === 'EN' ? (entry.en || entry.ru) : (entry.ru || entry.en);
         console.debug('[Treemap Focus] Resolved dimension_id', dimId, '→', decodedFocusNode, '(lang:', currentLang, ')');
       }
     }

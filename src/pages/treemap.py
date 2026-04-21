@@ -134,9 +134,11 @@ def generate_figure(
     name_ending = "_NAME_TRANSLATED" if translated else "_NAME"
     name_cols = ["ROOT"] + [col for col in df.columns if col.endswith(name_ending)]
 
+    # Strip columns not used in the figure to keep the serialized trace lean.
+    keep_cols = [c for c in name_cols + ["VALUE", "BUDGET_TYPE"] if c in df.columns]
     # Build figure
     fig = px.treemap(
-        data_frame=df,
+        data_frame=df[keep_cols],
         path=name_cols,
         values="VALUE",
         hover_data=None,
@@ -178,13 +180,18 @@ def generate_figure(
     # Attach custom data for hover to every node, including id for click selection.
     fig.update_traces(
         marker_colors=colors,
-        customdata=list(zip(values, parent_percentages, root_percentages, node_ids)),  # type: ignore
+        customdata=list(
+            zip(
+                [round(p, 2) for p in parent_percentages],
+                [round(p, 2) for p in root_percentages],
+            )
+        ),
         hovertemplate="<br>".join(
             [
                 "%{label}",
-                "%{customdata[0]:,.1f}" + unit_config.map[unit],
-                "%{customdata[1]:.1f}%" + " of parent",
-                "%{customdata[2]:.1f}%" + " of total",
+                "%{value:,.1f}" + unit_config.map[unit],
+                "%{customdata[0]:.1f}%" + " of parent",
+                "%{customdata[1]:.1f}%" + " of total",
             ]
         ),
         texttemplate="%{label}<br>%{value:,.1f}" + unit_config.map[unit],
@@ -197,7 +204,6 @@ def generate_figure(
         height=None,  # don't hardcode height
         margin=dict(t=20, l=10, r=10, b=10),
         font=dict(family="Source Sans 3", color="#444444"),
-        transition=dict(duration=300, easing="linear"),
     )
 
     return fig
@@ -241,6 +247,21 @@ def _build_treemap_node_map(df: pd.DataFrame, translated: bool) -> dict[str, dic
                     }
 
     return node_map
+
+
+def _build_compact_node_map(df: pd.DataFrame) -> dict[str, dict[str, str]]:
+    """Build a compact {str(dim_id): {ru: path, en: path}} map for clientside JS use.
+
+    Much smaller than the full node_map since each dimension appears once,
+    keyed by its integer ID rather than its (long) path string.
+    """
+    compact: dict[str, dict[str, str]] = {}
+    for path, info in _build_treemap_node_map(df, translated=False).items():
+        lang = str(info.get("language", "RU")).lower()
+        dim_id = str(info.get("dimension_id", ""))
+        if dim_id and lang in ("ru", "en"):
+            compact.setdefault(dim_id, {})[lang] = path
+    return compact
 
 
 def layout(**other_kwargs) -> html.Div:
@@ -309,7 +330,7 @@ def update_figure_from_filters(
     spending_type: SpendingTypeLiteral = "ALL",
     unit: UnitLiteral = "ABSOLUTE",
     language: str = "RU",
-) -> tuple[go.Figure, dict[str, str], dict[str, dict[str, int | str]], bool, str]:
+) -> tuple[go.Figure, dict[str, str], dict[str, dict[str, str]], bool, str]:
     # Guard: only run when the treemap page is active.
     if pathname != get_relative_path("/"):
         raise PreventUpdate
@@ -331,12 +352,11 @@ def update_figure_from_filters(
 
     df_shaped = shape_for_spending_type(df, spending_type=spending_type)
     df_shaped = shape_for_viewby(df_shaped, viewby=viewby)
-    # Build a lookup map for treemap node selection across pages.
-    node_map = _build_treemap_node_map(df_shaped, translated=translated)
+    compact_map = _build_compact_node_map(df_shaped)
     return (
         generate_figure(df_shaped, spending_type, unit=unit, translated=translated, viewby=viewby),
         {"visibility": "visible"},
-        node_map,
+        compact_map,
         False,
         "",
     )

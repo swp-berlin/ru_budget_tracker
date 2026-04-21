@@ -22,7 +22,7 @@ from dash import (
 from dash.exceptions import PreventUpdate
 
 from utils.fetch_timeseries import TimeseriesDataFetcher
-from utils.helper import get_unit_label
+from utils.helper import build_server_node_map, get_unit_label
 from utils.transform_timeseries import TimeseriesTransformer
 from utils.calculate import Calculator
 from utils.definitions import (
@@ -331,7 +331,6 @@ def layout(**other_kwargs) -> html.Div:
     Input("store-spending-type", "data"),
     Input("store-unit", "data"),
     Input("store-selected-id", "data"),
-    State("store-treemap-node-map", "data"),
 )
 def update_figure_from_filters(
     pathname: str | None,
@@ -340,7 +339,6 @@ def update_figure_from_filters(
     spending_type: SpendingTypeLiteral = "ALL",
     unit: UnitLiteral = "ABSOLUTE",
     selected_node_id: str | None = None,
-    node_map: dict[str, dict[str, int | str]] | None = None,
 ) -> tuple[go.Figure, dict[str, str], dict | None]:
     # Guard: only render on the timeseries page to keep hidden graphs hidden.
     if pathname != get_relative_path("/timeseries"):
@@ -349,8 +347,8 @@ def update_figure_from_filters(
     if budget_id is None:
         raise PreventUpdate
 
-    # Fetch and render using the selected values from stores
-    selected_dimension = node_map.get(selected_node_id) if selected_node_id and node_map else None
+    node_map = build_server_node_map(budget_id, spending_type, unit)
+    selected_dimension = node_map.get(selected_node_id) if selected_node_id else None
     classified_only = False
     if selected_dimension and "CLASSIFIED" in str(
         selected_dimension.get("dimension_original_identifier", "")
@@ -358,7 +356,7 @@ def update_figure_from_filters(
         classified_only = True
         # Use the parent chapter's dimension for the API filter.
         parent_path = "/".join(selected_node_id.split("/")[:-1]) if selected_node_id else None
-        selected_dimension = node_map.get(parent_path) if parent_path and node_map else None
+        selected_dimension = node_map.get(parent_path) if parent_path else None
     df, _, budget_type = fetch_timeseries_data(
         budget_id=budget_id,
         spending_type=spending_type,
@@ -396,7 +394,6 @@ def update_figure_from_filters(
     State("store-spending-type", "data"),
     State("store-unit", "data"),
     State("store-selected-id", "data"),
-    State("store-treemap-node-map", "data"),
     prevent_initial_call=True,
     optional=True,
 )
@@ -409,7 +406,6 @@ def download_timeseries_data(
     spending_type: SpendingTypeLiteral = "ALL",
     unit: UnitLiteral = "ABSOLUTE",
     selected_node_id: str | None = None,
-    node_map: dict[str, dict[str, int | str]] | None = None,
 ) -> dict[str, Any]:
     """
     Callback to download the current timeseries data as a csv file.
@@ -420,14 +416,15 @@ def download_timeseries_data(
         raise PreventUpdate
     if budget_id is None:
         raise PreventUpdate
-    selected_dimension = node_map.get(selected_node_id) if selected_node_id and node_map else None
+    node_map = build_server_node_map(budget_id, spending_type, unit)
+    selected_dimension = node_map.get(selected_node_id) if selected_node_id else None
     classified_only = False
     if selected_dimension and "CLASSIFIED" in str(
         selected_dimension.get("dimension_original_identifier", "")
     ):
         classified_only = True
         parent_path = "/".join(selected_node_id.split("/")[:-1]) if selected_node_id else None
-        selected_dimension = node_map.get(parent_path) if parent_path and node_map else None
+        selected_dimension = node_map.get(parent_path) if parent_path else None
     df, _, budget_type = fetch_timeseries_data(
         budget_id=budget_id,
         spending_type=spending_type,

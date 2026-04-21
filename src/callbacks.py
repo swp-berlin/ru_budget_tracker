@@ -507,7 +507,7 @@ clientside_callback(
     State("store-spending-type", "data"),
     State("store-unit", "data"),
     State("store-selected-id", "data"),
-    State("store-treemap-node-map", "data"),
+    State("store-treemap-node-map", "data"),  # compact map: {dim_id: {ru: path, en: path}}
     prevent_initial_call=True,
 )
 

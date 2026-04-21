@@ -4,6 +4,7 @@ Miscellaneous utility functions
 
 import colorsys
 import hashlib
+from functools import lru_cache
 
 import pandas as pd
 
@@ -217,3 +218,17 @@ def shape_for_viewby(
     df_copy = df_copy[relevant_cols]
 
     return df_copy
+
+
+@lru_cache(maxsize=10)
+def build_server_node_map(
+    budget_id: int, spending_type: SpendingTypeLiteral, unit: UnitLiteral
+) -> dict:
+    """Server-side cached node map for dimension resolution. Never sent to the browser.
+
+    Uses lazy imports to avoid a circular dependency with pages.treemap.
+    """
+    from pages.treemap import _build_treemap_node_map, transform_treemap_data  # noqa: PLC0415
+
+    df = transform_treemap_data(budget_id=budget_id, spending_type=spending_type, unit=unit)
+    return _build_treemap_node_map(df, translated=False)
