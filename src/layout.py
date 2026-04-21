@@ -256,10 +256,12 @@ def serve_layout():
     This ensures callbacks in pages can reference stores defined here.
     """
     return html.Div(
+        id="app-layout",
         children=[
             toolbar,
-            page_container,
-        ]
+            html.Div(id="timeseries-title"),
+            html.Div(page_container, id="pages-wrapper"),
+        ],
     )
 
 
@@ -275,5 +277,6 @@ validation_layout = html.Div(
         dcc.Graph(id="treemap-graph"),
         dcc.Download(id="download-timeseries-data"),
         html.Div(id="timeseries-spinner"),
+        html.Div(id="timeseries-title"),
     ]
 )

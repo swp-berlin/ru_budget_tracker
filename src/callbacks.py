@@ -160,12 +160,13 @@ def init_budgets(_, url_search: str | None):
 
 @callback(
     Output("store-budget-id", "data", allow_duplicate=True),
+    Output("store-selected-id", "data", allow_duplicate=True),
     Input("store-budget-options", "data"),
     Input({"type": "budget-item", "value": ALL}, "n_clicks"),
     prevent_initial_call=True,
 )
 def select_budget_dynamic(options, clicks):
-    """Update selected budget_id when a budget menu item is clicked."""
+    """Update selected budget_id when a budget menu item is clicked, clearing any treemap selection."""
     ctx = callback_context
     if not ctx.triggered:
         raise PreventUpdate
@@ -175,7 +176,7 @@ def select_budget_dynamic(options, clicks):
     selected_value = trig.get("value")
     if selected_value is None:
         raise PreventUpdate
-    return selected_value
+    return selected_value, None
 
 
 # --- Filter stores from URL ---

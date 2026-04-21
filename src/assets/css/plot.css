@@ -1,5 +1,58 @@
+/* Flex column filling the viewport so charts always fit without scrolling */
+#app-layout {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+}
+
+#pages-wrapper {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* page_container's outer div */
+#pages-wrapper > div {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Dash page content slot */
+#_pages_content {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
 /* Allow the Plotly pathbar / chart edges to render without being clipped at the SVG boundary */
 #treemap-graph .js-plotly-plot .main-svg,
 #timeseries-graph .js-plotly-plot .main-svg {
     overflow: visible;
+}
+
+#timeseries-title {
+    padding: 6px 30px 2px 80px;
+    text-align: center;
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 17px;
+    font-weight: 400;
+    color: #444444;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#timeseries-title:empty {
+    display: none;
+}
+
+@media (max-width: 640px) {
+    #timeseries-title {
+        white-space: normal;
+        word-break: break-word;
+    }
 }

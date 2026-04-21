@@ -179,7 +179,8 @@ Object.assign(window.dash_clientside.clientside, {
       // CSS-based visibility that is lost on serialisation.  Drawing them on canvas
       // after the SVG image is composited is the most reliable alternative.
       const fl = graphDiv._fullLayout || {};
-      const rawTitle = fl.title?.text ?? (typeof graphDiv.layout?.title === 'string' ? graphDiv.layout.title : graphDiv.layout?.title?.text) ?? '';
+      const titleEl = document.getElementById('timeseries-title');
+      const rawTitle = (titleEl?.textContent?.trim()) || fl.title?.text || (typeof graphDiv.layout?.title === 'string' ? graphDiv.layout.title : graphDiv.layout?.title?.text) || '';
       const rawYTitle = fl.yaxis?.title?.text ?? (typeof graphDiv.layout?.yaxis?.title === 'string' ? graphDiv.layout.yaxis.title : graphDiv.layout?.yaxis?.title?.text) ?? '';
       const sz = fl._size || {};
       const ml = (sz.l || 60) * scale;
@@ -199,7 +200,9 @@ Object.assign(window.dash_clientside.clientside, {
       const axisFontPx = readPx('.ytitle', fl.yaxis?.title?.font?.size || fl.font?.size || 12);
       const legendFontPx = readPx('.legend text', fl.font?.size || 12);
 
-      const totalHeight = svgHeight + footerPx * scale; // svgHeight = origH * scale
+      // Header strip above the SVG holds the chart title with breathing room.
+      const headerPx = rawTitle ? 48 : 0;
+      const totalHeight = headerPx * scale + svgHeight + footerPx * scale;
 
       const fontLoadPromise = document.fonts?.load
         ? Promise.all([
@@ -218,7 +221,9 @@ Object.assign(window.dash_clientside.clientside, {
 
         const img = new Image();
         img.onload = () => {
-          ctx.drawImage(img, 0, 0, svgWidth, svgHeight);
+          // SVG is offset downward by the header strip.
+          const hOff = headerPx * scale;
+          ctx.drawImage(img, 0, hOff, svgWidth, svgHeight);
 
           // Draw title, y-axis label, and legend via canvas so they are always present
           // regardless of SVG infolayer CSS visibility issues.
@@ -232,7 +237,17 @@ Object.assign(window.dash_clientside.clientside, {
             ctx.fillStyle = fl.title?.font?.color || textColor;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText(rawTitle, ml + pw / 2, mt / 2);
+            // Truncate to fit within the plot width with side padding.
+            const sidePad = 80 * scale;
+            const maxW = svgWidth - sidePad * 2;
+            let titleText = rawTitle;
+            if (ctx.measureText(titleText).width > maxW) {
+              while (titleText.length > 0 && ctx.measureText(titleText + '…').width > maxW) {
+                titleText = titleText.slice(0, -1);
+              }
+              titleText += '…';
+            }
+            ctx.fillText(titleText, svgWidth / 2, hOff / 2);
           }
 
           if (rawYTitle) {
@@ -241,7 +256,7 @@ Object.assign(window.dash_clientside.clientside, {
             ctx.fillStyle = fl.yaxis?.title?.font?.color || textColor;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.translate(ml / 2, mt + ph / 2);
+            ctx.translate(ml / 2, hOff + mt + ph / 2);
             ctx.rotate(-Math.PI / 2);
             ctx.fillText(rawYTitle, 0, 0);
             ctx.restore();
@@ -275,8 +290,8 @@ Object.assign(window.dash_clientside.clientside, {
             const legendCX = legOffX != null ? legOffX + (fl.legend?._width || 0) * scale / 2 : ml + pw / 2;
             const legendTopY =
               legOffY != null
-                ? legOffY
-                : mt + ph + Math.abs((fl.legend?.y ?? -0.2)) * ph - swatchH;
+                ? hOff + legOffY
+                : hOff + mt + ph + Math.abs((fl.legend?.y ?? -0.2)) * ph - swatchH;
 
             let curX = legendCX - totalLegendW / 2;
             const swatchY = legendTopY;

@@ -151,7 +151,6 @@ def generate_figure(
     unit: UnitLiteral = "ABSOLUTE",
     spending_type: SpendingTypeLiteral = "ALL",
     language: LanguageTypeLiteral = "EN",
-    title: str | None = None,
     budget_type: BudgetTypeLiteral = "LAW",
 ) -> go.Figure:
     """Build a treemap with stable ids and clean hover info."""
@@ -174,9 +173,8 @@ def generate_figure(
     # Layout adjustments
     # Change font to Source Sans 3 and make it wrapped
     fig.update_layout(
-        margin=dict(t=70, l=80, r=30, b=10, autoexpand=True),
+        margin=dict(t=15, l=80, r=30, b=10, autoexpand=True),
         font=dict(family="Source Sans 3"),
-        title=dict(text=title, automargin=True, yref="container"),
         legend=dict(
             orientation="h",
             yanchor="bottom",
@@ -264,16 +262,6 @@ def _resolve_selected_path(
     return paths.get(lang_key) or next(iter(paths.values()), None)
 
 
-def _wrap_title(title: str, max_line: int = 50) -> str:
-    """Insert a <br> at the nearest word boundary before max_line chars."""
-    if len(title) <= max_line:
-        return title
-    wrap_at = title.rfind(" ", 0, max_line)
-    if wrap_at == -1:
-        wrap_at = max_line
-    return title[:wrap_at] + "<br>" + title[wrap_at + 1 :]
-
-
 def _format_timeseries_title(
     resolved_path: str | None,
     spending_type: SpendingTypeLiteral,
@@ -293,7 +281,7 @@ def _format_timeseries_title(
     if spending_type == "MILITARY":
         title = f"{title} (military)"
 
-    return _wrap_title(title)
+    return title
 
 
 def layout(**other_kwargs) -> html.Div:
@@ -357,7 +345,7 @@ def layout(**other_kwargs) -> html.Div:
                 style={"visibility": "hidden", "height": "100%", "width": "100%"},
             ),
         ],
-        style={"width": "100%", "height": "90vh", "position": "relative"},
+        style={"width": "100%", "height": "100%", "position": "relative"},
     )
 
 
@@ -365,6 +353,7 @@ def layout(**other_kwargs) -> html.Div:
     Output("timeseries-graph", "figure"),
     Output("timeseries-graph", "style"),
     Output("store-timeseries-ticks", "data"),
+    Output("timeseries-title", "children"),
     Input("url", "pathname"),
     Input("store-budget-id", "data"),
     Input("store-period", "data"),
@@ -383,10 +372,10 @@ def update_figure_from_filters(
     selected_node_id: str | None = None,
     language: str = "RU",
     compact_node_map: dict | None = None,
-) -> tuple[go.Figure, dict[str, str], dict | None]:
+) -> tuple[go.Figure, dict[str, str], dict | None, str | None]:
     # Guard: only render on the timeseries page to keep hidden graphs hidden.
     if pathname != get_relative_path("/timeseries"):
-        return go.Figure(), {"display": "none"}, None
+        return go.Figure(), {"display": "none"}, None, None
     # Guard: wait until a budget is selected
     if budget_id is None:
         raise PreventUpdate
@@ -427,11 +416,10 @@ def update_figure_from_filters(
         tick_info = {"tickvals": [t.isoformat() for t in tick_values]}
 
     return (
-        generate_figure(
-            df, [], unit, spending_type, language="EN", title=title, budget_type=budget_type
-        ),
+        generate_figure(df, [], unit, spending_type, language="EN", budget_type=budget_type),
         {"visibility": "visible"},
         tick_info,
+        title,
     )
 
 
