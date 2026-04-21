@@ -272,7 +272,7 @@ Object.assign(window.dash_clientside.clientside, {
      * @param {function} callback
      * @param {number} timeout - Fallback delay in ms (default 400).
      */
-    function waitForPlotlyRender(callback, timeout = 400) {
+    function waitForPlotlyRender(callback, timeout = 150) {
       const plotDiv = getPlotDiv();
       let resolved = false;
       const resolve = () => {
@@ -366,11 +366,11 @@ Object.assign(window.dash_clientside.clientside, {
         if (ok) return;
       }
 
-      if (attempts < 5) setTimeout(pollForSlice, 500);
+      if (attempts < 5) setTimeout(pollForSlice, 150);
     };
 
-    console.debug('[Treemap Focus] Starting poll after initial delay', 300);
-    setTimeout(pollForSlice, 300);
+    console.debug('[Treemap Focus] Starting poll after initial delay', 50);
+    setTimeout(pollForSlice, 50);
 
     const msg = `Search triggered for '${decodedFocusNode}' at ${new Date().toISOString()}`;
     console.debug('[Treemap Focus] Returning status', msg);
@@ -418,56 +418,101 @@ Object.assign(window.dash_clientside.clientside, {
     const MARGIN = 5;
     const MIN_FONT_SIZE = 5;
 
+    // Return the BBox of an SVG element in its own local coordinate space.
+    // Falls back to getBoundingClientRect when getBBox is unavailable (non-SVG host).
+    function safeGetBBox(el) {
+      try {
+        if (typeof el.getBBox === 'function') {
+          var b = el.getBBox();
+          if (b && (b.width > 0 || b.height > 0)) return b;
+        }
+      } catch (e) { }
+      // Fallback: convert viewport rect to a plain object with the same shape.
+      var r = el.getBoundingClientRect();
+      return { x: r.left, y: r.top, width: r.width, height: r.height };
+    }
+
+    // IE/old-Android polyfill for Element.closest().
+    function closestPathbar(el) {
+      var node = el;
+      while (node && node !== document) {
+        if (node.className && typeof node.className === 'string' && node.className.indexOf('pathbar') !== -1) return node;
+        if (node.classList && node.classList.contains('pathbar')) return node;
+        node = node.parentNode;
+      }
+      return null;
+    }
+
     function applyInsets(plotDiv) {
-      plotDiv.querySelectorAll('g.slice').forEach((slice) => {
-        if (slice.closest('.pathbar')) return;
-        const surface = slice.querySelector('path.surface');
-        if (!surface) return;
-        const gText = slice.querySelector('g.slicetext');
-        if (!gText) return;
+      var slices = plotDiv.querySelectorAll('g.slice');
+      for (var si = 0; si < slices.length; si++) {
+        var slice = slices[si];
+        if (closestPathbar(slice)) continue;
+        var surface = slice.querySelector('path.surface');
+        if (!surface) continue;
+        var gText = slice.querySelector('g.slicetext');
+        if (!gText) continue;
 
-        const textEls = gText.querySelectorAll('text');
+        var textEls = gText.querySelectorAll('text');
+        if (!textEls.length) continue;
 
-        // Reset any previous font-size override to get natural measurements.
-        textEls.forEach((el) => { el.style.fontSize = ''; });
+        // Reset any previous overrides to get natural measurements.
+        for (var ti = 0; ti < textEls.length; ti++) {
+          textEls[ti].style.fontSize = '';
+        }
 
-        const sr = surface.getBoundingClientRect();
-        if (sr.width <= 0 || sr.height <= 0) return;
+        // Force a synchronous layout flush so getBBox() reads post-reset dimensions,
+        // not the previously-compressed values.
+        void plotDiv.getBoundingClientRect();
 
-        // Union of all <text> elements in viewport coordinates.
-        let tLeft = Infinity, tRight = -Infinity, tTop = Infinity, tBottom = -Infinity;
-        textEls.forEach((el) => {
-          const r = el.getBoundingClientRect();
-          if (r.width > 0 && r.height > 0) {
-            if (r.left   < tLeft)   tLeft   = r.left;
-            if (r.right  > tRight)  tRight  = r.right;
-            if (r.top    < tTop)    tTop    = r.top;
-            if (r.bottom > tBottom) tBottom = r.bottom;
+        // Measure surface in local SVG coordinate space — more reliable than
+        // getBoundingClientRect() for SVG elements across browsers.
+        var sr;
+        try { sr = safeGetBBox(surface); } catch (e) { continue; }
+        if (!sr || sr.width <= 0 || sr.height <= 0) continue;
+
+        // Union bounding box of all <text> children in the same coordinate space.
+        var tMinX = Infinity, tMaxX = -Infinity, tMinY = Infinity, tMaxY = -Infinity;
+        for (var ti2 = 0; ti2 < textEls.length; ti2++) {
+          var tb;
+          try { tb = safeGetBBox(textEls[ti2]); } catch (e) { continue; }
+          if (!tb || tb.width <= 0) continue;
+          if (tb.x              < tMinX) tMinX = tb.x;
+          if (tb.x + tb.width  > tMaxX) tMaxX = tb.x + tb.width;
+          if (tb.y              < tMinY) tMinY = tb.y;
+          if (tb.y + tb.height > tMaxY) tMaxY = tb.y + tb.height;
           }
-        });
-        if (tLeft === Infinity || tRight <= tLeft || tBottom <= tTop) return;
+        if (tMinX === Infinity || tMaxX <= tMinX || tMaxY <= tMinY) continue;
 
-        const halfW = (tRight  - tLeft) / 2;
-        const halfH = (tBottom - tTop)  / 2;
-        const cx    = tLeft + halfW;
-        const cy    = tTop  + halfH;
+        var tW = tMaxX - tMinX;
+        var tH = tMaxY - tMinY;
+        var srRight  = sr.x + sr.width;
+        var srBottom = sr.y + sr.height;
 
-        // Only scale if text overflows by more than a few pixels (avoids sub-pixel false positives).
-        if (tLeft >= sr.left - THRESHOLD && tRight <= sr.right + THRESHOLD && tBottom <= sr.bottom + THRESHOLD) return;
+        // No overflow — nothing to do.
+        if (tMinX >= sr.x - THRESHOLD && tMaxX <= srRight + THRESHOLD && tMaxY <= srBottom + THRESHOLD) continue;
 
-        // Compute ratio to fit with a small margin — only constrain sides that actually overflow.
-        let ratio = 1;
-        if (tRight  > sr.right)  ratio = Math.min(ratio, (sr.right  - MARGIN - cx) / halfW);
-        if (tBottom > sr.bottom) ratio = Math.min(ratio, (sr.bottom - MARGIN - cy) / halfH);
+        // Compute scale ratio needed to fit within the tile (with margin).
+        var ratio = 1;
+        var availW = srRight  - MARGIN - sr.x;
+        var availH = srBottom - MARGIN - sr.y;
+        if (tW > availW && availW > 0) ratio = Math.min(ratio, availW / tW);
+        if (tH > availH && availH > 0) ratio = Math.min(ratio, availH / tH);
 
-        if (ratio >= 1 || ratio <= 0) return;
+        if (ratio >= 1 || ratio <= 0) continue;
 
-        // Reduce font-size proportionally — skip if result would be below minimum readable size.
-        textEls.forEach((el) => {
-          const sz = parseFloat(window.getComputedStyle(el).fontSize);
-          if (sz > 0 && sz * ratio >= MIN_FONT_SIZE) el.style.fontSize = `${sz * ratio}px`;
-        });
-      });
+        for (var ti3 = 0; ti3 < textEls.length; ti3++) {
+          var el = textEls[ti3];
+          // Primary: shrink font-size proportionally.
+          var sz = 0;
+          try {
+            sz = parseFloat(window.getComputedStyle(el).fontSize) || 0;
+          } catch (e) { }
+          if (sz > 0) {
+            el.style.fontSize = Math.max(MIN_FONT_SIZE, sz * ratio) + 'px';
+          }
+        }
+      }
     }
 
     let tries = 0;
@@ -496,7 +541,7 @@ Object.assign(window.dash_clientside.clientside, {
         if (plotDiv._textInsetObserver) plotDiv._textInsetObserver.disconnect();
         const tileObserver = new MutationObserver(() => {
           clearTimeout(plotDiv._textInsetTimer);
-          plotDiv._textInsetTimer = setTimeout(() => applyInsets(plotDiv), 10);
+          plotDiv._textInsetTimer = setTimeout(() => applyInsets(plotDiv), 50);
         });
         tileObserver.observe(treemapLayer, {
           subtree: true,
