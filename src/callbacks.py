@@ -43,22 +43,6 @@ def _item_span(label: str, selected: bool) -> html.Span:
 
 
 @callback(
-    Output("store-selected-id", "data", allow_duplicate=True),
-    Input("url", "pathname"),
-    State("url", "search"),
-    prevent_initial_call=True,
-)
-def clear_selected_id_on_treemap_nav(pathname: str | None, search: str | None):
-    """Clear selected node when navigating to the treemap without a focus param."""
-    if pathname != get_relative_path("/"):
-        raise PreventUpdate
-    params = parse_qs(search.lstrip("?")) if search else {}
-    if "focus" in params:
-        raise PreventUpdate
-    return None
-
-
-@callback(
     Output("btn-switch-graphs", "href"),
     Output("btn-switch-graphs", "children"),
     Output("btn-switch-graphs", "title"),
@@ -438,6 +422,14 @@ clientside_callback(
     prevent_initial_call=True,
 )
 
+# Also hide the treemap spinner when a warning toast opens (callback error path).
+clientside_callback(
+    ClientsideFunction(namespace="clientside", function_name="hideTreemapSpinnerOnToast"),
+    Output("dummy-output", "hidden"),
+    Input("warning-toast", "is_open"),
+    prevent_initial_call=True,
+)
+
 # Show treemap spinner when any filter store changes (before the Python callback completes).
 clientside_callback(
     ClientsideFunction(namespace="clientside", function_name="showTreemapSpinner"),
@@ -458,6 +450,8 @@ clientside_callback(
     Input("store-period", "data"),
     Input("store-spending-type", "data"),
     Input("store-unit", "data"),
+    Input("store-selected-id", "data"),
+    Input("store-language", "data"),
     prevent_initial_call=True,
 )
 

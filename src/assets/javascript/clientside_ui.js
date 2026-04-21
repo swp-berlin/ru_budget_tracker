@@ -33,6 +33,14 @@ Object.assign(window.dash_clientside.clientside, {
     return window.dash_clientside.no_update;
   },
 
+  hideTreemapSpinnerOnToast: function (isOpen) {
+    if (isOpen) {
+      var el = document.getElementById('treemap-spinner');
+      if (el) el.style.display = 'none';
+    }
+    return window.dash_clientside.no_update;
+  },
+
   /**
    * Adjusts quarterly x-axis tick labels based on viewport width.
    *

@@ -9,7 +9,7 @@ Create Date: 2026-04-17
 import sqlalchemy as sa
 from alembic import op
 
-from models.treemap_cache import MAX_PROGRAM_LEVELS
+from models.treemap_cache import TreemapExpenseHierarchy, MAX_PROGRAM_LEVELS
 
 # revision identifiers, used by Alembic.
 revision = "0008"  # pragma: allowlist secret
@@ -17,7 +17,7 @@ down_revision = "0007"  # pragma: allowlist secret
 branch_labels = None
 depends_on = None
 
-TABLE_NAME = "treemap_expense_hierarchy"
+TABLE_NAME = TreemapExpenseHierarchy.__tablename__
 
 
 def _program_columns():

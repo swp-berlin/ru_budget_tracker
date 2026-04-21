@@ -1,13 +1,9 @@
 from functools import lru_cache
 from textwrap import wrap
 from typing import Sequence
-import networkx as nx
 import pandas as pd
 from sqlalchemy import RowMapping
-from utils.definitions import (
-    SpendingTypeLiteral,
-    MilitarySpending,
-)
+from utils.definitions import SpendingTypeLiteral
 from utils.fetch_treemap import ClassifiedSpendingData
 
 # Classified spending dimension IDs
@@ -47,85 +43,44 @@ class TreemapTransformer:
         self.limit = char_limit
 
     def _calculate_program_hierarchy(self, programs: Sequence[RowMapping]) -> dict[int, list[int]]:
-        """Calculate all paths from root to leaves in the hierarchy graph.
+        """Calculate all paths from root to leaves in the program tree.
 
         Returns a mapping of leaf program id -> full path from root to leaf.
         """
-        # Build edges more efficiently with set comprehension
-        deduped_edges = {
-            (row["dimension_id"], row["dimension_parent_id"])
-            for row in programs
-            if row["dimension_parent_id"] is not None
-        }
-
-        # Early return for empty graphs
-        if not deduped_edges:
+        if not programs:
             return {}
 
-        # Create a directed graph
-        g = nx.DiGraph()
-        g.add_edges_from(deduped_edges)  # pyright: ignore[reportArgumentType]
+        parent: dict[int, int] = {}
+        all_ids: set[int] = set()
+        parent_ids: set[int] = set()
 
-        # Get roots and leaves more efficiently
-        roots = [v for v, d in g.in_degree() if d == 0]
-        leaves = {v for v, d in g.out_degree() if d == 0}
+        for row in programs:
+            dim_id = int(row["dimension_id"])
+            par_id = row["dimension_parent_id"]
+            all_ids.add(dim_id)
+            if par_id is not None:
+                parent[dim_id] = int(par_id)
+                parent_ids.add(int(par_id))
 
-        # Early return if no valid structure
-        if not roots or not leaves:
+        if not parent:
             return {}
 
-        # Calculate paths from all roots to all leaves
-        program_paths: list[list[int]] = []
-        for root in roots:
-            # Filter leaves reachable from this root for efficiency
-            reachable = nx.descendants(g, root) | {root}
-            reachable_leaves = leaves & reachable
-            if reachable_leaves:
-                paths_raw = nx.all_simple_paths(g, root, list(reachable_leaves))
-                paths = [[int(elem) for elem in path] for path in paths_raw]
-                program_paths.extend(paths)
+        # Leaves are nodes that are not a parent of any other node.
+        leaves = all_ids - parent_ids
 
-        # Create a mapping for leaves to their full paths (reversed for root-to-leaf)
-        leave_mapping = {path[0]: path[::-1] for path in program_paths}
+        result: dict[int, list[int]] = {}
+        for leaf in leaves:
+            path: list[int] = []
+            node: int | None = leaf
+            seen: set[int] = set()
+            while node is not None and node not in seen:
+                path.append(node)
+                seen.add(node)
+                node = parent.get(node)
+            # path is [leaf, …, root] — reverse to root-first order
+            result[leaf] = path[::-1]
 
-        return leave_mapping
-
-    def _check_if_military(
-        self,
-        dim_type: str,
-        dim_original_id: str,
-        hierarchy_dict_entry: dict[str, int | float | str],
-        is_classified: bool = False,
-    ) -> bool:
-        """Filter the hierarchy dictionary based on spending type (e.g., military only)."""
-        # Cache class attributes locally for faster access in hot loop
-        simple_patterns = MilitarySpending.simple_patterns
-        combination_patterns = MilitarySpending.combination_patterns
-
-        # Convert dim_original_id once (avoid repeated str() calls)
-        dim_original_id_str = str(dim_original_id)
-
-        # Check single level patterns (most common case, check first)
-        for level_name, pattern in simple_patterns.items():
-            if dim_type.startswith(level_name) and pattern.match(dim_original_id_str):
-                return True
-
-        # Check combination patterns using all() for short-circuit evaluation
-        for combination in combination_patterns:
-            if all(
-                pattern.match(str(hierarchy_dict_entry.get(f"{dim}_ORIG_ID", "")))
-                for dim, pattern in combination.items()
-            ):
-                return True
-
-        # Check custom classified patterns only when is_classified=True
-        if is_classified:
-            custom_patterns = MilitarySpending.custom_patterns
-            for level_name, pattern in custom_patterns.items():
-                if dim_type.startswith(level_name) and pattern.match(dim_original_id_str):
-                    return True
-
-        return False
+        return result
 
     def _build_hierarchy_dict(
         self,
@@ -182,12 +137,8 @@ class TreemapTransformer:
                         # take absolute value to avoid negative values in treemap
                         "VALUE": abs(row.get("value", 0.0)),
                         "BUDGET_TYPE": relevant_dims[0].get("budget_type", ""),
+                        "IS_MILITARY": bool(row.get("is_military", False)),
                     },
-                )
-                entry["IS_MILITARY"] = self._check_if_military(
-                    dim_type,
-                    dim_original_id,
-                    hierarchy_dict_entry=entry,
                 )
                 if dim_type in ["MINISTRY", "CHAPTER", "SUBCHAPTER"]:
                     entry[f"{dim_type}_DIM_ID"] = row["dimension_id"]

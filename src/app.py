@@ -43,6 +43,7 @@ def _prewarm_treemap_cache() -> None:
     try:
         from utils.fetch_treemap import (
             fetch_budgets_for_dropdown,
+            fetch_treemap_hierarchy,
             populate_treemap_hierarchy,
         )
         from pages.treemap import fetch_treemap_data, transform_treemap_data
@@ -50,11 +51,18 @@ def _prewarm_treemap_cache() -> None:
         budgets = fetch_budgets_for_dropdown()
         if not budgets:
             return
+
+        for budget in budgets:
+            budget_id = budget["id"]
+            if not fetch_treemap_hierarchy(budget_id):
+                logger.info("Treemap hierarchy: populating budget_id=%s", budget_id)
+                populate_treemap_hierarchy(budget_id)
+
+        # Warm the in-memory lru_cache for the most recent budget only.
         budget_id = budgets[0]["id"]
-        populate_treemap_hierarchy(budget_id)
         fetch_treemap_data(budget_id)
         transform_treemap_data(budget_id, "ALL", "ABSOLUTE")
-        logger.info("Treemap cache pre-warmed for budget_id=%s", budget_id)
+        logger.info("Treemap cache pre-warmed for all %s budgets", len(budgets))
     except Exception:
         logger.warning("Treemap cache pre-warm failed", exc_info=True)
 

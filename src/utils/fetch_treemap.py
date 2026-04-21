@@ -14,10 +14,12 @@ from sqlalchemy import (
     Select,
     and_,
     case,
+    delete,
     extract,
     func,
     insert,
     select,
+    union,
 )
 from pydantic import BaseModel
 from database import get_sync_session
@@ -29,7 +31,8 @@ from models import (
     MAX_PROGRAM_LEVELS,
     ReportClassifiedSpendingPerChapter,
     ReportMilitaryOpenSpendingPerChapter,
-    treemap_expense_hierarchy,
+    TreemapExpenseHierarchy,
+    assoc_table,
 )
 
 # =============================================================================
@@ -38,6 +41,41 @@ from models import (
 
 # Valid dimension types for treemap hierarchy
 TREEMAP_DIMENSION_TYPES = ["MINISTRY", "CHAPTER", "SUBCHAPTER", "PROGRAM"]
+
+
+def _build_military_expense_ids_cte():
+    """Return a CTE of expense_ids classified as military, matching the view logic.
+
+    Covers:
+      - CHAPTER = '02'  (National Defense)
+      - PROGRAMM LIKE '31%'  (federal programs starting with 31)
+      - MINISTRY = '187'  (Rosgvardia)
+      - CHAPTER = '03' AND MINISTRY = '180'  (FSB combination)
+    """
+
+    def _expense_ids_for_dim(dim_type: str, orig_id_condition):
+        return (
+            select(assoc_table.c.expense_id)
+            .join(Dimension, assoc_table.c.dimension_id == Dimension.id)
+            .where(Dimension.type == dim_type)
+            .where(orig_id_condition)
+        )
+
+    chapter_02_sq = _expense_ids_for_dim("CHAPTER", Dimension.original_identifier == "02")
+    programm_31_sq = _expense_ids_for_dim("PROGRAMM", Dimension.original_identifier.like("31%"))
+    ministry_187_sq = _expense_ids_for_dim("MINISTRY", Dimension.original_identifier == "187")
+    ministry_180_sq = _expense_ids_for_dim("MINISTRY", Dimension.original_identifier == "180")
+    combo_sq = (
+        select(assoc_table.c.expense_id)
+        .join(Dimension, assoc_table.c.dimension_id == Dimension.id)
+        .where(Dimension.type == "CHAPTER")
+        .where(Dimension.original_identifier == "03")
+        .where(assoc_table.c.expense_id.in_(ministry_180_sq))
+    )
+
+    return union(chapter_02_sq, programm_31_sq, ministry_187_sq, combo_sq).cte(
+        "military_expense_ids"
+    )
 
 
 # =============================================================================
@@ -201,8 +239,10 @@ class TreemapDataFetcher:
             budget_id: The budget ID to fetch dimensions for.
 
         Returns:
-            Sequence of dimension row mappings with budget and dimension info.
+            Sequence of dimension row mappings with budget and dimension info,
+            including an is_military flag computed in SQL.
         """
+        military_cte = _build_military_expense_ids_cte()
         stmt = (
             select(
                 Expense.id,
@@ -213,9 +253,14 @@ class TreemapDataFetcher:
                 Dimension.type.label("dimension_type"),
                 _build_dimension_name_column(translated=False).label("dimension_name"),
                 _build_dimension_name_column(translated=True).label("dimension_name_translated"),
+                case(
+                    (military_cte.c.expense_id.is_not(None), True),
+                    else_=False,
+                ).label("is_military"),
             )
             .join(Expense.dimensions, isouter=True)
             .join(Expense.budget, isouter=True)
+            .outerjoin(military_cte, Expense.id == military_cte.c.expense_id)
             .where(Budget.id == budget_id)
             .where(Dimension.type.in_(TREEMAP_DIMENSION_TYPES))
         )
@@ -405,8 +450,8 @@ def fetch_treemap_hierarchy(budget_id: int) -> Sequence[RowMapping]:
     """Read pre-computed flat hierarchy rows for this budget from the DB table."""
     from sqlalchemy.exc import OperationalError
 
-    stmt = select(treemap_expense_hierarchy).where(
-        treemap_expense_hierarchy.c.budget_id == budget_id
+    stmt = select(TreemapExpenseHierarchy.__table__).where(
+        TreemapExpenseHierarchy.budget_id == budget_id
     )
     try:
         return _execute_query(stmt, unique=False)
@@ -449,11 +494,14 @@ def populate_treemap_hierarchy(budget_id: int) -> None:
 
     from sqlalchemy.exc import OperationalError
 
-    teh = treemap_expense_hierarchy
     try:
         with get_sync_session() as session:
-            session.execute(teh.delete().where(teh.c.budget_id == budget_id))
+            session.execute(
+                delete(TreemapExpenseHierarchy).where(
+                    TreemapExpenseHierarchy.budget_id == budget_id
+                )
+            )
             if rows:
-                session.execute(insert(teh), rows)
+                session.execute(insert(TreemapExpenseHierarchy), rows)
     except OperationalError:
         pass

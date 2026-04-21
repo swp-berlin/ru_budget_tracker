@@ -13,6 +13,7 @@ from dash import (
     callback,
     dcc,
     html,
+    no_update,
     register_page,
     get_relative_path,
 )
@@ -127,7 +128,7 @@ def generate_figure(
     unit: UnitLiteral = "ABSOLUTE",
     translated: bool = False,
     viewby: ViewByDimensionTypeLiteral = "MINISTRY",
-) -> go.Figure:
+) -> tuple[go.Figure, dict[str, str]]:
     """Build a treemap with stable ids and clean hover info."""
     # If translated, use translated names
     # ending = "NAME_TRANSLATED" if translated else "NAME"
@@ -176,9 +177,23 @@ def generate_figure(
         viewby,
         program_label_to_orig_id or None,
     )
+
+    # Replace long path-string ids with short integer ids to reduce JSON payload.
+    # The root virtual node keeps its empty-string id; all others get sequential integers.
+    path_to_short_id: dict[str, str] = {}
+    counter = 0
+    for nid in node_ids:
+        if nid and nid not in path_to_short_id:
+            path_to_short_id[nid] = str(counter)
+            counter += 1
+    new_ids = [path_to_short_id.get(nid, nid) for nid in node_ids]
+    new_parents = [path_to_short_id.get(p, p) for p in parents]
+
     # Combine existing customdata with new percentage data and node ids for hover and click interactions.
     # Attach custom data for hover to every node, including id for click selection.
     fig.update_traces(
+        ids=new_ids,
+        parents=new_parents,
         marker_colors=colors,
         customdata=list(
             zip(
@@ -206,7 +221,7 @@ def generate_figure(
         font=dict(family="Source Sans 3", color="#444444"),
     )
 
-    return fig
+    return fig, path_to_short_id
 
 
 def _build_treemap_node_map(df: pd.DataFrame, translated: bool) -> dict[str, dict[str, int | str]]:
@@ -249,8 +264,10 @@ def _build_treemap_node_map(df: pd.DataFrame, translated: bool) -> dict[str, dic
     return node_map
 
 
-def _build_compact_node_map(df: pd.DataFrame) -> dict[str, dict[str, str]]:
-    """Build a compact {str(dim_id): {ru: path, en: path}} map for clientside JS use.
+def _build_compact_node_map(
+    df: pd.DataFrame, path_to_short_id: dict[str, str] | None = None
+) -> dict[str, dict[str, str]]:
+    """Build a compact {str(dim_id): {ru: node_id, en: node_id}} map for clientside JS use.
 
     Much smaller than the full node_map since each dimension appears once,
     keyed by its integer ID rather than its (long) path string.
@@ -260,7 +277,8 @@ def _build_compact_node_map(df: pd.DataFrame) -> dict[str, dict[str, str]]:
         lang = str(info.get("language", "RU")).lower()
         dim_id = str(info.get("dimension_id", ""))
         if dim_id and lang in ("ru", "en"):
-            compact.setdefault(dim_id, {})[lang] = path
+            node_ref = path_to_short_id.get(path, path) if path_to_short_id else path
+            compact.setdefault(dim_id, {})[lang] = node_ref
     return compact
 
 
@@ -330,7 +348,7 @@ def update_figure_from_filters(
     spending_type: SpendingTypeLiteral = "ALL",
     unit: UnitLiteral = "ABSOLUTE",
     language: str = "RU",
-) -> tuple[go.Figure, dict[str, str], dict[str, dict[str, str]], bool, str]:
+) -> tuple[Any, Any, Any, bool, str]:
     # Guard: only run when the treemap page is active.
     if pathname != get_relative_path("/"):
         raise PreventUpdate
@@ -348,13 +366,16 @@ def update_figure_from_filters(
             unit=unit,
         )
     except ValueError as e:
-        return go.Figure(), {"visibility": "hidden"}, {}, True, str(e)
+        return no_update, no_update, no_update, True, str(e)
 
     df_shaped = shape_for_spending_type(df, spending_type=spending_type)
     df_shaped = shape_for_viewby(df_shaped, viewby=viewby)
-    compact_map = _build_compact_node_map(df_shaped)
+    fig, path_to_short_id = generate_figure(
+        df_shaped, spending_type, unit=unit, translated=translated, viewby=viewby
+    )
+    compact_map = _build_compact_node_map(df_shaped, path_to_short_id=path_to_short_id)
     return (
-        generate_figure(df_shaped, spending_type, unit=unit, translated=translated, viewby=viewby),
+        fig,
         {"visibility": "visible"},
         compact_map,
         False,

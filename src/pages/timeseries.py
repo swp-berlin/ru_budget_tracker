@@ -65,7 +65,7 @@ def _calculate_values(
     df = df[df["dates"].notna()].copy()
     rows_to_drop: list = []
     for budget_date, group_idx in df.groupby(df["dates"].dt.date).groups.items():
-        calc = Calculator(budget_id=budget_id, unit=unit, date=budget_date, budget_type=budget_type)
+        calc = Calculator(budget_id=budget_id, unit=unit, date=budget_date, budget_type=budget_type)  # type: ignore
         try:
             df.loc[group_idx, "expenses"] = calc.calculate_series(
                 df.loc[group_idx, "expenses"]
@@ -174,9 +174,9 @@ def generate_figure(
     # Layout adjustments
     # Change font to Source Sans 3 and make it wrapped
     fig.update_layout(
-        margin=dict(t=50, l=80, r=30, b=10, autoexpand=True),
+        margin=dict(t=70, l=80, r=30, b=10, autoexpand=True),
         font=dict(family="Source Sans 3"),
-        title=title,  # Ensure the title reflects treemap selections and filters.
+        title=dict(text=title, automargin=True, yref="container"),
         legend=dict(
             orientation="h",
             yanchor="bottom",
@@ -228,14 +228,58 @@ def generate_figure(
     return fig
 
 
-def _format_timeseries_title(
+def _resolve_selected_path(
     selected_node_id: str | None,
+    compact_node_map: dict | None,
+    node_map: dict,
+    language: str,
+) -> str | None:
+    """Resolve a short treemap id to the full path for the given language.
+
+    Treemap figures use short integer ids to reduce JSON payload. This maps
+    the stored short id back to the full path string needed for dimension
+    lookups and title generation.
+    """
+    if not selected_node_id or not compact_node_map:
+        return None
+
+    short_to_dim: dict[str, str] = {}
+    for dim_id, lang_map in compact_node_map.items():
+        for sid in lang_map.values():
+            short_to_dim[str(sid)] = str(dim_id)
+
+    dim_id = short_to_dim.get(str(selected_node_id))
+    if not dim_id:
+        return None
+
+    lang_key = "en" if language == "EN" else "ru"
+    dim_to_paths: dict[str, dict[str, str]] = {}
+    for path, info in node_map.items():
+        did = str(info.get("dimension_id", ""))
+        lang = info.get("language", "RU").lower()
+        if did and lang in ("ru", "en"):
+            dim_to_paths.setdefault(did, {})[lang] = path
+
+    paths = dim_to_paths.get(dim_id, {})
+    return paths.get(lang_key) or next(iter(paths.values()), None)
+
+
+def _wrap_title(title: str, max_line: int = 50) -> str:
+    """Insert a <br> at the nearest word boundary before max_line chars."""
+    if len(title) <= max_line:
+        return title
+    wrap_at = title.rfind(" ", 0, max_line)
+    if wrap_at == -1:
+        wrap_at = max_line
+    return title[:wrap_at] + "<br>" + title[wrap_at + 1 :]
+
+
+def _format_timeseries_title(
+    resolved_path: str | None,
     spending_type: SpendingTypeLiteral,
 ) -> str:
-    max_length = 60
-    # Use the last path segment as the node label to keep titles readable.
-    if selected_node_id:
-        node_label = selected_node_id.split("/")[-1]
+    if resolved_path:
+        node_label = resolved_path.split("/")[-1]
         # Strip the leading original identifier prefix like "123 - " for cleaner titles.
         if " - " in node_label:
             node_label = node_label.split(" - ", 1)[1]
@@ -249,11 +293,7 @@ def _format_timeseries_title(
     if spending_type == "MILITARY":
         title = f"{title} (military)"
 
-    # Truncate long titles with an ellipsis suffix for visual consistency.
-    if len(title) > max_length:
-        title = f"{title[:max_length]}..."
-
-    return title
+    return _wrap_title(title)
 
 
 def layout(**other_kwargs) -> html.Div:
@@ -331,6 +371,8 @@ def layout(**other_kwargs) -> html.Div:
     Input("store-spending-type", "data"),
     Input("store-unit", "data"),
     Input("store-selected-id", "data"),
+    Input("store-language", "data"),
+    State("store-treemap-node-map", "data"),
 )
 def update_figure_from_filters(
     pathname: str | None,
@@ -339,6 +381,8 @@ def update_figure_from_filters(
     spending_type: SpendingTypeLiteral = "ALL",
     unit: UnitLiteral = "ABSOLUTE",
     selected_node_id: str | None = None,
+    language: str = "RU",
+    compact_node_map: dict | None = None,
 ) -> tuple[go.Figure, dict[str, str], dict | None]:
     # Guard: only render on the timeseries page to keep hidden graphs hidden.
     if pathname != get_relative_path("/timeseries"):
@@ -347,15 +391,22 @@ def update_figure_from_filters(
     if budget_id is None:
         raise PreventUpdate
 
-    node_map = build_server_node_map(budget_id, spending_type, unit)
-    selected_dimension = node_map.get(selected_node_id) if selected_node_id else None
+    try:
+        node_map = build_server_node_map(budget_id, spending_type, unit)
+    except ValueError:
+        node_map = {}
+
+    resolved_path = _resolve_selected_path(
+        selected_node_id, compact_node_map, node_map, language or "RU"
+    )
+    selected_dimension = node_map.get(resolved_path) if resolved_path else None
     classified_only = False
     if selected_dimension and "CLASSIFIED" in str(
         selected_dimension.get("dimension_original_identifier", "")
     ):
         classified_only = True
         # Use the parent chapter's dimension for the API filter.
-        parent_path = "/".join(selected_node_id.split("/")[:-1]) if selected_node_id else None
+        parent_path = "/".join(resolved_path.split("/")[:-1]) if resolved_path else None
         selected_dimension = node_map.get(parent_path) if parent_path else None
     df, _, budget_type = fetch_timeseries_data(
         budget_id=budget_id,
@@ -365,8 +416,8 @@ def update_figure_from_filters(
         selected_dimension=selected_dimension,
         classified_only=classified_only,
     )
-    # Build a title based on the treemap selection and spending-type filter.
-    title = _format_timeseries_title(selected_node_id, spending_type)
+    # Build a title from the resolved path so the label matches the current language.
+    title = _format_timeseries_title(resolved_path, spending_type)
 
     # Provide tick metadata for the clientside responsive-tick callback.
     # Only needed for REPORT budgets shown with all periods (many quarterly ticks).
@@ -416,7 +467,10 @@ def download_timeseries_data(
         raise PreventUpdate
     if budget_id is None:
         raise PreventUpdate
-    node_map = build_server_node_map(budget_id, spending_type, unit)
+    try:
+        node_map = build_server_node_map(budget_id, spending_type, unit)
+    except ValueError:
+        node_map = {}
     selected_dimension = node_map.get(selected_node_id) if selected_node_id else None
     classified_only = False
     if selected_dimension and "CLASSIFIED" in str(

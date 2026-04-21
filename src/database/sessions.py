@@ -30,6 +30,15 @@ def _set_sqlite_pragma(dbapi_connection, connection_record):
     cursor.execute("PRAGMA synchronous=NORMAL")
     cursor.execute("PRAGMA cache_size=-64000")  # 64MB cache
     cursor.execute("PRAGMA temp_store=MEMORY")
+    cursor.execute("PRAGMA mmap_size=268435456")  # 256MB memory-mapped I/O
+    cursor.close()
+
+
+@event.listens_for(engine, "first_connect")
+def _optimize_on_startup(dbapi_connection, connection_record):
+    """Update query planner statistics once at startup."""
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA optimize")
     cursor.close()
 
 

@@ -14,8 +14,10 @@ from sqlalchemy import (
     RowMapping,
     Subquery,
     and_,
+    delete,
     extract,
     func,
+    insert,
     intersect,
     literal,
     or_,
@@ -30,6 +32,7 @@ from models import (
     Expense,
     LawMilitaryOpenSpendingPerChapter,
     ReportMilitaryOpenSpendingPerChapter,
+    TimeseriesBudgetSummary,
     assoc_table,
 )
 from utils.definitions import (
@@ -39,6 +42,67 @@ from utils.definitions import (
     budget_config,
 )
 from utils.fetch_treemap import _execute_query
+
+
+# =============================================================================
+# Timeseries Summary Cache (DB-level)
+# =============================================================================
+
+
+def _fetch_timeseries_summary(spending_type: str, fetch_category: str) -> Sequence[RowMapping]:
+    """Read pre-computed timeseries summary rows from the DB table.
+
+    Returns rows aliased to match the original query column names:
+    id, original_identifier, published_at, type, total_value, military_value.
+    """
+    stmt = select(
+        TimeseriesBudgetSummary.budget_id.label("id"),
+        TimeseriesBudgetSummary.original_identifier,
+        TimeseriesBudgetSummary.published_at,
+        TimeseriesBudgetSummary.budget_type.label("type"),
+        TimeseriesBudgetSummary.total_value,
+        TimeseriesBudgetSummary.military_value,
+    ).where(
+        and_(
+            TimeseriesBudgetSummary.spending_type == spending_type,
+            TimeseriesBudgetSummary.fetch_category == fetch_category,
+        )
+    )
+    return _execute_query(stmt, unique=False)
+
+
+def _store_timeseries_summary(
+    rows: Sequence[RowMapping], spending_type: str, fetch_category: str
+) -> None:
+    """Persist computed timeseries rows to the summary table."""
+    if not rows:
+        return
+    records = [
+        {
+            "budget_id": r["id"],
+            "original_identifier": r["original_identifier"],
+            "published_at": r["published_at"],
+            "budget_type": r["type"],
+            "fetch_category": fetch_category,
+            "spending_type": spending_type,
+            "total_value": r["total_value"],
+            "military_value": r["military_value"],
+        }
+        for r in rows
+    ]
+    try:
+        with get_sync_session() as session:
+            session.execute(
+                delete(TimeseriesBudgetSummary).where(
+                    and_(
+                        TimeseriesBudgetSummary.spending_type == spending_type,
+                        TimeseriesBudgetSummary.fetch_category == fetch_category,
+                    )
+                )
+            )
+            session.execute(insert(TimeseriesBudgetSummary), records)
+    except Exception:
+        pass
 
 
 # =============================================================================
@@ -256,6 +320,11 @@ class TimeseriesDataFetcher:
         if self.spending_type in TimeseriesDataFetcher._law_budget_cache:
             return TimeseriesDataFetcher._law_budget_cache[self.spending_type]
 
+        precomputed = _fetch_timeseries_summary(self.spending_type, "LAW")
+        if precomputed:
+            TimeseriesDataFetcher._law_budget_cache[self.spending_type] = precomputed
+            return precomputed
+
         base_columns = self._get_budget_expense_columns()
 
         military_conditions = self._build_military_spending_condition()
@@ -369,6 +438,7 @@ class TimeseriesDataFetcher:
             union_stmt = law_stmt.union(total_stmt)
             with get_sync_session() as session:
                 result = session.execute(union_stmt).mappings().all()
+            _store_timeseries_summary(result, self.spending_type, "LAW")
             TimeseriesDataFetcher._law_budget_cache[self.spending_type] = result
             return result
 
@@ -376,6 +446,7 @@ class TimeseriesDataFetcher:
 
         with get_sync_session() as session:
             result = session.execute(union_stmt).mappings().all()
+        _store_timeseries_summary(result, self.spending_type, "LAW")
         TimeseriesDataFetcher._law_budget_cache[self.spending_type] = result
         return result
 
@@ -394,6 +465,11 @@ class TimeseriesDataFetcher:
         """
         if self.spending_type in TimeseriesDataFetcher._execution_budget_cache:
             return TimeseriesDataFetcher._execution_budget_cache[self.spending_type]
+
+        precomputed = _fetch_timeseries_summary(self.spending_type, "REPORT")
+        if precomputed:
+            TimeseriesDataFetcher._execution_budget_cache[self.spending_type] = precomputed
+            return precomputed
 
         base_columns = self._get_budget_expense_columns()
 
@@ -466,6 +542,7 @@ class TimeseriesDataFetcher:
             union_stmt = report_stmt.union(total_stmt)
             with get_sync_session() as session:
                 result = session.execute(union_stmt).mappings().all()
+            _store_timeseries_summary(result, self.spending_type, "REPORT")
             TimeseriesDataFetcher._execution_budget_cache[self.spending_type] = result
             return result
 
@@ -504,6 +581,7 @@ class TimeseriesDataFetcher:
 
         with get_sync_session() as session:
             result = session.execute(stmt).mappings().all()
+        _store_timeseries_summary(result, self.spending_type, "REPORT")
         TimeseriesDataFetcher._execution_budget_cache[self.spending_type] = result
         return result
 

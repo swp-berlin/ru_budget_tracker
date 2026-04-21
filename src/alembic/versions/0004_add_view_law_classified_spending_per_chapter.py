@@ -11,6 +11,7 @@ from sqlalchemy import and_, case, cast, func, Integer, literal, select
 from sqlalchemy.dialects.sqlite import dialect as sqlite_dialect
 
 from models import Budget, Expense, Dimension, assoc_table
+from models.classified_spending_views import LawClassifiedSpendingPerChapter
 from utils.definitions import budget_config
 
 
@@ -20,7 +21,7 @@ down_revision = "0003"  # pragma: allowlist secret
 branch_labels = None
 depends_on = None
 
-VIEW_NAME = "v_law_classified_spending_per_chapter"
+VIEW_NAME = LawClassifiedSpendingPerChapter.__tablename__
 
 
 def _build_view_select():

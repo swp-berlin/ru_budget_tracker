@@ -11,7 +11,10 @@ from sqlalchemy import and_, case, cast, func, Integer, select, union
 from sqlalchemy.dialects.sqlite import dialect as sqlite_dialect
 
 from models import Budget, Expense, Dimension, assoc_table
-from models.classified_spending_views import LawClassifiedSpendingPerChapter
+from models.classified_spending_views import (
+    LawClassifiedSpendingPerChapter,
+    LawMilitaryOpenSpendingPerChapter,
+)
 
 # revision identifiers, used by Alembic.
 revision = "0006"  # pragma: allowlist secret
@@ -19,7 +22,7 @@ down_revision = "0005"  # pragma: allowlist secret
 branch_labels = None
 depends_on = None
 
-VIEW_NAME = "v_law_military_open_spending_per_chapter"
+VIEW_NAME = LawMilitaryOpenSpendingPerChapter.__tablename__
 
 
 def _build_view_select():
