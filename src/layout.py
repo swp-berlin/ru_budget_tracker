@@ -58,6 +58,7 @@ toolbar = html.Div(
         dcc.Store(id="store-treemap-node-map"),
         # Store for download status (used by clientside callback, not displayed)
         dcc.Store(id="store-download-status"),
+        dcc.Store(id="store-previous-path"),
         # Timeseries page: tick metadata and window width for responsive tick labels
         dcc.Store(id="store-timeseries-ticks"),
         dcc.Store(id="store-window-width", data=1280),
@@ -225,7 +226,6 @@ toolbar = html.Div(
                                     ),
                                     id="btn-about",
                                     title="About This Project",
-                                    href=get_relative_path("/about"),
                                 ),
                             ],
                             direction="horizontal",
