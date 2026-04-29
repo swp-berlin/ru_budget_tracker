@@ -203,13 +203,13 @@ def generate_figure(
         ),
         hovertemplate="<br>".join(
             [
-                "%{label}",
-                "%{value:,.1f}" + unit_config.map[unit],
-                "%{customdata[0]:.1f}%" + " of parent",
-                "%{customdata[1]:.1f}%" + " of total",
+                "<b>%{label}</b>",
+                "<br>%{value:,.1f}" + unit_config.map[unit],
+                "<i>%{customdata[0]:.1f}%" + " of parent</i>",
+                "<i>%{customdata[1]:.1f}%" + " of total</i>",
             ]
         ),
-        texttemplate="%{label}<br>%{value:,.1f}" + unit_config.map[unit],
+        texttemplate="%{label}<br><sub>%{value:,.1f}" + unit_config.map[unit] + "</sub>",
     )
 
     # Layout adjustments
