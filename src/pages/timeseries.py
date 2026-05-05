@@ -78,6 +78,7 @@ def _calculate_values(
     return df
 
 
+# Maps each quarter label to its last month — REPORT data is cumulative and dated at quarter-end.
 _PERIOD_MONTH = {"Q1": 3, "Q2": 6, "Q3": 9, "Q4": 12}
 
 
@@ -103,6 +104,7 @@ def fetch_timeseries_data(
     ancestor_dim_ids: tuple[int, ...] = (),
 ) -> tuple[pd.DataFrame, str, BudgetTypeLiteral]:
     """Fetch and transform treemap data for the current filters."""
+    # Dicts aren't hashable, so convert selected_dimension to a sorted tuple for the cache key.
     dim_key = tuple(sorted(selected_dimension.items())) if selected_dimension else None
     cache_key = (budget_id, spending_type, unit, period, dim_key, classified_only, ancestor_dim_ids)
     if cache_key in _timeseries_cache:
@@ -124,10 +126,7 @@ def fetch_timeseries_data(
         ancestor_dim_ids=list(ancestor_dim_ids),
     )
     transformer = TimeseriesTransformer()
-    if unit in [
-        "PERCENT_YEAR_TO_DATE_SPENDING",
-        "PERCENT_YEAR_TO_DATE_REVENUE",
-    ]:
+    if unit in {"PERCENT_YEAR_TO_DATE_SPENDING", "PERCENT_YEAR_TO_DATE_REVENUE"}:
         df = transformer.transform_data(budgets, normalize=True, spending_type=spending_type)
     else:
         df = transformer.transform_data(budgets, normalize=False, spending_type=spending_type)
@@ -138,8 +137,11 @@ def fetch_timeseries_data(
     if budget_type == "REPORT":
         df = _shape_for_period(df, period)
     df = _calculate_values(df, budget_id, unit, budget_type)
+    # Normalisation (e.g. percent-of-GDP) can produce tiny negatives; clamp to zero.
     df["expenses"] = df["expenses"].clip(lower=0)
     # Rename LAW and REPORT to OPEN for clearer legend labeling in the timeseries view.
+    # where() keeps the value when the condition is True, so CLASSIFIED is preserved
+    # and every other type becomes "OPEN".
     df["types"] = df["types"].where(df["types"] == "CLASSIFIED", "OPEN")
     if classified_only:
         df = df.loc[df["types"] == "CLASSIFIED"]
@@ -189,7 +191,7 @@ def generate_figure(
         ),
         yaxis_title=f"{unit_label}",
         xaxis_title="",  # Format x-axis to show quarter labels (e.g., "2018-Q1")
-        uirevision=f"unit:{unit}",
+        uirevision=f"unit:{unit}",  # changing unit forces a full chart reset (zoom/pan cleared)
     )
     # Set x-axis tick labels and hover format based on budget type
     if budget_type == "REPORT":
@@ -257,24 +259,13 @@ def _resolve_selected_path(
     """
     if not selected_node_id or not compact_node_map:
         return None
-
     entry = compact_node_map.get(str(selected_node_id))
     if not entry:
         return None
-    dim_id = entry.get("leaf") if isinstance(entry, dict) else entry
-    if not dim_id:
+    raw_dim_id = entry.get("leaf") if isinstance(entry, dict) else entry
+    if not raw_dim_id:
         return None
-
-    lang_key = "en" if language == "EN" else "ru"
-    dim_to_paths: dict[str, dict[str, str]] = {}
-    for path, info in node_map.items():
-        did = str(info.get("dimension_id", ""))
-        lang = info.get("language", "RU").lower()
-        if did and lang in ("ru", "en"):
-            dim_to_paths.setdefault(did, {})[lang] = path
-
-    paths = dim_to_paths.get(str(dim_id), {})
-    return paths.get(lang_key) or next(iter(paths.values()), None)
+    return _find_path_by_dimension_id(int(raw_dim_id), node_map, language)
 
 
 def _format_timeseries_title(
@@ -452,6 +443,7 @@ def update_figure_from_filters(
     tick_info: dict | None = None
     if budget_type == "REPORT" and period == "ALL":
         tick_values = df["dates"].dropna().sort_values().unique().tolist()
+        # Dash serialises store data as JSON, so timestamps must be ISO strings not datetime objects.
         tick_info = {"tickvals": [t.isoformat() for t in tick_values]}
 
     return (
@@ -519,6 +511,8 @@ def download_timeseries_data(
 
     def _format_period(dt: pd.Timestamp) -> str:
         if budget_type == "REPORT":
+            # Data is pre-filtered to quarter-end months (3,6,9,12), so month//3 always
+            # yields the correct quarter number 1–4 with no off-by-one.
             quarter = dt.month // 3
             return f"{dt.year}-Q{quarter}"
         return str(dt.year)
@@ -543,8 +537,8 @@ def download_timeseries_data(
             .reset_index()
             .rename(
                 columns={"OPEN": f"Open ({value_col})", "CLASSIFIED": f"Classified ({value_col})"}
-            ),
-        )[0]
+            )
+        )
         pivoted[f"Total ({value_col})"] = (
             pivoted[f"Open ({value_col})"] + pivoted[f"Classified ({value_col})"]
         ).round(2)
@@ -557,7 +551,7 @@ def download_timeseries_data(
     military = "_military" if spending_type == "MILITARY" else ""
     filename = f"timeseries_{timestamp}_{sanitized}_{unit.lower()}{military}.csv"
     buf = io.BytesIO()
-    pivoted.to_csv(buf, sep=";", index=False, encoding="utf-8-sig")
+    pivoted.to_csv(buf, sep=";", index=False, encoding="utf-8-sig")  # utf-8-sig adds BOM for Excel
     return dcc.send_bytes(buf.getvalue(), filename)  # type: ignore
 
 

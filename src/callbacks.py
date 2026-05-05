@@ -34,6 +34,20 @@ _spending_type_labels = {v: l for l, v in spending_type_config.options}
 _unit_labels = {v: l for l, v in unit_config.options}
 
 
+def _triggered_value(item_type: str):
+    """Return the `value` from a pattern-matched triggered component, or raise PreventUpdate."""
+    trig = getattr(callback_context, "triggered_id", None)
+    if isinstance(trig, dict) and trig.get("type") == item_type:
+        return trig.get("value")
+    raise PreventUpdate
+
+
+def _get_budget_type(budget_id: int | None, options: list[dict] | None) -> str | None:
+    if not budget_id or not options:
+        return None
+    return next((opt.get("type") for opt in options if opt.get("value") == budget_id), None)
+
+
 def _item_span(label: str, selected: bool) -> html.Span:
     style = {"fontWeight": "bold"} if selected else {}
     return html.Span(label, title=label, style=style)
@@ -147,13 +161,8 @@ def toggle_viewby_period_menu(
     """Toggle visibility of View By and Period menus based on current page."""
     if pathname == get_relative_path("/timeseries"):
         period_style: dict[str, Any] = {}
-        if budget_id and options:
-            budget_type = next(
-                (opt.get("type") for opt in options if opt.get("value") == budget_id),
-                None,
-            )
-            if budget_type == "LAW":
-                period_style = {"cursor": "not-allowed"}
+        if _get_budget_type(budget_id, options) == "LAW":
+            period_style = {"cursor": "not-allowed"}
         return {"display": "none"}, period_style
     return {}, {"display": "none"}
 
@@ -167,10 +176,7 @@ def toggle_period_menu_disabled(
     budget_id: int | None, options: list[dict[str, Any]] | None
 ) -> bool:
     """Disable the period menu for LAW budgets where quarter selection does not apply."""
-    if not budget_id or not options:
-        return False
-    budget_type = next((opt.get("type") for opt in options if opt.get("value") == budget_id), None)
-    return budget_type == "LAW"
+    return _get_budget_type(budget_id, options) == "LAW"
 
 
 @callback(
@@ -178,7 +184,7 @@ def toggle_period_menu_disabled(
     Input("url", "pathname"),
 )
 def toggle_resize_interval(pathname: str | None) -> bool:
-    return pathname != "/timeseries"
+    return pathname != get_relative_path("/timeseries")
 
 
 # --- Budget ---
@@ -296,13 +302,7 @@ def apply_filters_from_url(url_search: str | None):
     prevent_initial_call=True,
 )
 def select_viewby(_clicks):
-    ctx = callback_context
-    if not ctx.triggered:
-        raise PreventUpdate
-    trig = getattr(ctx, "triggered_id", None)
-    if isinstance(trig, dict) and trig.get("type") == "viewby-item":
-        return trig.get("value")
-    raise PreventUpdate
+    return _triggered_value("viewby-item")
 
 
 @callback(
@@ -311,13 +311,7 @@ def select_viewby(_clicks):
     prevent_initial_call=True,
 )
 def select_period(_clicks):
-    ctx = callback_context
-    if not ctx.triggered:
-        raise PreventUpdate
-    trig = getattr(ctx, "triggered_id", None)
-    if isinstance(trig, dict) and trig.get("type") == "period-item":
-        return trig.get("value")
-    raise PreventUpdate
+    return _triggered_value("period-item")
 
 
 @callback(
@@ -326,13 +320,7 @@ def select_period(_clicks):
     prevent_initial_call=True,
 )
 def select_spending_type(_clicks):
-    ctx = callback_context
-    if not ctx.triggered:
-        raise PreventUpdate
-    trig = getattr(ctx, "triggered_id", None)
-    if isinstance(trig, dict) and trig.get("type") == "spending-type-item":
-        return trig.get("value")
-    raise PreventUpdate
+    return _triggered_value("spending-type-item")
 
 
 @callback(
@@ -341,13 +329,7 @@ def select_spending_type(_clicks):
     prevent_initial_call=True,
 )
 def select_unit(_clicks):
-    ctx = callback_context
-    if not ctx.triggered:
-        raise PreventUpdate
-    trig = getattr(ctx, "triggered_id", None)
-    if isinstance(trig, dict) and trig.get("type") == "unit-item":
-        return trig.get("value")
-    raise PreventUpdate
+    return _triggered_value("unit-item")
 
 
 # --- Menu label updates ---

@@ -153,6 +153,7 @@ def generate_figure(
     node_ids: list[str] = list(trace_data["ids"])
     parents: list[str] = list(trace_data["parents"])
     values: list[float] = [float(v) if v is not None else 0.0 for v in trace_data["values"]]
+    # px.treemap wraps each custom_data value in a list, so each entry is [budget_type_str].
     budget_types: list[str] = [budget_type[0] for budget_type in trace_data["customdata"]]
 
     # Compute percentages for all nodes based on treemap aggregation.
@@ -175,17 +176,13 @@ def generate_figure(
         budget_types,
         spending_type,
         viewby,
-        program_label_to_orig_id or None,
+        program_label_to_orig_id or None,  # pass None rather than {} so the helper skips the lookup
     )
 
     # Replace long path-string ids with short integer ids to reduce JSON payload.
     # The root virtual node keeps its empty-string id; all others get sequential integers.
-    path_to_short_id: dict[str, str] = {}
-    counter = 0
-    for nid in node_ids:
-        if nid and nid not in path_to_short_id:
-            path_to_short_id[nid] = str(counter)
-            counter += 1
+    unique_nids = dict.fromkeys(nid for nid in node_ids if nid)
+    path_to_short_id = {nid: str(i) for i, nid in enumerate(unique_nids)}
     new_ids = [path_to_short_id.get(nid, nid) for nid in node_ids]
     new_parents = [path_to_short_id.get(p, p) for p in parents]
 
@@ -268,6 +265,8 @@ def _build_compact_node_map(
                     extra_path_to_id[path] = node_ref
                     next_id += 1
                 dim_id_int = int(dim_id)
+                # ctx is stored before appending dim_id_int, so it contains only ancestors,
+                # not the node itself. The timeseries uses this to filter by hierarchy context.
                 compact[node_ref] = {"leaf": str(dim_id_int), "ctx": list(seen_dim_ids)}
                 seen_dim_ids.append(dim_id_int)
 
@@ -390,13 +389,14 @@ def update_selected_id(click_data: dict | None) -> Optional[str]:
         # Prefer explicit id provided by Plotly for treemap nodes.
         node_id = pts[0].get("id")
         if not node_id:
-            # customdata structure: [value, parent_pct, root_pct, node_id]
+            # Legacy fallback: older Plotly versions didn't include "id" in clickData.
             custom = pts[0].get("customdata", [])
             node_id = custom[3] if len(custom) >= 4 else None
         if not node_id:
             raise PreventUpdate
         return str(node_id)
     except Exception:
+        # Malformed clickData (e.g. missing keys) — silently ignore rather than crash.
         raise PreventUpdate
 
 
@@ -530,5 +530,7 @@ def download_treemap_data(
     military = "_military" if spending_type == "MILITARY" else ""
     filename = f"treemap_{timestamp}_{sanitized}_{unit.lower()}{military}.csv"
     buf = io.BytesIO()
-    download_df.to_csv(buf, sep=";", index=False, encoding="utf-8-sig")
+    download_df.to_csv(
+        buf, sep=";", index=False, encoding="utf-8-sig"
+    )  # utf-8-sig adds BOM for Excel
     return dcc.send_bytes(buf.getvalue(), filename)  # type: ignore
