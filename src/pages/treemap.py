@@ -231,6 +231,12 @@ def _build_compact_node_map(
     compact: dict[str, dict[str, str]] = {}
     records = df.to_dict("records")
 
+    # path_to_short_id covers only the figure's current language; assign fresh IDs for the other.
+    next_id = (
+        max((int(v) for v in path_to_short_id.values()), default=-1) + 1 if path_to_short_id else 0
+    )
+    extra_path_to_id: dict[str, str] = {}
+
     for name_ending, lang in (("_NAME", "ru"), ("_NAME_TRANSLATED", "en")):
         name_cols = ["ROOT"] + [col for col in df.columns if col.endswith(name_ending)]
 
@@ -247,7 +253,14 @@ def _build_compact_node_map(
                 if pd.isnull(dim_id):
                     continue
                 path = "/".join(labels)
-                node_ref = path_to_short_id.get(path, path) if path_to_short_id else path
+                if path_to_short_id and path in path_to_short_id:
+                    node_ref = path_to_short_id[path]
+                elif path in extra_path_to_id:
+                    node_ref = extra_path_to_id[path]
+                else:
+                    node_ref = str(next_id)
+                    extra_path_to_id[path] = node_ref
+                    next_id += 1
                 compact.setdefault(str(int(dim_id)), {})[lang] = node_ref
 
     return compact
