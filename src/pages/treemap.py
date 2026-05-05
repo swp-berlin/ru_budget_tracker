@@ -387,7 +387,7 @@ def update_selected_id(click_data: dict | None) -> Optional[str]:
             node_id = custom[3] if len(custom) >= 4 else None
         if not node_id:
             raise PreventUpdate
-        return node_id
+        return str(node_id)
     except Exception:
         raise PreventUpdate
 
