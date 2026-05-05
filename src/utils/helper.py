@@ -228,7 +228,32 @@ def build_server_node_map(
 
     Uses lazy imports to avoid a circular dependency with pages.treemap.
     """
-    from pages.treemap import _build_treemap_node_map, transform_treemap_data  # noqa: PLC0415
+    from pages.treemap import transform_treemap_data  # noqa: PLC0415
 
     df = transform_treemap_data(budget_id=budget_id, spending_type=spending_type, unit=unit)
-    return _build_treemap_node_map(df, translated=False)
+
+    node_map: dict[str, dict[str, int | str]] = {}
+    records = df.to_dict("records")
+    for name_ending in ("_NAME", "_NAME_TRANSLATED"):
+        name_cols = ["ROOT"] + [col for col in df.columns if col.endswith(name_ending)]
+        language = "EN" if name_ending == "_NAME_TRANSLATED" else "RU"
+        for record in records:
+            labels: list[str] = []
+            for col in name_cols:
+                label = record.get(col)
+                if not label:
+                    continue
+                labels.append(str(label))
+                if col == "ROOT":
+                    continue
+                base = col.replace(name_ending, "")
+                dim_id = record.get(f"{base}_DIM_ID")
+                dim_orig_id = record.get(f"{base}_ORIG_ID")
+                if pd.notnull(dim_id) and pd.notnull(dim_orig_id):
+                    node_map["/".join(labels)] = {
+                        "dimension_id": int(dim_id),
+                        "dimension_original_identifier": str(dim_orig_id),
+                        "dimension_type": "PROGRAM" if base.startswith("PROGRAM_") else base,
+                        "language": language,
+                    }
+    return node_map

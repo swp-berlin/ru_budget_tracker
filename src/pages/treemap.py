@@ -224,61 +224,32 @@ def generate_figure(
     return fig, path_to_short_id
 
 
-def _build_treemap_node_map(df: pd.DataFrame, translated: bool) -> dict[str, dict[str, int | str]]:
-    """Build a node-id map (Plotly treemap ids) to dimension metadata.
-
-    Paths for both languages are always included so that focus lookups succeed
-    regardless of which language was active when a node was selected.
-    """
-    node_map: dict[str, dict[str, int | str]] = {}
-    # Convert once to plain dicts — ~10-50x faster than iterrows() which wraps each row in a Series.
+def _build_compact_node_map(
+    df: pd.DataFrame, path_to_short_id: dict[str, str] | None = None
+) -> dict[str, dict[str, str]]:
+    """Build a compact {str(dim_id): {ru: node_id, en: node_id}} map for clientside JS use."""
+    compact: dict[str, dict[str, str]] = {}
     records = df.to_dict("records")
 
-    for name_ending in ("_NAME", "_NAME_TRANSLATED"):
+    for name_ending, lang in (("_NAME", "ru"), ("_NAME_TRANSLATED", "en")):
         name_cols = ["ROOT"] + [col for col in df.columns if col.endswith(name_ending)]
-        language = "EN" if name_ending == "_NAME_TRANSLATED" else "RU"
 
         for record in records:
             labels: list[str] = []
             for col in name_cols:
                 label = record.get(col)
                 if not label:
-                    break
+                    continue
                 labels.append(str(label))
                 if col == "ROOT":
                     continue
-                base = col.replace(name_ending, "")
-                dim_id = record.get(f"{base}_DIM_ID")
-                dim_orig_id = record.get(f"{base}_ORIG_ID")
-                dim_type = "PROGRAM" if base.startswith("PROGRAM_") else base
+                dim_id = record.get(f"{col.replace(name_ending, '')}_DIM_ID")
+                if pd.isnull(dim_id):
+                    continue
                 path = "/".join(labels)
-                # Skip null/NaN ids that can appear for root/placeholder nodes.
-                if pd.notnull(dim_id) and pd.notnull(dim_orig_id):
-                    node_map[path] = {
-                        "dimension_id": int(dim_id),
-                        "dimension_original_identifier": str(dim_orig_id),
-                        "dimension_type": str(dim_type),
-                        "language": language,
-                    }
+                node_ref = path_to_short_id.get(path, path) if path_to_short_id else path
+                compact.setdefault(str(int(dim_id)), {})[lang] = node_ref
 
-    return node_map
-
-
-def _build_compact_node_map(
-    df: pd.DataFrame, path_to_short_id: dict[str, str] | None = None
-) -> dict[str, dict[str, str]]:
-    """Build a compact {str(dim_id): {ru: node_id, en: node_id}} map for clientside JS use.
-
-    Much smaller than the full node_map since each dimension appears once,
-    keyed by its integer ID rather than its (long) path string.
-    """
-    compact: dict[str, dict[str, str]] = {}
-    for path, info in _build_treemap_node_map(df, translated=False).items():
-        lang = str(info.get("language", "RU")).lower()
-        dim_id = str(info.get("dimension_id", ""))
-        if dim_id and lang in ("ru", "en"):
-            node_ref = path_to_short_id.get(path, path) if path_to_short_id else path
-            compact.setdefault(dim_id, {})[lang] = node_ref
     return compact
 
 
