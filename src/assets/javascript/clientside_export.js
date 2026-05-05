@@ -24,16 +24,11 @@ Object.assign(window.dash_clientside.clientside, {
       if (spendingType) params.set('spending_type', spendingType);
       if (unit) params.set('unit', unit);
       if (selectedId) {
-        // Compact nodeMap is keyed by dim_id: {ru: path, en: path}.
-        // Scan values to find the dim_id whose path matches the selected node.
+        // Compact nodeMap is {short_id: dim_id} — direct lookup by selected short_id.
         let focusParam = selectedId;
         if (nodeMap) {
-          for (const [dimId, paths] of Object.entries(nodeMap)) {
-            if (paths.ru === selectedId || paths.en === selectedId) {
-              focusParam = dimId;
-              break;
-            }
-          }
+          const dimId = nodeMap[String(selectedId)];
+          if (dimId) focusParam = dimId;
         }
         params.set('focus', focusParam);
       }

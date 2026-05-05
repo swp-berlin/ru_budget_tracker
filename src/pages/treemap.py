@@ -226,9 +226,13 @@ def generate_figure(
 
 def _build_compact_node_map(
     df: pd.DataFrame, path_to_short_id: dict[str, str] | None = None
-) -> dict[str, dict[str, str]]:
-    """Build a compact {str(dim_id): {ru: node_id, en: node_id}} map for clientside JS use."""
-    compact: dict[str, dict[str, str]] = {}
+) -> dict[str, str]:
+    """Build a compact {short_id: dim_id} reverse map for clientside JS use.
+
+    Each short_id is unique (assigned per path), so the same dim_id appearing under
+    multiple parents gets a separate entry — no overwrites.
+    """
+    compact: dict[str, str] = {}
     records = df.to_dict("records")
 
     # path_to_short_id covers only the figure's current language; assign fresh IDs for the other.
@@ -237,7 +241,7 @@ def _build_compact_node_map(
     )
     extra_path_to_id: dict[str, str] = {}
 
-    for name_ending, lang in (("_NAME", "ru"), ("_NAME_TRANSLATED", "en")):
+    for name_ending in ("_NAME", "_NAME_TRANSLATED"):
         name_cols = ["ROOT"] + [col for col in df.columns if col.endswith(name_ending)]
 
         for record in records:
@@ -261,7 +265,7 @@ def _build_compact_node_map(
                     node_ref = str(next_id)
                     extra_path_to_id[path] = node_ref
                     next_id += 1
-                compact.setdefault(str(int(dim_id)), {})[lang] = node_ref
+                compact[node_ref] = str(int(dim_id))
 
     return compact
 

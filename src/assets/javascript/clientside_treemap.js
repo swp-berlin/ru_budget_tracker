@@ -24,18 +24,20 @@ Object.assign(window.dash_clientside.clientside, {
     // URLSearchParams already decodes %xx; apply decodeURIComponent only for double-encoded values.
     let decodedFocusNode = decodeURIComponent(focusNode).trim();
 
-    // If the focus param is a numeric dimension_id, reverse-look it up in the node map.
-    // Each entry carries a "language" tag ("RU" or "EN") set during nodeMap construction,
-    // so we can reliably select the path that matches the active figure language without
-    // relying on Plotly's exact ID format.
+    // If the focus param is a numeric dimension_id, find the short_id for that dim in
+    // the current figure. nodeMap is {short_id: dim_id} — scan for any short_id that maps
+    // to the target dim_id and is present in the current figure's ids.
     const dimId = parseInt(decodedFocusNode, 10);
     if (!isNaN(dimId) && nodeMap) {
-      // Compact nodeMap is keyed by dim_id string: {ru: path, en: path}.
-      const currentLang = (language || 'RU').toUpperCase();
-      const entry = nodeMap[String(dimId)];
-      if (entry) {
-        decodedFocusNode = currentLang === 'EN' ? (entry.en || entry.ru) : (entry.ru || entry.en);
-        console.debug('[Treemap Focus] Resolved dimension_id', dimId, '→', decodedFocusNode, '(lang:', currentLang, ')');
+      const figureIds = figure?.data?.[0]?.ids;
+      for (const [shortId, mappedDimId] of Object.entries(nodeMap)) {
+        if (String(mappedDimId) === String(dimId)) {
+          if (!figureIds || figureIds.includes(shortId)) {
+            decodedFocusNode = shortId;
+            console.debug('[Treemap Focus] Resolved dimension_id', dimId, '→', decodedFocusNode);
+            break;
+          }
+        }
       }
     }
 

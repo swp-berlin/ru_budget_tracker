@@ -86,23 +86,31 @@ def update_about_button(pathname: str | None, previous_path: str | None, budget_
     Input("store-budget-id", "data"),
     State("store-selected-id", "data"),
     State("store-treemap-node-map", "data"),
+    State("url", "search"),
 )
 def switch_graphs(
     pathname: str | None,
     budget_id: int | None,
     selected_id: str | None,
     compact_node_map: dict | None,
+    url_search: str | None,
 ):
     """Swap destination, icon, and label based on current page."""
     params: list[str] = []
     if budget_id is not None:
         params.append(f"budget_id={budget_id}")
+    focus_added = False
     if selected_id and compact_node_map:
-        for dim_id_str, lang_map in compact_node_map.items():
-            if str(selected_id) in (str(v) for v in lang_map.values()):
-                if dim_id_str.isdigit():
-                    params.append(f"focus={dim_id_str}")
-                break
+        dim_id_str = compact_node_map.get(str(selected_id))
+        if dim_id_str and dim_id_str.isdigit():
+            params.append(f"focus={dim_id_str}")
+            focus_added = True
+    # If no focus was resolved from the node map, pass through any existing ?focus= from the URL.
+    if not focus_added and url_search:
+        qs = parse_qs(url_search.lstrip("?"))
+        focus_raw = qs.get("focus", [None])[0]
+        if focus_raw and unquote_plus(focus_raw).strip().isdigit():
+            params.append(f"focus={unquote_plus(focus_raw).strip()}")
     query_string = f"?{'&'.join(params)}" if params else ""
 
     if pathname == get_relative_path("/timeseries"):
@@ -554,7 +562,7 @@ clientside_callback(
     State("store-spending-type", "data"),
     State("store-unit", "data"),
     State("store-selected-id", "data"),
-    State("store-treemap-node-map", "data"),  # compact map: {dim_id: {ru: path, en: path}}
+    State("store-treemap-node-map", "data"),  # compact map: {short_id: dim_id}
     prevent_initial_call=True,
 )
 

@@ -256,12 +256,7 @@ def _resolve_selected_path(
     if not selected_node_id or not compact_node_map:
         return None
 
-    short_to_dim: dict[str, str] = {}
-    for dim_id, lang_map in compact_node_map.items():
-        for sid in lang_map.values():
-            short_to_dim[str(sid)] = str(dim_id)
-
-    dim_id = short_to_dim.get(str(selected_node_id))
+    dim_id = compact_node_map.get(str(selected_node_id))
     if not dim_id:
         return None
 
@@ -407,16 +402,20 @@ def update_figure_from_filters(
     )
     # Deep-link fallback: compact_node_map is absent on fresh page loads, so short IDs
     # can't be decoded. Use ?focus=<dimension_id> from the URL instead.
+    focus_dim_id: int | None = None
     if resolved_path is None and url_search:
         params = parse_qs(url_search.lstrip("?"))
         focus_raw = params.get("focus", [None])[0]
         if focus_raw:
             focus_raw = unquote_plus(focus_raw).strip()
             if focus_raw.isdigit():
-                resolved_path = _find_path_by_dimension_id(
-                    int(focus_raw), node_map, language or "RU"
-                )
+                focus_dim_id = int(focus_raw)
+                resolved_path = _find_path_by_dimension_id(focus_dim_id, node_map, language or "RU")
     selected_dimension = node_map.get(resolved_path) if resolved_path else None
+    # If the focus dim isn't in the current budget's node_map (e.g. it only exists in
+    # a different budget year), use the dimension_id directly so the data is still filtered.
+    if selected_dimension is None and focus_dim_id is not None:
+        selected_dimension = {"dimension_id": focus_dim_id, "dimension_original_identifier": ""}
     classified_only = False
     if selected_dimension and "CLASSIFIED" in str(
         selected_dimension.get("dimension_original_identifier", "")
