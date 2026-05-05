@@ -24,11 +24,11 @@ Object.assign(window.dash_clientside.clientside, {
       if (spendingType) params.set('spending_type', spendingType);
       if (unit) params.set('unit', unit);
       if (selectedId) {
-        // Compact nodeMap is {short_id: dim_id} — direct lookup by selected short_id.
+        // Compact nodeMap is {short_id: {leaf: dim_id, ctx: [...]}} — direct lookup by short_id.
         let focusParam = selectedId;
         if (nodeMap) {
-          const dimId = nodeMap[String(selectedId)];
-          if (dimId) focusParam = dimId;
+          const entry = nodeMap[String(selectedId)];
+          if (entry) focusParam = entry.leaf ?? entry;
         }
         params.set('focus', focusParam);
       }

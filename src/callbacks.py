@@ -101,10 +101,12 @@ def switch_graphs(
         params.append(f"budget_id={budget_id}")
     focus_added = False
     if selected_id and compact_node_map:
-        dim_id_str = compact_node_map.get(str(selected_id))
-        if dim_id_str and dim_id_str.isdigit():
-            params.append(f"focus={dim_id_str}")
-            focus_added = True
+        entry = compact_node_map.get(str(selected_id))
+        if entry:
+            dim_id_str = entry.get("leaf") if isinstance(entry, dict) else entry
+            if dim_id_str and str(dim_id_str).isdigit():
+                params.append(f"focus={dim_id_str}")
+                focus_added = True
     # If no focus was resolved from the node map, pass through any existing ?focus= from the URL.
     if not focus_added and url_search:
         qs = parse_qs(url_search.lstrip("?"))

@@ -220,6 +220,7 @@ class TimeseriesDataFetcher:
         military_conditions: list[ColumnElement[bool]],
         budget_type: BudgetTypeLiteral | None = None,
         dimension_ids: list[int] | None = None,
+        ancestor_dim_ids: list[int] | None = None,
     ) -> Subquery:
         """
         Build the subquery for expenses with military spending classification.
@@ -256,6 +257,16 @@ class TimeseriesDataFetcher:
         if dimension_ids:
             expenses_subquery = expenses_subquery.where(Dimension.id.in_(dimension_ids))
 
+        # Narrow to the specific parent context (e.g. subchapter) the user clicked on.
+        # For each ancestor dim, keep only expenses that are ALSO associated with that dim.
+        if ancestor_dim_ids:
+            for anc_id in ancestor_dim_ids:
+                expenses_subquery = expenses_subquery.where(
+                    Expense.id.in_(
+                        select(assoc_table.c.expense_id).where(assoc_table.c.dimension_id == anc_id)
+                    )
+                )
+
         if budget_type == "REPORT":
             expenses_subquery = expenses_subquery.join(
                 Budget, and_(Expense.budget_id == Budget.id, Budget.type == "REPORT")
@@ -274,6 +285,7 @@ class TimeseriesDataFetcher:
         budget_types: list[str],
         dimension_ids: list[int],
         quarterly_only: bool,
+        ancestor_dim_ids: list[int] | None = None,
     ) -> Sequence[RowMapping]:
         """Fetch summed expenses for budgets filtered by dimension ids."""
         from models.budget import expense_dimension_association_table as assoc_table
@@ -283,7 +295,9 @@ class TimeseriesDataFetcher:
         military_conditions = self._build_military_spending_condition()
 
         expenses_subquery = self._build_expense_subquery(
-            military_conditions, dimension_ids=dimension_ids
+            military_conditions,
+            dimension_ids=dimension_ids,
+            ancestor_dim_ids=ancestor_dim_ids or [],
         )
 
         stmt = (
@@ -663,11 +677,15 @@ class TimeseriesDataFetcher:
             return session.execute(stmt).mappings().all()
 
     def fetch_budgets_filtered(
-        self, budget_id: int, dimension_id: int
+        self,
+        budget_id: int,
+        dimension_id: int,
+        ancestor_dim_ids: list[int] | None = None,
     ) -> tuple[Sequence[RowMapping], BudgetTypeLiteral]:
         """Fetch budget expenses filtered by a selected dimension and its descendants."""
         initial_budget = self._fetch_budget(budget_id)
         dimension_ids = self._fetch_descendant_dimension_ids(dimension_id)
+        ancestor_dim_ids = ancestor_dim_ids or []
 
         if initial_budget.type == "REPORT":
             return (
@@ -675,6 +693,7 @@ class TimeseriesDataFetcher:
                     ["REPORT"],
                     dimension_ids,
                     quarterly_only=True,
+                    ancestor_dim_ids=ancestor_dim_ids,
                 ),
                 "REPORT",
             )
@@ -683,6 +702,7 @@ class TimeseriesDataFetcher:
                 ["LAW"],
                 dimension_ids,
                 quarterly_only=False,
+                ancestor_dim_ids=ancestor_dim_ids,
             )
             # Also fetch TOTAL budget data for the ancestor CHAPTER so classified spending
             # can be computed as TOTAL_chapter - open_chapter.
@@ -698,6 +718,7 @@ class TimeseriesDataFetcher:
         self,
         budget_id: int | None = None,
         dimension_id: int | None = None,
+        ancestor_dim_ids: list[int] | None = None,
     ) -> tuple[Sequence[RowMapping], BudgetTypeLiteral]:
         """
         Fetch budget and expense data for bar chart visualization.
@@ -705,6 +726,7 @@ class TimeseriesDataFetcher:
         Args:
             budget_id: The budget ID to fetch data for.
             dimension_id: Optional dimension ID to filter by.
+            ancestor_dim_ids: Optional ancestor dimension IDs for context-aware filtering.
 
         Returns:
             Tuple of (budget expense rows, budget category string).
@@ -716,7 +738,11 @@ class TimeseriesDataFetcher:
             raise ValueError("budget_id must be provided to fetch data.")
         # Filter to the selected dimension when provided.
         if dimension_id is not None:
-            result = self.fetch_budgets_filtered(budget_id=budget_id, dimension_id=dimension_id)
+            result = self.fetch_budgets_filtered(
+                budget_id=budget_id,
+                dimension_id=dimension_id,
+                ancestor_dim_ids=ancestor_dim_ids or [],
+            )
         else:
             result = self.fetch_budgets(budget_id=budget_id)
 

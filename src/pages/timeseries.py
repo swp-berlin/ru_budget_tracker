@@ -100,10 +100,11 @@ def fetch_timeseries_data(
     period: PeriodLiteral = "ALL",
     selected_dimension: dict[str, int | str] | None = None,
     classified_only: bool = False,
+    ancestor_dim_ids: tuple[int, ...] = (),
 ) -> tuple[pd.DataFrame, str, BudgetTypeLiteral]:
     """Fetch and transform treemap data for the current filters."""
     dim_key = tuple(sorted(selected_dimension.items())) if selected_dimension else None
-    cache_key = (budget_id, spending_type, unit, period, dim_key, classified_only)
+    cache_key = (budget_id, spending_type, unit, period, dim_key, classified_only, ancestor_dim_ids)
     if cache_key in _timeseries_cache:
         cached_df, cached_type, cached_budget_type = _timeseries_cache[cache_key]
         return cached_df.copy(), cached_type, cached_budget_type
@@ -120,6 +121,7 @@ def fetch_timeseries_data(
     budgets, type = data_fetcher.fetch_data(
         budget_id=budget_id,
         dimension_id=dimension_id,
+        ancestor_dim_ids=list(ancestor_dim_ids),
     )
     transformer = TimeseriesTransformer()
     if unit in [
@@ -256,7 +258,10 @@ def _resolve_selected_path(
     if not selected_node_id or not compact_node_map:
         return None
 
-    dim_id = compact_node_map.get(str(selected_node_id))
+    entry = compact_node_map.get(str(selected_node_id))
+    if not entry:
+        return None
+    dim_id = entry.get("leaf") if isinstance(entry, dict) else entry
     if not dim_id:
         return None
 
@@ -268,7 +273,7 @@ def _resolve_selected_path(
         if did and lang in ("ru", "en"):
             dim_to_paths.setdefault(did, {})[lang] = path
 
-    paths = dim_to_paths.get(dim_id, {})
+    paths = dim_to_paths.get(str(dim_id), {})
     return paths.get(lang_key) or next(iter(paths.values()), None)
 
 
@@ -400,6 +405,12 @@ def update_figure_from_filters(
     resolved_path = _resolve_selected_path(
         selected_node_id, compact_node_map, node_map, language or "RU"
     )
+    # Ancestor dim_ids from the clicked node's path context (for context-aware timeseries filtering).
+    ancestor_dim_ids: tuple[int, ...] = ()
+    if selected_node_id and compact_node_map:
+        entry = compact_node_map.get(str(selected_node_id))
+        if entry and isinstance(entry, dict):
+            ancestor_dim_ids = tuple(int(x) for x in entry.get("ctx", []))
     # Deep-link fallback: compact_node_map is absent on fresh page loads, so short IDs
     # can't be decoded. Use ?focus=<dimension_id> from the URL instead.
     focus_dim_id: int | None = None
@@ -431,6 +442,7 @@ def update_figure_from_filters(
         period=period,
         selected_dimension=selected_dimension,
         classified_only=classified_only,
+        ancestor_dim_ids=ancestor_dim_ids,
     )
     # Build a title from the resolved path so the label matches the current language.
     title = _format_timeseries_title(resolved_path, spending_type)

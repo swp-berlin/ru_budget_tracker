@@ -25,12 +25,13 @@ Object.assign(window.dash_clientside.clientside, {
     let decodedFocusNode = decodeURIComponent(focusNode).trim();
 
     // If the focus param is a numeric dimension_id, find the short_id for that dim in
-    // the current figure. nodeMap is {short_id: dim_id} — scan for any short_id that maps
-    // to the target dim_id and is present in the current figure's ids.
+    // the current figure. nodeMap is {short_id: {leaf: dim_id, ctx: [...]}} — scan for any
+    // short_id whose leaf matches the target dim_id and is present in the current figure's ids.
     const dimId = parseInt(decodedFocusNode, 10);
     if (!isNaN(dimId) && nodeMap) {
       const figureIds = figure?.data?.[0]?.ids;
-      for (const [shortId, mappedDimId] of Object.entries(nodeMap)) {
+      for (const [shortId, entry] of Object.entries(nodeMap)) {
+        const mappedDimId = entry?.leaf ?? entry;
         if (String(mappedDimId) === String(dimId)) {
           if (!figureIds || figureIds.includes(shortId)) {
             decodedFocusNode = shortId;

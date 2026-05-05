@@ -226,13 +226,14 @@ def generate_figure(
 
 def _build_compact_node_map(
     df: pd.DataFrame, path_to_short_id: dict[str, str] | None = None
-) -> dict[str, str]:
-    """Build a compact {short_id: dim_id} reverse map for clientside JS use.
+) -> dict[str, dict]:
+    """Build a compact {short_id: {leaf: dim_id, ctx: [ancestor_dim_ids]}} map.
 
     Each short_id is unique (assigned per path), so the same dim_id appearing under
-    multiple parents gets a separate entry — no overwrites.
+    multiple parents gets a separate entry with distinct ancestor context. This allows
+    the timeseries to filter by the same subchapter/chapter context as the clicked node.
     """
-    compact: dict[str, str] = {}
+    compact: dict[str, dict] = {}
     records = df.to_dict("records")
 
     # path_to_short_id covers only the figure's current language; assign fresh IDs for the other.
@@ -246,9 +247,10 @@ def _build_compact_node_map(
 
         for record in records:
             labels: list[str] = []
+            seen_dim_ids: list[int] = []  # ancestor dim_ids accumulated along the path
             for col in name_cols:
                 label = record.get(col)
-                if not label:
+                if not label or pd.isna(label):
                     continue
                 labels.append(str(label))
                 if col == "ROOT":
@@ -265,7 +267,9 @@ def _build_compact_node_map(
                     node_ref = str(next_id)
                     extra_path_to_id[path] = node_ref
                     next_id += 1
-                compact[node_ref] = str(int(dim_id))
+                dim_id_int = int(dim_id)
+                compact[node_ref] = {"leaf": str(dim_id_int), "ctx": list(seen_dim_ids)}
+                seen_dim_ids.append(dim_id_int)
 
     return compact
 
