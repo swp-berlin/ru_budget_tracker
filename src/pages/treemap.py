@@ -109,9 +109,7 @@ def transform_treemap_data(
     budget_type: BudgetTypeLiteral = next(
         (row["budget_type"] for row in dimensions if row["budget_type"] in ["LAW", "REPORT"]), "LAW"
     )
-    transformer = TreemapTransformer(
-        dimensions, programs, classified, spending_type=spending_type, char_limit=45
-    )
+    transformer = TreemapTransformer(dimensions, programs, classified, spending_type=spending_type)
     flat_rows = fetch_treemap_hierarchy(budget_id)
     if flat_rows:
         df = transformer.transform_from_flat(flat_rows)
