@@ -195,6 +195,7 @@ def generate_figure(
         ids=new_ids,
         parents=new_parents,
         marker_colors=colors,
+        marker_pad=dict(t=25, l=5, r=5, b=5),
         customdata=list(
             zip(
                 [round(p, 2) for p in parent_percentages],
