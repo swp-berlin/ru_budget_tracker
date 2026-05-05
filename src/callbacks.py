@@ -43,6 +43,42 @@ def _item_span(label: str, selected: bool) -> html.Span:
 
 
 @callback(
+    Output("store-previous-path", "data"),
+    Input("url", "pathname"),
+)
+def track_previous_path(pathname: str | None):
+    """Remember the last non-about pathname so the back button can return to it."""
+    if pathname == get_relative_path("/about"):
+        raise PreventUpdate
+    return pathname
+
+
+@callback(
+    Output("btn-about", "href"),
+    Output("btn-about", "children"),
+    Output("btn-about", "title"),
+    Input("url", "pathname"),
+    State("store-previous-path", "data"),
+    State("store-budget-id", "data"),
+)
+def update_about_button(pathname: str | None, previous_path: str | None, budget_id: int | None):
+    """Swap icon and destination for the about/back button based on current page."""
+    if pathname == get_relative_path("/about"):
+        back_path = previous_path or get_relative_path("/")
+        query = f"?budget_id={budget_id}" if budget_id is not None else ""
+        return (
+            f"{back_path}{query}",
+            html.Img(src=get_asset_url("icons/arrow_back.svg"), alt="Back icon"),
+            "Go Back",
+        )
+    return (
+        get_relative_path("/about"),
+        html.Img(src=get_asset_url("icons/info.svg"), alt="Info icon"),
+        "About This Project",
+    )
+
+
+@callback(
     Output("btn-switch-graphs", "href"),
     Output("btn-switch-graphs", "children"),
     Output("btn-switch-graphs", "title"),
