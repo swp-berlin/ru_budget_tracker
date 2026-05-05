@@ -2,6 +2,7 @@ import io
 import logging
 from typing import Any, cast
 from datetime import date, datetime
+from urllib.parse import parse_qs, unquote_plus
 
 import dash_bootstrap_components as dbc
 import pandas as pd
@@ -226,11 +227,25 @@ def generate_figure(
     return fig
 
 
+def _find_path_by_dimension_id(
+    dim_id: int, node_map: dict, language: LanguageTypeLiteral = "RU"
+) -> str | None:
+    """Look up a node path directly by dimension_id, used for deep-link fallback."""
+    lang_key = language.upper()
+    fallback: str | None = None
+    for path, info in node_map.items():
+        if info.get("dimension_id") == dim_id:
+            if info.get("language", "").upper() == lang_key:
+                return path
+            fallback = path
+    return fallback
+
+
 def _resolve_selected_path(
     selected_node_id: str | None,
     compact_node_map: dict | None,
     node_map: dict,
-    language: str,
+    language: LanguageTypeLiteral,
 ) -> str | None:
     """Resolve a short treemap id to the full path for the given language.
 
@@ -362,6 +377,7 @@ def layout(**other_kwargs) -> html.Div:
     Input("store-selected-id", "data"),
     Input("store-language", "data"),
     State("store-treemap-node-map", "data"),
+    State("url", "search"),
 )
 def update_figure_from_filters(
     pathname: str | None,
@@ -370,8 +386,9 @@ def update_figure_from_filters(
     spending_type: SpendingTypeLiteral = "ALL",
     unit: UnitLiteral = "ABSOLUTE",
     selected_node_id: str | None = None,
-    language: str = "RU",
+    language: LanguageTypeLiteral = "RU",
     compact_node_map: dict | None = None,
+    url_search: str | None = None,
 ) -> tuple[go.Figure, dict[str, str], dict | None, str | None]:
     # Guard: only render on the timeseries page to keep hidden graphs hidden.
     if pathname != get_relative_path("/timeseries"):
@@ -388,6 +405,17 @@ def update_figure_from_filters(
     resolved_path = _resolve_selected_path(
         selected_node_id, compact_node_map, node_map, language or "RU"
     )
+    # Deep-link fallback: compact_node_map is absent on fresh page loads, so short IDs
+    # can't be decoded. Use ?focus=<dimension_id> from the URL instead.
+    if resolved_path is None and url_search:
+        params = parse_qs(url_search.lstrip("?"))
+        focus_raw = params.get("focus", [None])[0]
+        if focus_raw:
+            focus_raw = unquote_plus(focus_raw).strip()
+            if focus_raw.isdigit():
+                resolved_path = _find_path_by_dimension_id(
+                    int(focus_raw), node_map, language or "RU"
+                )
     selected_dimension = node_map.get(resolved_path) if resolved_path else None
     classified_only = False
     if selected_dimension and "CLASSIFIED" in str(

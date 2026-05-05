@@ -84,10 +84,26 @@ def update_about_button(pathname: str | None, previous_path: str | None, budget_
     Output("btn-switch-graphs", "title"),
     Input("url", "pathname"),
     Input("store-budget-id", "data"),
+    State("store-selected-id", "data"),
+    State("store-treemap-node-map", "data"),
 )
-def switch_graphs(pathname: str | None, budget_id: int | None):
+def switch_graphs(
+    pathname: str | None,
+    budget_id: int | None,
+    selected_id: str | None,
+    compact_node_map: dict | None,
+):
     """Swap destination, icon, and label based on current page."""
-    query_string = f"?budget_id={budget_id}" if budget_id is not None else ""
+    params: list[str] = []
+    if budget_id is not None:
+        params.append(f"budget_id={budget_id}")
+    if selected_id and compact_node_map:
+        for dim_id_str, lang_map in compact_node_map.items():
+            if str(selected_id) in (str(v) for v in lang_map.values()):
+                if dim_id_str.isdigit():
+                    params.append(f"focus={dim_id_str}")
+                break
+    query_string = f"?{'&'.join(params)}" if params else ""
 
     if pathname == get_relative_path("/timeseries"):
         return (
