@@ -109,9 +109,7 @@ def transform_treemap_data(
     budget_type: BudgetTypeLiteral = next(
         (row["budget_type"] for row in dimensions if row["budget_type"] in ["LAW", "REPORT"]), "LAW"
     )
-    transformer = TreemapTransformer(
-        dimensions, programs, classified, spending_type=spending_type, char_limit=45
-    )
+    transformer = TreemapTransformer(dimensions, programs, classified, spending_type=spending_type)
     flat_rows = fetch_treemap_hierarchy(budget_id)
     if flat_rows:
         df = transformer.transform_from_flat(flat_rows)
@@ -153,6 +151,7 @@ def generate_figure(
     node_ids: list[str] = list(trace_data["ids"])
     parents: list[str] = list(trace_data["parents"])
     values: list[float] = [float(v) if v is not None else 0.0 for v in trace_data["values"]]
+    # px.treemap wraps each custom_data value in a list, so each entry is [budget_type_str].
     budget_types: list[str] = [budget_type[0] for budget_type in trace_data["customdata"]]
 
     # Compute percentages for all nodes based on treemap aggregation.
@@ -175,17 +174,13 @@ def generate_figure(
         budget_types,
         spending_type,
         viewby,
-        program_label_to_orig_id or None,
+        program_label_to_orig_id or None,  # pass None rather than {} so the helper skips the lookup
     )
 
     # Replace long path-string ids with short integer ids to reduce JSON payload.
     # The root virtual node keeps its empty-string id; all others get sequential integers.
-    path_to_short_id: dict[str, str] = {}
-    counter = 0
-    for nid in node_ids:
-        if nid and nid not in path_to_short_id:
-            path_to_short_id[nid] = str(counter)
-            counter += 1
+    unique_nids = dict.fromkeys(nid for nid in node_ids if nid)
+    path_to_short_id = {nid: str(i) for i, nid in enumerate(unique_nids)}
     new_ids = [path_to_short_id.get(nid, nid) for nid in node_ids]
     new_parents = [path_to_short_id.get(p, p) for p in parents]
 
@@ -195,6 +190,7 @@ def generate_figure(
         ids=new_ids,
         parents=new_parents,
         marker_colors=colors,
+        marker_pad=dict(t=25, l=5, r=5, b=5),
         customdata=list(
             zip(
                 [round(p, 2) for p in parent_percentages],
@@ -203,13 +199,13 @@ def generate_figure(
         ),
         hovertemplate="<br>".join(
             [
-                "%{label}",
-                "%{value:,.1f}" + unit_config.map[unit],
-                "%{customdata[0]:.1f}%" + " of parent",
-                "%{customdata[1]:.1f}%" + " of total",
+                "<b>%{label}</b>",
+                "<br>%{value:,.1f}" + unit_config.map[unit],
+                "<i>%{customdata[0]:.1f}%" + " of parent</i>",
+                "<i>%{customdata[1]:.1f}%" + " of total</i>",
             ]
         ),
-        texttemplate="%{label}<br>%{value:,.1f}" + unit_config.map[unit],
+        texttemplate="%{label}<br><sub>%{value:,.1f}" + unit_config.map[unit] + "</sub>",
     )
 
     # Layout adjustments
@@ -224,61 +220,55 @@ def generate_figure(
     return fig, path_to_short_id
 
 
-def _build_treemap_node_map(df: pd.DataFrame, translated: bool) -> dict[str, dict[str, int | str]]:
-    """Build a node-id map (Plotly treemap ids) to dimension metadata.
+def _build_compact_node_map(
+    df: pd.DataFrame, path_to_short_id: dict[str, str] | None = None
+) -> dict[str, dict]:
+    """Build a compact {short_id: {leaf: dim_id, ctx: [ancestor_dim_ids]}} map.
 
-    Paths for both languages are always included so that focus lookups succeed
-    regardless of which language was active when a node was selected.
+    Each short_id is unique (assigned per path), so the same dim_id appearing under
+    multiple parents gets a separate entry with distinct ancestor context. This allows
+    the timeseries to filter by the same subchapter/chapter context as the clicked node.
     """
-    node_map: dict[str, dict[str, int | str]] = {}
-    # Convert once to plain dicts — ~10-50x faster than iterrows() which wraps each row in a Series.
+    compact: dict[str, dict] = {}
     records = df.to_dict("records")
+
+    # path_to_short_id covers only the figure's current language; assign fresh IDs for the other.
+    next_id = (
+        max((int(v) for v in path_to_short_id.values()), default=-1) + 1 if path_to_short_id else 0
+    )
+    extra_path_to_id: dict[str, str] = {}
 
     for name_ending in ("_NAME", "_NAME_TRANSLATED"):
         name_cols = ["ROOT"] + [col for col in df.columns if col.endswith(name_ending)]
-        language = "EN" if name_ending == "_NAME_TRANSLATED" else "RU"
 
         for record in records:
             labels: list[str] = []
+            seen_dim_ids: list[int] = []  # ancestor dim_ids accumulated along the path
             for col in name_cols:
                 label = record.get(col)
-                if not label:
-                    break
+                if not label or pd.isna(label):
+                    continue
                 labels.append(str(label))
                 if col == "ROOT":
                     continue
-                base = col.replace(name_ending, "")
-                dim_id = record.get(f"{base}_DIM_ID")
-                dim_orig_id = record.get(f"{base}_ORIG_ID")
-                dim_type = "PROGRAM" if base.startswith("PROGRAM_") else base
+                dim_id = record.get(f"{col.replace(name_ending, '')}_DIM_ID")
+                if pd.isnull(dim_id):
+                    continue
                 path = "/".join(labels)
-                # Skip null/NaN ids that can appear for root/placeholder nodes.
-                if pd.notnull(dim_id) and pd.notnull(dim_orig_id):
-                    node_map[path] = {
-                        "dimension_id": int(dim_id),
-                        "dimension_original_identifier": str(dim_orig_id),
-                        "dimension_type": str(dim_type),
-                        "language": language,
-                    }
+                if path_to_short_id and path in path_to_short_id:
+                    node_ref = path_to_short_id[path]
+                elif path in extra_path_to_id:
+                    node_ref = extra_path_to_id[path]
+                else:
+                    node_ref = str(next_id)
+                    extra_path_to_id[path] = node_ref
+                    next_id += 1
+                dim_id_int = int(dim_id)
+                # ctx is stored before appending dim_id_int, so it contains only ancestors,
+                # not the node itself. The timeseries uses this to filter by hierarchy context.
+                compact[node_ref] = {"leaf": str(dim_id_int), "ctx": list(seen_dim_ids)}
+                seen_dim_ids.append(dim_id_int)
 
-    return node_map
-
-
-def _build_compact_node_map(
-    df: pd.DataFrame, path_to_short_id: dict[str, str] | None = None
-) -> dict[str, dict[str, str]]:
-    """Build a compact {str(dim_id): {ru: node_id, en: node_id}} map for clientside JS use.
-
-    Much smaller than the full node_map since each dimension appears once,
-    keyed by its integer ID rather than its (long) path string.
-    """
-    compact: dict[str, dict[str, str]] = {}
-    for path, info in _build_treemap_node_map(df, translated=False).items():
-        lang = str(info.get("language", "RU")).lower()
-        dim_id = str(info.get("dimension_id", ""))
-        if dim_id and lang in ("ru", "en"):
-            node_ref = path_to_short_id.get(path, path) if path_to_short_id else path
-            compact.setdefault(dim_id, {})[lang] = node_ref
     return compact
 
 
@@ -296,8 +286,8 @@ def layout(**other_kwargs) -> html.Div:
     """
 
     return html.Div(
-        # Graph to display the treemap
-        [
+        className="plot-page",
+        children=[
             # Hidden timeseries graph keeps cross-page callbacks satisfied.
             dcc.Graph(
                 id="timeseries-graph",
@@ -398,13 +388,14 @@ def update_selected_id(click_data: dict | None) -> Optional[str]:
         # Prefer explicit id provided by Plotly for treemap nodes.
         node_id = pts[0].get("id")
         if not node_id:
-            # customdata structure: [value, parent_pct, root_pct, node_id]
+            # Legacy fallback: older Plotly versions didn't include "id" in clickData.
             custom = pts[0].get("customdata", [])
             node_id = custom[3] if len(custom) >= 4 else None
         if not node_id:
             raise PreventUpdate
-        return node_id
+        return str(node_id)
     except Exception:
+        # Malformed clickData (e.g. missing keys) — silently ignore rather than crash.
         raise PreventUpdate
 
 
@@ -538,5 +529,7 @@ def download_treemap_data(
     military = "_military" if spending_type == "MILITARY" else ""
     filename = f"treemap_{timestamp}_{sanitized}_{unit.lower()}{military}.csv"
     buf = io.BytesIO()
-    download_df.to_csv(buf, sep=";", index=False, encoding="utf-8-sig")
+    download_df.to_csv(
+        buf, sep=";", index=False, encoding="utf-8-sig"
+    )  # utf-8-sig adds BOM for Excel
     return dcc.send_bytes(buf.getvalue(), filename)  # type: ignore

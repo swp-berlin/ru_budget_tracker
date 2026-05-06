@@ -1,13 +1,24 @@
+/* Make the about page scrollable inside the app layout */
+#app-layout:has(.about-page) {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+}
+
+#app-layout:has(.about-page) #pages-wrapper {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
 :root {
   --fg: #222;
   --muted: #666;
-  --accent: #2b6cb0;
 }
 
 body {
   margin: 0;
-  font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Arial,
-    sans-serif;
   color: var(--fg);
 }
 

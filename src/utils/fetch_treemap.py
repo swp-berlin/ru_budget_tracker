@@ -471,9 +471,7 @@ def populate_treemap_hierarchy(budget_id: int) -> None:
         published_at=published_at,
     )
 
-    transformer = TreemapTransformer(
-        dimensions, programs, classified, spending_type="ALL", char_limit=45
-    )
+    transformer = TreemapTransformer(dimensions, programs, classified, spending_type="ALL")
     df = transformer.transform_data()
 
     # Exclude classified rows — they are dynamic and generated at render time.

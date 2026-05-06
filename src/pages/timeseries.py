@@ -2,6 +2,7 @@ import io
 import logging
 from typing import Any, cast
 from datetime import date, datetime
+from urllib.parse import parse_qs, unquote_plus
 
 import dash_bootstrap_components as dbc
 import pandas as pd
@@ -77,6 +78,7 @@ def _calculate_values(
     return df
 
 
+# Maps each quarter label to its last month — REPORT data is cumulative and dated at quarter-end.
 _PERIOD_MONTH = {"Q1": 3, "Q2": 6, "Q3": 9, "Q4": 12}
 
 
@@ -99,10 +101,12 @@ def fetch_timeseries_data(
     period: PeriodLiteral = "ALL",
     selected_dimension: dict[str, int | str] | None = None,
     classified_only: bool = False,
+    ancestor_dim_ids: tuple[int, ...] = (),
 ) -> tuple[pd.DataFrame, str, BudgetTypeLiteral]:
     """Fetch and transform treemap data for the current filters."""
+    # Dicts aren't hashable, so convert selected_dimension to a sorted tuple for the cache key.
     dim_key = tuple(sorted(selected_dimension.items())) if selected_dimension else None
-    cache_key = (budget_id, spending_type, unit, period, dim_key, classified_only)
+    cache_key = (budget_id, spending_type, unit, period, dim_key, classified_only, ancestor_dim_ids)
     if cache_key in _timeseries_cache:
         cached_df, cached_type, cached_budget_type = _timeseries_cache[cache_key]
         return cached_df.copy(), cached_type, cached_budget_type
@@ -119,12 +123,10 @@ def fetch_timeseries_data(
     budgets, type = data_fetcher.fetch_data(
         budget_id=budget_id,
         dimension_id=dimension_id,
+        ancestor_dim_ids=list(ancestor_dim_ids),
     )
     transformer = TimeseriesTransformer()
-    if unit in [
-        "PERCENT_YEAR_TO_DATE_SPENDING",
-        "PERCENT_YEAR_TO_DATE_REVENUE",
-    ]:
+    if unit in {"PERCENT_YEAR_TO_DATE_SPENDING", "PERCENT_YEAR_TO_DATE_REVENUE"}:
         df = transformer.transform_data(budgets, normalize=True, spending_type=spending_type)
     else:
         df = transformer.transform_data(budgets, normalize=False, spending_type=spending_type)
@@ -135,8 +137,11 @@ def fetch_timeseries_data(
     if budget_type == "REPORT":
         df = _shape_for_period(df, period)
     df = _calculate_values(df, budget_id, unit, budget_type)
+    # Normalisation (e.g. percent-of-GDP) can produce tiny negatives; clamp to zero.
     df["expenses"] = df["expenses"].clip(lower=0)
     # Rename LAW and REPORT to OPEN for clearer legend labeling in the timeseries view.
+    # where() keeps the value when the condition is True, so CLASSIFIED is preserved
+    # and every other type becomes "OPEN".
     df["types"] = df["types"].where(df["types"] == "CLASSIFIED", "OPEN")
     if classified_only:
         df = df.loc[df["types"] == "CLASSIFIED"]
@@ -177,16 +182,14 @@ def generate_figure(
         font=dict(family="Source Sans 3"),
         legend=dict(
             orientation="h",
-            yanchor="bottom",
-            y=-0.15,
+            y=-0.15 if budget_type == "REPORT" else -0.1,
             xanchor="center",
             x=0.5,
-            maxheight=0.1,  # Comment maxheight to see legend take up 0.5 of plotting area
             title_text="",
         ),
         yaxis_title=f"{unit_label}",
         xaxis_title="",  # Format x-axis to show quarter labels (e.g., "2018-Q1")
-        uirevision=f"unit:{unit}",
+        uirevision=f"unit:{unit}",  # changing unit forces a full chart reset (zoom/pan cleared)
     )
     # Set x-axis tick labels and hover format based on budget type
     if budget_type == "REPORT":
@@ -214,23 +217,33 @@ def generate_figure(
         n = len(bar.x) if bar.x is not None else 0  # type: ignore
         bar.customdata = [[unit_label]] * n
         if bar.name == "OPEN":
-            bar.hovertemplate = (
-                "<b>%{x}</b><br>Value: %{y:,.1f} %{customdata[0]}<br><extra></extra>"
-            )
+            bar.hovertemplate = "<b>%{x}: OPEN</b><br>%{y:,.1f} %{customdata[0]}<br><extra></extra>"
         elif bar.name == "CLASSIFIED":
-            bar.hovertemplate = (
-                "<b>%{x}</b><br>Value: %{y:,.1f} %{customdata[0]} (CLASSIFIED)<br><extra></extra>"
-            )
+            bar.hovertemplate = f"<b>%{{x}}: {classified_label}</b><br>%{{y:,.1f}} %{{customdata[0]}}<br><extra></extra>"
             bar.name = classified_label
 
     return fig
+
+
+def _find_path_by_dimension_id(
+    dim_id: int, node_map: dict, language: LanguageTypeLiteral = "RU"
+) -> str | None:
+    """Look up a node path directly by dimension_id, used for deep-link fallback."""
+    lang_key = language.upper()
+    fallback: str | None = None
+    for path, info in node_map.items():
+        if info.get("dimension_id") == dim_id:
+            if info.get("language", "").upper() == lang_key:
+                return path
+            fallback = path
+    return fallback
 
 
 def _resolve_selected_path(
     selected_node_id: str | None,
     compact_node_map: dict | None,
     node_map: dict,
-    language: str,
+    language: LanguageTypeLiteral,
 ) -> str | None:
     """Resolve a short treemap id to the full path for the given language.
 
@@ -240,26 +253,13 @@ def _resolve_selected_path(
     """
     if not selected_node_id or not compact_node_map:
         return None
-
-    short_to_dim: dict[str, str] = {}
-    for dim_id, lang_map in compact_node_map.items():
-        for sid in lang_map.values():
-            short_to_dim[str(sid)] = str(dim_id)
-
-    dim_id = short_to_dim.get(str(selected_node_id))
-    if not dim_id:
+    entry = compact_node_map.get(str(selected_node_id))
+    if not entry:
         return None
-
-    lang_key = "en" if language == "EN" else "ru"
-    dim_to_paths: dict[str, dict[str, str]] = {}
-    for path, info in node_map.items():
-        did = str(info.get("dimension_id", ""))
-        lang = info.get("language", "RU").lower()
-        if did and lang in ("ru", "en"):
-            dim_to_paths.setdefault(did, {})[lang] = path
-
-    paths = dim_to_paths.get(dim_id, {})
-    return paths.get(lang_key) or next(iter(paths.values()), None)
+    raw_dim_id = entry.get("leaf") if isinstance(entry, dict) else entry
+    if not raw_dim_id:
+        return None
+    return _find_path_by_dimension_id(int(raw_dim_id), node_map, language)
 
 
 def _format_timeseries_title(
@@ -321,8 +321,8 @@ def layout(**other_kwargs) -> html.Div:
         for label, value in unit_config.options
     ]
     return html.Div(
-        # Graph to display the timeseries
-        [
+        className="plot-page",
+        children=[
             # Hidden treemap graph keeps cross-page callbacks satisfied.
             dcc.Graph(
                 id="treemap-graph", style={"display": "none", "height": "100%", "width": "100%"}
@@ -362,6 +362,7 @@ def layout(**other_kwargs) -> html.Div:
     Input("store-selected-id", "data"),
     Input("store-language", "data"),
     State("store-treemap-node-map", "data"),
+    State("url", "search"),
 )
 def update_figure_from_filters(
     pathname: str | None,
@@ -370,8 +371,9 @@ def update_figure_from_filters(
     spending_type: SpendingTypeLiteral = "ALL",
     unit: UnitLiteral = "ABSOLUTE",
     selected_node_id: str | None = None,
-    language: str = "RU",
+    language: LanguageTypeLiteral = "RU",
     compact_node_map: dict | None = None,
+    url_search: str | None = None,
 ) -> tuple[go.Figure, dict[str, str], dict | None, str | None]:
     # Guard: only render on the timeseries page to keep hidden graphs hidden.
     if pathname != get_relative_path("/timeseries"):
@@ -388,7 +390,28 @@ def update_figure_from_filters(
     resolved_path = _resolve_selected_path(
         selected_node_id, compact_node_map, node_map, language or "RU"
     )
+    # Ancestor dim_ids from the clicked node's path context (for context-aware timeseries filtering).
+    ancestor_dim_ids: tuple[int, ...] = ()
+    if selected_node_id and compact_node_map:
+        entry = compact_node_map.get(str(selected_node_id))
+        if entry and isinstance(entry, dict):
+            ancestor_dim_ids = tuple(int(x) for x in entry.get("ctx", []))
+    # Deep-link fallback: compact_node_map is absent on fresh page loads, so short IDs
+    # can't be decoded. Use ?focus=<dimension_id> from the URL instead.
+    focus_dim_id: int | None = None
+    if resolved_path is None and url_search:
+        params = parse_qs(url_search.lstrip("?"))
+        focus_raw = params.get("focus", [None])[0]
+        if focus_raw:
+            focus_raw = unquote_plus(focus_raw).strip()
+            if focus_raw.isdigit():
+                focus_dim_id = int(focus_raw)
+                resolved_path = _find_path_by_dimension_id(focus_dim_id, node_map, language or "RU")
     selected_dimension = node_map.get(resolved_path) if resolved_path else None
+    # If the focus dim isn't in the current budget's node_map (e.g. it only exists in
+    # a different budget year), use the dimension_id directly so the data is still filtered.
+    if selected_dimension is None and focus_dim_id is not None:
+        selected_dimension = {"dimension_id": focus_dim_id, "dimension_original_identifier": ""}
     classified_only = False
     if selected_dimension and "CLASSIFIED" in str(
         selected_dimension.get("dimension_original_identifier", "")
@@ -404,6 +427,7 @@ def update_figure_from_filters(
         period=period,
         selected_dimension=selected_dimension,
         classified_only=classified_only,
+        ancestor_dim_ids=ancestor_dim_ids,
     )
     # Build a title from the resolved path so the label matches the current language.
     title = _format_timeseries_title(resolved_path, spending_type)
@@ -413,6 +437,7 @@ def update_figure_from_filters(
     tick_info: dict | None = None
     if budget_type == "REPORT" and period == "ALL":
         tick_values = df["dates"].dropna().sort_values().unique().tolist()
+        # Dash serialises store data as JSON, so timestamps must be ISO strings not datetime objects.
         tick_info = {"tickvals": [t.isoformat() for t in tick_values]}
 
     return (
@@ -480,6 +505,8 @@ def download_timeseries_data(
 
     def _format_period(dt: pd.Timestamp) -> str:
         if budget_type == "REPORT":
+            # Data is pre-filtered to quarter-end months (3,6,9,12), so month//3 always
+            # yields the correct quarter number 1–4 with no off-by-one.
             quarter = dt.month // 3
             return f"{dt.year}-Q{quarter}"
         return str(dt.year)
@@ -504,8 +531,8 @@ def download_timeseries_data(
             .reset_index()
             .rename(
                 columns={"OPEN": f"Open ({value_col})", "CLASSIFIED": f"Classified ({value_col})"}
-            ),
-        )[0]
+            )
+        )
         pivoted[f"Total ({value_col})"] = (
             pivoted[f"Open ({value_col})"] + pivoted[f"Classified ({value_col})"]
         ).round(2)
@@ -516,9 +543,10 @@ def download_timeseries_data(
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     sanitized = budget_label.replace(" ", "_").replace("/", "-")
     military = "_military" if spending_type == "MILITARY" else ""
-    filename = f"timeseries_{timestamp}_{sanitized}_{unit.lower()}{military}.csv"
+    period_suffix = f"_{period.lower()}" if period and period != "ALL" else ""
+    filename = f"timeseries_{timestamp}_{sanitized}_{unit.lower()}{military}{period_suffix}.csv"
     buf = io.BytesIO()
-    pivoted.to_csv(buf, sep=";", index=False, encoding="utf-8-sig")
+    pivoted.to_csv(buf, sep=";", index=False, encoding="utf-8-sig")  # utf-8-sig adds BOM for Excel
     return dcc.send_bytes(buf.getvalue(), filename)  # type: ignore
 
 

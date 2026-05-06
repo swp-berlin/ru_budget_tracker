@@ -1,12 +1,12 @@
 /* Flex column filling the viewport so charts always fit without scrolling */
-#app-layout {
+#app-layout:has(.plot-page) {
     display: flex;
     flex-direction: column;
     height: 100vh;
     overflow: hidden;
 }
 
-#pages-wrapper {
+#app-layout:has(.plot-page) #pages-wrapper {
     flex: 1;
     min-height: 0;
     display: flex;
@@ -14,7 +14,7 @@
 }
 
 /* page_container's outer div */
-#pages-wrapper > div {
+#app-layout:has(.plot-page) #pages-wrapper > div {
     flex: 1;
     min-height: 0;
     display: flex;
@@ -22,7 +22,7 @@
 }
 
 /* Dash page content slot */
-#_pages_content {
+#app-layout:has(.plot-page) #_pages_content {
     flex: 1;
     min-height: 0;
     overflow: hidden;
@@ -37,7 +37,6 @@
 #timeseries-title {
     padding: 6px 30px 2px 80px;
     text-align: center;
-    font-family: 'Source Sans 3', sans-serif;
     font-size: 17px;
     font-weight: 400;
     color: #444444;

@@ -34,6 +34,20 @@ _spending_type_labels = {v: l for l, v in spending_type_config.options}
 _unit_labels = {v: l for l, v in unit_config.options}
 
 
+def _triggered_value(item_type: str):
+    """Return the `value` from a pattern-matched triggered component, or raise PreventUpdate."""
+    trig = getattr(callback_context, "triggered_id", None)
+    if isinstance(trig, dict) and trig.get("type") == item_type:
+        return trig.get("value")
+    raise PreventUpdate
+
+
+def _get_budget_type(budget_id: int | None, options: list[dict] | None) -> str | None:
+    if not budget_id or not options:
+        return None
+    return next((opt.get("type") for opt in options if opt.get("value") == budget_id), None)
+
+
 def _item_span(label: str, selected: bool) -> html.Span:
     style = {"fontWeight": "bold"} if selected else {}
     return html.Span(label, title=label, style=style)
@@ -84,10 +98,36 @@ def update_about_button(pathname: str | None, previous_path: str | None, budget_
     Output("btn-switch-graphs", "title"),
     Input("url", "pathname"),
     Input("store-budget-id", "data"),
+    Input("store-selected-id", "data"),
+    State("store-treemap-node-map", "data"),
+    State("url", "search"),
 )
-def switch_graphs(pathname: str | None, budget_id: int | None):
+def switch_graphs(
+    pathname: str | None,
+    budget_id: int | None,
+    selected_id: str | None,
+    compact_node_map: dict | None,
+    url_search: str | None,
+):
     """Swap destination, icon, and label based on current page."""
-    query_string = f"?budget_id={budget_id}" if budget_id is not None else ""
+    params: list[str] = []
+    if budget_id is not None:
+        params.append(f"budget_id={budget_id}")
+    focus_added = False
+    if selected_id and compact_node_map:
+        entry = compact_node_map.get(str(selected_id))
+        if entry:
+            dim_id_str = entry.get("leaf") if isinstance(entry, dict) else entry
+            if dim_id_str and str(dim_id_str).isdigit():
+                params.append(f"focus={dim_id_str}")
+                focus_added = True
+    # If no focus was resolved from the node map, pass through any existing ?focus= from the URL.
+    if not focus_added and url_search:
+        qs = parse_qs(url_search.lstrip("?"))
+        focus_raw = qs.get("focus", [None])[0]
+        if focus_raw and unquote_plus(focus_raw).strip().isdigit():
+            params.append(f"focus={unquote_plus(focus_raw).strip()}")
+    query_string = f"?{'&'.join(params)}" if params else ""
 
     if pathname == get_relative_path("/timeseries"):
         return (
@@ -121,13 +161,8 @@ def toggle_viewby_period_menu(
     """Toggle visibility of View By and Period menus based on current page."""
     if pathname == get_relative_path("/timeseries"):
         period_style: dict[str, Any] = {}
-        if budget_id and options:
-            budget_type = next(
-                (opt.get("type") for opt in options if opt.get("value") == budget_id),
-                None,
-            )
-            if budget_type == "LAW":
-                period_style = {"cursor": "not-allowed"}
+        if _get_budget_type(budget_id, options) == "LAW":
+            period_style = {"cursor": "not-allowed"}
         return {"display": "none"}, period_style
     return {}, {"display": "none"}
 
@@ -141,10 +176,7 @@ def toggle_period_menu_disabled(
     budget_id: int | None, options: list[dict[str, Any]] | None
 ) -> bool:
     """Disable the period menu for LAW budgets where quarter selection does not apply."""
-    if not budget_id or not options:
-        return False
-    budget_type = next((opt.get("type") for opt in options if opt.get("value") == budget_id), None)
-    return budget_type == "LAW"
+    return _get_budget_type(budget_id, options) == "LAW"
 
 
 @callback(
@@ -152,7 +184,7 @@ def toggle_period_menu_disabled(
     Input("url", "pathname"),
 )
 def toggle_resize_interval(pathname: str | None) -> bool:
-    return pathname != "/timeseries"
+    return pathname != get_relative_path("/timeseries")
 
 
 # --- Budget ---
@@ -224,13 +256,14 @@ def select_budget_dynamic(options, clicks):
     Output("store-spending-type", "data", allow_duplicate=True),
     Output("store-unit", "data", allow_duplicate=True),
     Output("store-language", "data", allow_duplicate=True),
+    Output("store-period", "data", allow_duplicate=True),
     Input("url", "search"),
     prevent_initial_call="initial_duplicate",
 )
 def apply_filters_from_url(url_search: str | None):
     """Apply filters from URL query params on load and when the URL changes.
 
-    Recognized params: budget_id, viewby, spending_type, unit, language.
+    Recognized params: budget_id, viewby, spending_type, unit, language, period.
     Missing params leave the current store values unchanged (no_update).
     """
     if not url_search:
@@ -247,6 +280,7 @@ def apply_filters_from_url(url_search: str | None):
         spending_type = first("spending_type")
         unit = first("unit")
         language = first("language")
+        period = first("period")
 
         budget_id = int(budget_id_raw) if budget_id_raw and budget_id_raw.isdigit() else None
 
@@ -256,6 +290,7 @@ def apply_filters_from_url(url_search: str | None):
             spending_type if spending_type else no_update,
             unit if unit else no_update,
             language if language else no_update,
+            period if period else no_update,
         )
     except Exception:
         raise PreventUpdate
@@ -270,13 +305,7 @@ def apply_filters_from_url(url_search: str | None):
     prevent_initial_call=True,
 )
 def select_viewby(_clicks):
-    ctx = callback_context
-    if not ctx.triggered:
-        raise PreventUpdate
-    trig = getattr(ctx, "triggered_id", None)
-    if isinstance(trig, dict) and trig.get("type") == "viewby-item":
-        return trig.get("value")
-    raise PreventUpdate
+    return _triggered_value("viewby-item")
 
 
 @callback(
@@ -285,13 +314,7 @@ def select_viewby(_clicks):
     prevent_initial_call=True,
 )
 def select_period(_clicks):
-    ctx = callback_context
-    if not ctx.triggered:
-        raise PreventUpdate
-    trig = getattr(ctx, "triggered_id", None)
-    if isinstance(trig, dict) and trig.get("type") == "period-item":
-        return trig.get("value")
-    raise PreventUpdate
+    return _triggered_value("period-item")
 
 
 @callback(
@@ -300,13 +323,7 @@ def select_period(_clicks):
     prevent_initial_call=True,
 )
 def select_spending_type(_clicks):
-    ctx = callback_context
-    if not ctx.triggered:
-        raise PreventUpdate
-    trig = getattr(ctx, "triggered_id", None)
-    if isinstance(trig, dict) and trig.get("type") == "spending-type-item":
-        return trig.get("value")
-    raise PreventUpdate
+    return _triggered_value("spending-type-item")
 
 
 @callback(
@@ -315,13 +332,7 @@ def select_spending_type(_clicks):
     prevent_initial_call=True,
 )
 def select_unit(_clicks):
-    ctx = callback_context
-    if not ctx.triggered:
-        raise PreventUpdate
-    trig = getattr(ctx, "triggered_id", None)
-    if isinstance(trig, dict) and trig.get("type") == "unit-item":
-        return trig.get("value")
-    raise PreventUpdate
+    return _triggered_value("unit-item")
 
 
 # --- Menu label updates ---
@@ -495,20 +506,12 @@ clientside_callback(
 # Hide the timeseries spinner once the graph becomes visible.
 clientside_callback(
     ClientsideFunction(namespace="clientside", function_name="hideTimeseriesSpinner"),
-    Output("dummy-output", "accessKey"),
+    Output("dummy-output", "accessKey", allow_duplicate=True),
     Input("timeseries-graph", "figure", allow_optional=True),
     prevent_initial_call=True,
 )
 
-# Constrain treemap text within tile boundaries via SVG textLength.
-clientside_callback(
-    ClientsideFunction(namespace="clientside", function_name="applyTreemapTextInset"),
-    Output("dummy-output", "className"),
-    Input("treemap-graph", "figure", allow_optional=True),
-)
-
 # Restore treemap zoom to the previously selected node after a figure update.
-# Uses Plotly.restyle so the MutationObserver in applyTreemapTextInset keeps working.
 clientside_callback(
     ClientsideFunction(namespace="clientside", function_name="restoreTreemapZoom"),
     Output("dummy-restore-zoom", "children"),
@@ -524,6 +527,8 @@ clientside_callback(
     Input("treemap-graph", "figure", allow_optional=True),
     State("store-treemap-node-map", "data"),
     State("store-language", "data"),
+    State("store-budget-id", "data"),
+    State("store-viewby", "data"),
     prevent_initial_call=True,
 )
 
@@ -537,8 +542,12 @@ clientside_callback(
     State("store-viewby", "data"),
     State("store-spending-type", "data"),
     State("store-unit", "data"),
+    State("store-period", "data"),
+    State("store-language", "data"),
     State("store-selected-id", "data"),
-    State("store-treemap-node-map", "data"),  # compact map: {dim_id: {ru: path, en: path}}
+    State(
+        "store-treemap-node-map", "data"
+    ),  # compact map: {short_id: {leaf: dim_id, ctx: [ancestor_dim_ids]}}
     prevent_initial_call=True,
 )
 
@@ -552,5 +561,24 @@ clientside_callback(
     State("store-budget-options", "data"),
     State("store-unit", "data"),
     State("store-spending-type", "data"),
+    State("store-period", "data"),
     prevent_initial_call=True,
 )
+
+
+# Disable share/download buttons and filters that don't apply on the about page.
+@callback(
+    Output("btn-download-image", "disabled"),
+    Output("btn-download-csv", "disabled"),
+    Output("btn-share-link", "disabled"),
+    Output("btn-switch-data-language", "disabled"),
+    Output("menu-budget", "disabled"),
+    Output("menu-viewby", "disabled"),
+    Output("menu-spending-type", "disabled"),
+    Output("menu-unit", "disabled"),
+    Input("url", "pathname"),
+)
+def toggle_action_buttons_disabled(pathname: str | None) -> tuple[bool, ...]:
+    """Disable buttons and dropdowns that don't apply on the about page."""
+    on_about = pathname == get_relative_path("/about")
+    return (on_about,) * 8

@@ -96,6 +96,8 @@ class TimeseriesTransformer:
             )
             if corresponding_budget is None:
                 continue
+            if budget["total_value"] is None:
+                continue
 
             multiplicator: float = budget_config.law_total_value_multiplier
             if corresponding_budget["type"] == "REPORT":
@@ -103,13 +105,10 @@ class TimeseriesTransformer:
 
             total_value: float = budget["total_value"] * multiplicator  # type: ignore
 
-            # For MILITARY mode, classified is pre-computed in total_value by the fetch layer
-            # (TOTAL_military_chapters × multiplier − all_open_military_chapters), so open_value = 0.
-            # For ALL spending type, subtract the corresponding budget's open spending as usual.
-            if spending_type == "MILITARY":
-                open_value: float = 0.0
-            else:
-                open_value = float(corresponding_budget[open_value_key] or 0.0)  # type: ignore
+            # The fetch layer always pre-computes classified in TOTAL rows
+            # (total_value = classified / multiplier, military_value = 0),
+            # so no open spending needs to be subtracted here.
+            open_value: float = 0.0
             classified_expense = total_value - open_value
             budget_id = budget["id"]
             df = pd.concat(

@@ -7,7 +7,8 @@ register_page(__name__, path="/about")
 
 # Define the layout of the about page using Dash HTML components
 layout = html.Div(
-    [
+    className="about-page",
+    children=[
         # Hidden graph stubs keep cross-page callbacks satisfied when on this page.
         dcc.Graph(id="treemap-graph", style={"display": "none"}),
         dcc.Graph(id="timeseries-graph", style={"display": "none"}),
@@ -316,5 +317,5 @@ layout = html.Div(
         ),
         # Placeholder for any additional root-level elements
         html.Div(id="moco-bx-root"),
-    ]
+    ],
 )

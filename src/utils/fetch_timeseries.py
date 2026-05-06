@@ -5,7 +5,7 @@ This module provides the TimeseriesDataFetcher class for fetching and preparing
 budget data for timeseries (bar chart) visualization.
 """
 
-from typing import ClassVar, Sequence
+from typing import ClassVar, Sequence, cast
 from datetime import date
 from functools import lru_cache
 
@@ -220,6 +220,7 @@ class TimeseriesDataFetcher:
         military_conditions: list[ColumnElement[bool]],
         budget_type: BudgetTypeLiteral | None = None,
         dimension_ids: list[int] | None = None,
+        ancestor_dim_ids: list[int] | None = None,
     ) -> Subquery:
         """
         Build the subquery for expenses with military spending classification.
@@ -254,7 +255,28 @@ class TimeseriesDataFetcher:
             .join(Dimension, assoc_table.c.dimension_id == Dimension.id)
         )
         if dimension_ids:
-            expenses_subquery = expenses_subquery.where(Dimension.id.in_(dimension_ids))
+            # Use an IN subquery rather than WHERE on the joined Dimension so that the
+            # military_conditions check (which uses the same Dimension join) still sees
+            # ALL dimension associations of each expense. Filtering the join directly would
+            # hide non-chapter dimension rows and cause military_value to be computed as 0
+            # for expenses that match military patterns via a different dimension type.
+            expenses_subquery = expenses_subquery.where(
+                Expense.id.in_(
+                    select(assoc_table.c.expense_id).where(
+                        assoc_table.c.dimension_id.in_(dimension_ids)
+                    )
+                )
+            )
+
+        # Narrow to the specific parent context (e.g. subchapter) the user clicked on.
+        # For each ancestor dim, keep only expenses that are ALSO associated with that dim.
+        if ancestor_dim_ids:
+            for anc_id in ancestor_dim_ids:
+                expenses_subquery = expenses_subquery.where(
+                    Expense.id.in_(
+                        select(assoc_table.c.expense_id).where(assoc_table.c.dimension_id == anc_id)
+                    )
+                )
 
         if budget_type == "REPORT":
             expenses_subquery = expenses_subquery.join(
@@ -274,6 +296,7 @@ class TimeseriesDataFetcher:
         budget_types: list[str],
         dimension_ids: list[int],
         quarterly_only: bool,
+        ancestor_dim_ids: list[int] | None = None,
     ) -> Sequence[RowMapping]:
         """Fetch summed expenses for budgets filtered by dimension ids."""
         from models.budget import expense_dimension_association_table as assoc_table
@@ -283,7 +306,9 @@ class TimeseriesDataFetcher:
         military_conditions = self._build_military_spending_condition()
 
         expenses_subquery = self._build_expense_subquery(
-            military_conditions, dimension_ids=dimension_ids
+            military_conditions,
+            dimension_ids=dimension_ids,
+            ancestor_dim_ids=ancestor_dim_ids or [],
         )
 
         stmt = (
@@ -445,7 +470,8 @@ class TimeseriesDataFetcher:
         union_stmt = law_ministry_stmt.union(total_chapter_stmt)
 
         with get_sync_session() as session:
-            result = session.execute(union_stmt).mappings().all()
+            raw = session.execute(union_stmt).mappings().all()
+        result = cast(Sequence[RowMapping], self._precompute_classified_in_total_rows(raw))
         _store_timeseries_summary(result, self.spending_type, "LAW")
         TimeseriesDataFetcher._law_budget_cache[self.spending_type] = result
         return result
@@ -580,7 +606,8 @@ class TimeseriesDataFetcher:
         )
 
         with get_sync_session() as session:
-            result = session.execute(stmt).mappings().all()
+            raw = session.execute(stmt).mappings().all()
+        result = cast(Sequence[RowMapping], self._precompute_classified_in_total_rows(raw))
         _store_timeseries_summary(result, self.spending_type, "REPORT")
         TimeseriesDataFetcher._execution_budget_cache[self.spending_type] = result
         return result
@@ -612,6 +639,85 @@ class TimeseriesDataFetcher:
                 f"No expenses found for budget ID {budget_id} with type {budget_type}."
             )
         return result, budget_type
+
+    def _fetch_dimension_type(self, dimension_id: int) -> str | None:
+        stmt = select(Dimension.type).where(Dimension.id == dimension_id)
+        rows = _execute_query(stmt, unique=False)
+        return str(rows[0]["type"]) if rows else None
+
+    def _precompute_classified_in_total_rows(
+        self, rows: Sequence[RowMapping] | list[dict]
+    ) -> list[dict]:
+        """Replace raw TOTAL row values with pre-computed classified spending.
+
+        For each TOTAL row, finds its matching open row by published_at and computes:
+            classified = total_value × multiplier − open_value
+        then stores classified / multiplier back as total_value (military_value = 0).
+        This normalises TOTAL row semantics so the transform can always use open_value = 0.
+        """
+        open_by_date = {row["published_at"]: row for row in rows if row["type"] != "TOTAL"}
+        result: list[dict] = []
+        for row in rows:
+            if row["type"] != "TOTAL":
+                result.append(dict(row))
+                continue
+            corresponding = open_by_date.get(row["published_at"])
+            if corresponding is None:
+                continue
+            multiplier = (
+                budget_config.report_total_value_multiplier
+                if corresponding["type"] == "REPORT"
+                else budget_config.law_total_value_multiplier
+            )
+            total_val = float(row["total_value"] or 0) * multiplier
+            open_val = float(corresponding["total_value"] or 0)
+            classified = total_val - open_val
+            new_row = dict(row)
+            new_row["total_value"] = classified / multiplier
+            new_row["military_value"] = 0.0
+            result.append(new_row)
+        return result
+
+    def _fetch_military_chapter_classified_as_total_rows(
+        self, chapter_orig_id: str
+    ) -> Sequence[RowMapping]:
+        """Fetch pre-computed military classified spending for a specific chapter as TOTAL rows.
+
+        Mirrors the non-filtered MILITARY TOTAL stmt but scoped to one chapter's
+        classified_spending from LawMilitaryOpenSpendingPerChapter.
+        Returns total_value = classified_sum / multiplier, military_value = 0
+        so the transform can apply open_value = 0 uniformly.
+        """
+        base_columns = self._get_budget_expense_columns()
+        view_year_agg = (
+            select(
+                extract("year", Budget.published_at).label("year"),
+                func.sum(LawMilitaryOpenSpendingPerChapter.classified_spending).label(
+                    "classified_sum"
+                ),
+            )
+            .select_from(LawMilitaryOpenSpendingPerChapter)
+            .join(Budget, LawMilitaryOpenSpendingPerChapter.budget_id == Budget.id)
+            .where(Budget.type == "LAW")
+            .where(LawMilitaryOpenSpendingPerChapter.original_identifier == chapter_orig_id)
+            .group_by(extract("year", Budget.published_at))
+            .subquery()
+        )
+        stmt = (
+            select(
+                *base_columns,
+                (view_year_agg.c.classified_sum / budget_config.law_total_value_multiplier).label(
+                    "total_value"
+                ),
+                literal(0.0).label("military_value"),
+            )
+            .select_from(Budget)
+            .join(view_year_agg, extract("year", Budget.published_at) == view_year_agg.c.year)
+            .where(Budget.type == "TOTAL")
+            .where(Budget.original_identifier.like("%LAW%"))
+        )
+        with get_sync_session() as session:
+            return session.execute(stmt).mappings().all()
 
     def _fetch_chapter_original_identifier(self, dimension_id: int) -> str | None:
         """Walk up the dimension hierarchy to find the ancestor CHAPTER's original_identifier.
@@ -663,11 +769,15 @@ class TimeseriesDataFetcher:
             return session.execute(stmt).mappings().all()
 
     def fetch_budgets_filtered(
-        self, budget_id: int, dimension_id: int
+        self,
+        budget_id: int,
+        dimension_id: int,
+        ancestor_dim_ids: list[int] | None = None,
     ) -> tuple[Sequence[RowMapping], BudgetTypeLiteral]:
         """Fetch budget expenses filtered by a selected dimension and its descendants."""
         initial_budget = self._fetch_budget(budget_id)
         dimension_ids = self._fetch_descendant_dimension_ids(dimension_id)
+        ancestor_dim_ids = ancestor_dim_ids or []
 
         if initial_budget.type == "REPORT":
             return (
@@ -675,6 +785,7 @@ class TimeseriesDataFetcher:
                     ["REPORT"],
                     dimension_ids,
                     quarterly_only=True,
+                    ancestor_dim_ids=ancestor_dim_ids,
                 ),
                 "REPORT",
             )
@@ -683,13 +794,25 @@ class TimeseriesDataFetcher:
                 ["LAW"],
                 dimension_ids,
                 quarterly_only=False,
+                ancestor_dim_ids=ancestor_dim_ids,
             )
-            # Also fetch TOTAL budget data for the ancestor CHAPTER so classified spending
-            # can be computed as TOTAL_chapter - open_chapter.
+            # Fetch pre-computed classified TOTAL rows for CHAPTER dimensions only.
+            # SUBCHAPTER nodes have no classified breakdown in the data model.
             chapter_orig_id = self._fetch_chapter_original_identifier(dimension_id)
-            if chapter_orig_id:
-                total_data = self._fetch_total_law_expenses_for_chapter(chapter_orig_id)
-                return list(open_data) + list(total_data), "LAW"
+            if chapter_orig_id and self._fetch_dimension_type(dimension_id) == "CHAPTER":
+                if self.spending_type == "MILITARY":
+                    total_data: Sequence[RowMapping] | list[dict] = (
+                        self._fetch_military_chapter_classified_as_total_rows(chapter_orig_id)
+                    )
+                else:
+                    raw_total = self._fetch_total_law_expenses_for_chapter(chapter_orig_id)
+                    combined = list(open_data) + list(raw_total)
+                    total_data = [
+                        r
+                        for r in self._precompute_classified_in_total_rows(combined)
+                        if r["type"] == "TOTAL"
+                    ]
+                return cast(Sequence[RowMapping], list(open_data) + list(total_data)), "LAW"
             return open_data, "LAW"
         else:
             raise ValueError(f"Unsupported budget type: {initial_budget.type} for ID {budget_id}")
@@ -698,6 +821,7 @@ class TimeseriesDataFetcher:
         self,
         budget_id: int | None = None,
         dimension_id: int | None = None,
+        ancestor_dim_ids: list[int] | None = None,
     ) -> tuple[Sequence[RowMapping], BudgetTypeLiteral]:
         """
         Fetch budget and expense data for bar chart visualization.
@@ -705,6 +829,7 @@ class TimeseriesDataFetcher:
         Args:
             budget_id: The budget ID to fetch data for.
             dimension_id: Optional dimension ID to filter by.
+            ancestor_dim_ids: Optional ancestor dimension IDs for context-aware filtering.
 
         Returns:
             Tuple of (budget expense rows, budget category string).
@@ -716,7 +841,11 @@ class TimeseriesDataFetcher:
             raise ValueError("budget_id must be provided to fetch data.")
         # Filter to the selected dimension when provided.
         if dimension_id is not None:
-            result = self.fetch_budgets_filtered(budget_id=budget_id, dimension_id=dimension_id)
+            result = self.fetch_budgets_filtered(
+                budget_id=budget_id,
+                dimension_id=dimension_id,
+                ancestor_dim_ids=ancestor_dim_ids or [],
+            )
         else:
             result = self.fetch_budgets(budget_id=budget_id)
 

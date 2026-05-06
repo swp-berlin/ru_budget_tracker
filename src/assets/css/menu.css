@@ -1,25 +1,26 @@
-/* Dropdown toggle base layout (text-specific rules moved to typography.css) */
+/* Dropdown toggle base layout */
 #menu-budget .dropdown-toggle,
 #menu-viewby .dropdown-toggle,
 #menu-period .dropdown-toggle,
 #menu-spending-type .dropdown-toggle,
 #menu-unit .dropdown-toggle {
+  display: inline-block;
+  position: relative;
   height: 40px;
   line-height: 24px;
-  padding: 8px 12px;
-  display: inline-flex;
-  align-items: center;
+  padding: 8px 28px 8px 12px; /* 28px right reserves space for caret */
   max-width: 150px;
-  /* keeps trigger compact */
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
-#menu-budget .dropdown-toggle>*,
-#menu-viewby .dropdown-toggle>*,
-#menu-period .dropdown-toggle>*,
-#menu-spending-type .dropdown-toggle>*,
-#menu-unit .dropdown-toggle>* {
-  min-width: 0;
-  /* allow flex children to shrink for ellipsis */
+#menu-budget .dropdown-toggle > *,
+#menu-viewby .dropdown-toggle > *,
+#menu-period .dropdown-toggle > *,
+#menu-spending-type .dropdown-toggle > *,
+#menu-unit .dropdown-toggle > * {
+  min-width: 0; /* allow flex children to shrink for ellipsis */
 }
 
 /* Keep the dropdown list scrollable and compact */
@@ -32,20 +33,6 @@
   overflow-y: auto;
   overflow-x: hidden;
   min-width: 180px;
-}
-
-/* All menu toggles: ellipsize label text but always show caret */
-#menu-budget .dropdown-toggle,
-#menu-viewby .dropdown-toggle,
-#menu-period .dropdown-toggle,
-#menu-spending-type .dropdown-toggle,
-#menu-unit .dropdown-toggle {
-  display: inline-block;
-  position: relative;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  padding-right: 28px;
 }
 
 /* Keep caret visible by absolutely positioning it inside the toggle */
@@ -61,65 +48,37 @@
   margin-left: 0;
 }
 
-/* Timeseries button: keep content on one line and hide label if space is tight */
 #btn-switch-graphs {
   display: inline-flex;
-  /* align icon + label horizontally */
   align-items: center;
   gap: 4px;
-  /* consistent spacing */
   white-space: nowrap;
-  /* never wrap inside the button */
-  max-width: 100%;
-  /* allow container to constrain button */
+  width: 130px;
+  justify-content: center;
 }
 
 #btn-switch-graphs .btn-label {
-  white-space: nowrap;
-  /* ensure label itself won’t wrap */
   overflow: hidden;
-  /* prevent spillover */
   text-overflow: ellipsis;
-  /* ellipsis if container forces smaller width */
 }
-
-/* Item row base layout hook (intentionally minimal) */
 
 /* Toolbar button sizing: make all action buttons same height */
 .toolbar .btn {
   height: 40px;
-  /* uniform height */
   padding: 8px 12px;
-  /* match dropdown padding */
   line-height: 24px;
-  /* consistent line-height with toggles */
   display: inline-flex;
-  /* center icon/text */
   align-items: center;
 }
 
-/* Default toolbar icon size and spacing */
+/* Default toolbar icon size */
 .toolbar .btn img {
   width: 24px;
   height: 24px;
 }
 
-/* Provide default gap between icon and text for timeseries */
-#btn-switch-graphs img {
-  margin-right: 4px;
-}
-
-/* Fix action button widths so labels don't resize buttons */
-#btn-switch-graphs {
-  width: 130px;
-  /* enough space for both 'Timeseries' and 'Treemap' */
-  justify-content: center;
-  /* center icon and text within fixed width */
-}
-
 #btn-switch-data-language {
   width: 50px;
-  /* consistent width for RU/EN */
   justify-content: center;
 }
 
@@ -131,7 +90,7 @@
   justify-content: space-between;
 }
 
-/* Medium screens: wrap action buttons onto a second row, left-aligned with the dropdowns */
+/* Medium screens: wrap action buttons onto a second row */
 @media (max-width: 1500px) {
   .toolbar-body {
     flex-wrap: wrap;
@@ -139,9 +98,8 @@
   }
 }
 
-/* Optional: narrower items on small screens */
+/* Narrower items on small screens */
 @media (max-width: 480px) {
-
   #menu-budget .dropdown-toggle,
   #menu-viewby .dropdown-toggle,
   #menu-period .dropdown-toggle,
@@ -159,59 +117,41 @@
 
 /* Responsive: stack menus and action buttons vertically on narrow screens */
 @media (max-width: 600px) {
-
-  /* Make the whole toolbar vertical */
   .toolbar {
     display: flex;
     flex-direction: column;
-    /* stack rows */
     align-items: stretch;
-    /* full-width children */
     gap: 8px;
-    /* spacing between rows */
   }
 
   .toolbar .toolbar-group {
     display: flex;
     flex-direction: column;
-    /* stack group items */
     width: 100%;
     gap: 6px;
   }
 
-  /* Keep action buttons in a horizontal row that can wrap */
   .toolbar .toolbar-actions {
     display: flex;
-    flex-direction: row;
-    /* horizontal buttons on narrow screens */
+    flex-direction: row; /* override .toolbar-group's column direction */
     flex-wrap: wrap;
-    /* allow wrapping to next line */
     align-items: center;
     justify-content: center;
-    /* center action buttons on narrow screens */
     gap: 6px;
-    /* tight spacing for compactness */
     width: 100%;
   }
 
-  /*
-    Make each control take a full row.
-    We target the component wrappers by id and the action buttons.
-  */
   #menu-budget,
   #menu-viewby,
   #menu-period,
   #menu-spending-type,
   #menu-unit {
     display: block;
-    /* force block to stack */
     width: 100%;
-    /* full width rows */
     margin: 6px 0;
-    /* comfortable vertical spacing */
   }
 
-  /* Ensure dropdown triggers stretch to full width and ignore prior max-width */
+  /* Dropdown triggers stretch to full width on mobile */
   #menu-budget .dropdown-toggle,
   #menu-viewby .dropdown-toggle,
   #menu-period .dropdown-toggle,
@@ -219,14 +159,10 @@
   #menu-unit .dropdown-toggle {
     width: 100%;
     min-width: 100%;
-    /* keep all toggles full width in stacked layout */
     max-width: none;
-    /* override earlier max-width constraints */
     justify-content: space-between;
-    /* keep caret aligned to the right */
   }
 
-  /* Match dropdown list width to its trigger for consistency on mobile */
   #menu-budget .dropdown-menu,
   #menu-viewby .dropdown-menu,
   #menu-period .dropdown-menu,
@@ -236,14 +172,11 @@
     max-width: 100%;
   }
 
-  /* Compact button sizing and layout on mobile */
   .toolbar .toolbar-actions .btn {
     padding: 4px 8px;
-    /* smaller buttons */
     line-height: 1.2;
   }
 
-  /* Ensure action buttons don't stretch full width */
   .toolbar .toolbar-actions #btn-switch-graphs,
   .toolbar .toolbar-actions #btn-share-link,
   .toolbar .toolbar-actions #btn-download-image,
@@ -255,24 +188,19 @@
     justify-content: center;
   }
 
-  /* Slightly smaller icons on mobile */
   .toolbar .toolbar-actions img {
     width: 1.5em;
     height: 1.5em;
   }
 
-  /* Hide timeseries label to save space on narrow screens */
   #btn-switch-graphs .btn-label {
     display: none;
   }
 
   #btn-switch-graphs img {
     margin-right: 0 !important;
-    /* remove gap when label hidden */
   }
 }
-
-/* Button layout rules only; text color moved to typography.css */
 
 /* Treemap loading spinner */
 @keyframes treemap-spin {
