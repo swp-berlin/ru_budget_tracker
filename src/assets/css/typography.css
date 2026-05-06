@@ -92,3 +92,31 @@
     font-family: 'Source Sans 3';
     /* inline SVG icons */
 }
+
+/* Disabled toolbar buttons: gray background, muted icon/text, no pointer */
+.toolbar .btn:disabled,
+.toolbar .btn.disabled {
+    background-color: #e9ecef !important;
+    border-color: #dee2e6 !important;
+    color: #adb5bd !important;
+    opacity: 1;
+    cursor: not-allowed;
+    pointer-events: auto;
+}
+
+.toolbar .btn:disabled *,
+.toolbar .btn.disabled * {
+    color: #adb5bd !important;
+    fill: #adb5bd !important;
+}
+
+/* Disabled toolbar dropdowns */
+.toolbar .dropdown.disabled > .dropdown-toggle,
+.toolbar .dropdown > .dropdown-toggle:disabled {
+    background-color: #e9ecef !important;
+    border-color: #dee2e6 !important;
+    color: #adb5bd !important;
+    opacity: 1;
+    cursor: not-allowed;
+    pointer-events: auto;
+}

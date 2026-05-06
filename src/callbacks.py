@@ -559,3 +559,21 @@ clientside_callback(
     State("store-spending-type", "data"),
     prevent_initial_call=True,
 )
+
+
+# Disable share/download buttons and filters that don't apply on the about page.
+@callback(
+    Output("btn-download-image", "disabled"),
+    Output("btn-download-csv", "disabled"),
+    Output("btn-share-link", "disabled"),
+    Output("btn-switch-data-language", "disabled"),
+    Output("menu-budget", "disabled"),
+    Output("menu-viewby", "disabled"),
+    Output("menu-spending-type", "disabled"),
+    Output("menu-unit", "disabled"),
+    Input("url", "pathname"),
+)
+def toggle_action_buttons_disabled(pathname: str | None) -> tuple[bool, ...]:
+    """Disable buttons and dropdowns that don't apply on the about page."""
+    on_about = pathname == get_relative_path("/about")
+    return (on_about,) * 8
