@@ -96,6 +96,8 @@ class TimeseriesTransformer:
             )
             if corresponding_budget is None:
                 continue
+            if budget["total_value"] is None:
+                continue
 
             multiplicator: float = budget_config.law_total_value_multiplier
             if corresponding_budget["type"] == "REPORT":
