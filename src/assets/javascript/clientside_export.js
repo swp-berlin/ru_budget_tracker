@@ -1,6 +1,10 @@
 window.dash_clientside = window.dash_clientside || {};
 window.dash_clientside.clientside = window.dash_clientside.clientside || {};
 
+// Font used in all exported images. Change here to update every occurrence.
+const EXPORT_FONT = 'Source Sans 3';
+const EXPORT_FONT_FILE = 'assets/fonts/Source_Sans_3/SourceSans3-VariableFont_wght.ttf';
+
 Object.assign(window.dash_clientside.clientside, {
 
   // ---------------------------------------------------------------------------
@@ -230,7 +234,7 @@ Object.assign(window.dash_clientside.clientside, {
       //           We use a relative URL so this works regardless of what path
       //           the Dash app is mounted on (e.g. /ru-budget-tracker/).
       // ------------------------------------------------------------------
-      const fontLoadPromise = fetch('assets/fonts/Source_Sans_3/SourceSans3-VariableFont_wght.ttf')
+      const fontLoadPromise = fetch(EXPORT_FONT_FILE)
         .then((r) => r.arrayBuffer())
         .then((buf) => {
           // Convert the binary font data to a base64 string.
@@ -247,8 +251,8 @@ Object.assign(window.dash_clientside.clientside, {
           // Return a CSS block that (a) registers the font via @font-face and
           // (b) forces every element in the SVG to use it.
           return (
-            `@font-face { font-family: "Source Sans 3"; src: url("data:font/truetype;base64,${b64}") format("truetype"); font-weight: 100 900; }` +
-            '* { font-family: "Source Sans 3", sans-serif !important; }'
+            `@font-face { font-family: "${EXPORT_FONT}"; src: url("data:font/truetype;base64,${b64}") format("truetype"); font-weight: 100 900; }` +
+            `* { font-family: "${EXPORT_FONT}", sans-serif !important; }`
           );
         })
         .then((fontCss) => {
@@ -262,8 +266,8 @@ Object.assign(window.dash_clientside.clientside, {
           // canvas text overlays (title, watermark, etc.) render correctly.
           return document.fonts?.load
             ? Promise.all([
-                document.fonts.load('400 12px "Source Sans 3"'),
-                document.fonts.load('600 12px "Source Sans 3"'),
+                document.fonts.load(`400 12px "${EXPORT_FONT}"`),
+                document.fonts.load(`600 12px "${EXPORT_FONT}"`),
               ])
             : new Promise((resolve) => setTimeout(resolve, 500));
         });
@@ -305,7 +309,7 @@ Object.assign(window.dash_clientside.clientside, {
           // Chart title — centred in the header strip above the SVG.
           if (rawTitle) {
             const titleSize = titleFontPx * scale;
-            ctx.font = `${titleSize}px "Source Sans 3", sans-serif`;
+            ctx.font = `${titleSize}px "${EXPORT_FONT}", sans-serif`;
             ctx.fillStyle = fl.title?.font?.color || textColor;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
@@ -326,7 +330,7 @@ Object.assign(window.dash_clientside.clientside, {
           if (rawYTitle) {
             const axisSize = axisFontPx * scale;
             ctx.save();
-            ctx.font = `${axisSize}px "Source Sans 3", sans-serif`;
+            ctx.font = `${axisSize}px "${EXPORT_FONT}", sans-serif`;
             ctx.fillStyle = fl.yaxis?.title?.font?.color || textColor;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
@@ -347,7 +351,7 @@ Object.assign(window.dash_clientside.clientside, {
             const swatchGap = 5 * scale;
             const itemGap = 20 * scale;
 
-            ctx.font = `${legendSize}px "Source Sans 3", sans-serif`;
+            ctx.font = `${legendSize}px "${EXPORT_FONT}", sans-serif`;
 
             const items = legendTraces.map((t) => ({
               label: t.name,
@@ -378,7 +382,7 @@ Object.assign(window.dash_clientside.clientside, {
           }
 
           // Watermark in the footer strip.
-          ctx.font = `${12 * scale}px "Source Sans 3", sans-serif`;
+          ctx.font = `${12 * scale}px "${EXPORT_FONT}", sans-serif`;
           ctx.fillStyle = '#333333';
           ctx.textAlign = 'right';
           ctx.textBaseline = 'alphabetic';
