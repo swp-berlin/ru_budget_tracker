@@ -286,8 +286,8 @@ def layout(**other_kwargs) -> html.Div:
     """
 
     return html.Div(
-        # Graph to display the treemap
-        [
+        className="plot-page",
+        children=[
             # Hidden timeseries graph keeps cross-page callbacks satisfied.
             dcc.Graph(
                 id="timeseries-graph",

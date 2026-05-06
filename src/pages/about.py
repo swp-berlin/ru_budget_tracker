@@ -316,5 +316,5 @@ layout = html.Div(
         ),
         # Placeholder for any additional root-level elements
         html.Div(id="moco-bx-root"),
-    ]
+    ],
 )
