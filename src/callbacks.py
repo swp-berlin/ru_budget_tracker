@@ -511,15 +511,7 @@ clientside_callback(
     prevent_initial_call=True,
 )
 
-# Constrain treemap text within tile boundaries via SVG textLength.
-clientside_callback(
-    ClientsideFunction(namespace="clientside", function_name="applyTreemapTextInset"),
-    Output("dummy-output", "className"),
-    Input("treemap-graph", "figure", allow_optional=True),
-)
-
 # Restore treemap zoom to the previously selected node after a figure update.
-# Uses Plotly.restyle so the MutationObserver in applyTreemapTextInset keeps working.
 clientside_callback(
     ClientsideFunction(namespace="clientside", function_name="restoreTreemapZoom"),
     Output("dummy-restore-zoom", "children"),

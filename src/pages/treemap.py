@@ -109,9 +109,7 @@ def transform_treemap_data(
     budget_type: BudgetTypeLiteral = next(
         (row["budget_type"] for row in dimensions if row["budget_type"] in ["LAW", "REPORT"]), "LAW"
     )
-    transformer = TreemapTransformer(
-        dimensions, programs, classified, spending_type=spending_type, char_limit=45
-    )
+    transformer = TreemapTransformer(dimensions, programs, classified, spending_type=spending_type)
     flat_rows = fetch_treemap_hierarchy(budget_id)
     if flat_rows:
         df = transformer.transform_from_flat(flat_rows)
@@ -192,6 +190,7 @@ def generate_figure(
         ids=new_ids,
         parents=new_parents,
         marker_colors=colors,
+        marker_pad=dict(t=25, l=5, r=5, b=5),
         customdata=list(
             zip(
                 [round(p, 2) for p in parent_percentages],
@@ -200,13 +199,13 @@ def generate_figure(
         ),
         hovertemplate="<br>".join(
             [
-                "%{label}",
-                "%{value:,.1f}" + unit_config.map[unit],
-                "%{customdata[0]:.1f}%" + " of parent",
-                "%{customdata[1]:.1f}%" + " of total",
+                "<b>%{label}</b>",
+                "<br>%{value:,.1f}" + unit_config.map[unit],
+                "<i>%{customdata[0]:.1f}%" + " of parent</i>",
+                "<i>%{customdata[1]:.1f}%" + " of total</i>",
             ]
         ),
-        texttemplate="%{label}<br>%{value:,.1f}" + unit_config.map[unit],
+        texttemplate="%{label}<br><sub>%{value:,.1f}" + unit_config.map[unit] + "</sub>",
     )
 
     # Layout adjustments
