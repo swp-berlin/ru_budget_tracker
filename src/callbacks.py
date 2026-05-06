@@ -506,20 +506,12 @@ clientside_callback(
 # Hide the timeseries spinner once the graph becomes visible.
 clientside_callback(
     ClientsideFunction(namespace="clientside", function_name="hideTimeseriesSpinner"),
-    Output("dummy-output", "accessKey"),
+    Output("dummy-output", "accessKey", allow_duplicate=True),
     Input("timeseries-graph", "figure", allow_optional=True),
     prevent_initial_call=True,
 )
 
-# Constrain treemap text within tile boundaries via SVG textLength.
-clientside_callback(
-    ClientsideFunction(namespace="clientside", function_name="applyTreemapTextInset"),
-    Output("dummy-output", "className"),
-    Input("treemap-graph", "figure", allow_optional=True),
-)
-
 # Restore treemap zoom to the previously selected node after a figure update.
-# Uses Plotly.restyle so the MutationObserver in applyTreemapTextInset keeps working.
 clientside_callback(
     ClientsideFunction(namespace="clientside", function_name="restoreTreemapZoom"),
     Output("dummy-restore-zoom", "children"),
@@ -535,6 +527,8 @@ clientside_callback(
     Input("treemap-graph", "figure", allow_optional=True),
     State("store-treemap-node-map", "data"),
     State("store-language", "data"),
+    State("store-budget-id", "data"),
+    State("store-viewby", "data"),
     prevent_initial_call=True,
 )
 
@@ -551,7 +545,9 @@ clientside_callback(
     State("store-period", "data"),
     State("store-language", "data"),
     State("store-selected-id", "data"),
-    State("store-treemap-node-map", "data"),  # compact map: {short_id: dim_id}
+    State(
+        "store-treemap-node-map", "data"
+    ),  # compact map: {short_id: {leaf: dim_id, ctx: [ancestor_dim_ids]}}
     prevent_initial_call=True,
 )
 
