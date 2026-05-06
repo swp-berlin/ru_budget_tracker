@@ -2,13 +2,6 @@ window.dash_clientside = window.dash_clientside || {};
 window.dash_clientside.clientside = window.dash_clientside.clientside || {};
 
 Object.assign(window.dash_clientside.clientside, {
-  /**
-   * Hide the treemap loading spinner once the graph style becomes visible.
-   * Safe to call on any page — checks for element existence before touching it.
-   *
-   * @param {object} style - The treemap-graph style object (used as trigger only)
-   * @returns {window.dash_clientside.no_update}
-   */
   hideTreemapSpinner: function (style) {
     var el = document.getElementById('treemap-spinner');
     if (el) el.style.display = 'none';
@@ -41,18 +34,20 @@ Object.assign(window.dash_clientside.clientside, {
     return window.dash_clientside.no_update;
   },
 
-  /**
-   * Adjusts quarterly x-axis tick labels based on viewport width.
-   *
-   * On narrow screens (< 640 px) only Q1 ticks show the year; all others are
-   * hidden. On wider screens every tick shows the full "YYYY-Qn" label.
-   * Only runs when tickInfo is non-null (REPORT budget, all periods selected).
-   *
-   * @param {number} windowWidth - Current viewport width in pixels.
-   * @param {object|null} tickInfo - {tickvals: string[]} ISO date strings for each tick, or null.
-   * @param {object} figure - Current Plotly figure object.
-   * @returns Updated figure or no_update.
-   */
+  // ---------------------------------------------------------------------------
+  // adjustTimeseriesTicks
+  //
+  // Adjusts quarterly x-axis tick labels based on viewport width.
+  //
+  // On narrow screens (< 640 px) only Q1 ticks show the year; all others are
+  // hidden. On wider screens every tick shows the full "YYYY-Qn" label.
+  // Only runs when tickInfo is non-null (REPORT budget, all periods selected).
+  //
+  // @param {number} windowWidth - Current viewport width in pixels.
+  // @param {object|null} tickInfo - {tickvals: string[]} ISO date strings, or null.
+  // @param {object} figure - Current Plotly figure object.
+  // @returns Updated figure or no_update.
+  // ---------------------------------------------------------------------------
   adjustTimeseriesTicks: function (windowWidth, tickInfo, figure) {
     if (!tickInfo || !tickInfo.tickvals || !tickInfo.tickvals.length || !figure) {
       return window.dash_clientside.no_update;
