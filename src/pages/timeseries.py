@@ -182,11 +182,9 @@ def generate_figure(
         font=dict(family="Source Sans 3"),
         legend=dict(
             orientation="h",
-            yanchor="bottom",
-            y=-0.15,
+            y=-0.15 if budget_type == "REPORT" else -0.1,
             xanchor="center",
             x=0.5,
-            maxheight=0.1,  # Comment maxheight to see legend take up 0.5 of plotting area
             title_text="",
         ),
         yaxis_title=f"{unit_label}",
@@ -219,13 +217,9 @@ def generate_figure(
         n = len(bar.x) if bar.x is not None else 0  # type: ignore
         bar.customdata = [[unit_label]] * n
         if bar.name == "OPEN":
-            bar.hovertemplate = (
-                "<b>%{x}</b><br>Value: %{y:,.1f} %{customdata[0]}<br><extra></extra>"
-            )
+            bar.hovertemplate = "<b>%{x}: OPEN</b><br>%{y:,.1f} %{customdata[0]}<br><extra></extra>"
         elif bar.name == "CLASSIFIED":
-            bar.hovertemplate = (
-                "<b>%{x}</b><br>Value: %{y:,.1f} %{customdata[0]} (CLASSIFIED)<br><extra></extra>"
-            )
+            bar.hovertemplate = f"<b>%{{x}}: {classified_label}</b><br>%{{y:,.1f}} %{{customdata[0]}}<br><extra></extra>"
             bar.name = classified_label
 
     return fig
