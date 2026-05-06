@@ -321,8 +321,8 @@ def layout(**other_kwargs) -> html.Div:
         for label, value in unit_config.options
     ]
     return html.Div(
-        # Graph to display the timeseries
-        [
+        className="plot-page",
+        children=[
             # Hidden treemap graph keeps cross-page callbacks satisfied.
             dcc.Graph(
                 id="treemap-graph", style={"display": "none", "height": "100%", "width": "100%"}
