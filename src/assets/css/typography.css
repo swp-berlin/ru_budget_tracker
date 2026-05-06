@@ -1,7 +1,8 @@
-/* Typography: text color and truncation for dropdowns and buttons
-    Using static font files from /src/assets/fonts/Source_Sans_3/static/
-    font-display: block prevents Open Sans fallback while the file loads
-    */
+/*
+Typography: text color and truncation for dropdowns and buttons
+Using static font files from /src/assets/fonts/Source_Sans_3/static/
+font-display: block prevents Open Sans fallback while the file loads
+*/
 @font-face {
     font-family: 'Source Sans 3';
     src: url('../fonts/Source_Sans_3/SourceSans3-VariableFont_wght.ttf') format('truetype');
@@ -9,7 +10,13 @@
     font-display: block;
 }
 
-
+/*
+Apply the font globally and enforce it with !important
+to override Plotly's inline styles. Those inline styles otherwise enforce
+the fallback font (Open Sans) even after Source Sans 3 loads.
+If you want to use a different font, update the @font-face declaration above
+and adjust the font-family value here and in clientsides_export.js accordingly.
+*/
 * {
   font-family: "Source Sans 3", verdana, arial, sans-serif !important;
 }
