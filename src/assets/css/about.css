@@ -1,13 +1,10 @@
 :root {
   --fg: #222;
   --muted: #666;
-  --accent: #2b6cb0;
 }
 
 body {
   margin: 0;
-  font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Arial,
-    sans-serif;
   color: var(--fg);
 }
 

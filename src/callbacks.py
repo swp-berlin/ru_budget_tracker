@@ -557,6 +557,7 @@ clientside_callback(
     State("store-budget-options", "data"),
     State("store-unit", "data"),
     State("store-spending-type", "data"),
+    State("store-period", "data"),
     prevent_initial_call=True,
 )
 

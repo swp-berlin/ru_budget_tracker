@@ -543,7 +543,8 @@ def download_timeseries_data(
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     sanitized = budget_label.replace(" ", "_").replace("/", "-")
     military = "_military" if spending_type == "MILITARY" else ""
-    filename = f"timeseries_{timestamp}_{sanitized}_{unit.lower()}{military}.csv"
+    period_suffix = f"_{period.lower()}" if period and period != "ALL" else ""
+    filename = f"timeseries_{timestamp}_{sanitized}_{unit.lower()}{military}{period_suffix}.csv"
     buf = io.BytesIO()
     pivoted.to_csv(buf, sep=";", index=False, encoding="utf-8-sig")  # utf-8-sig adds BOM for Excel
     return dcc.send_bytes(buf.getvalue(), filename)  # type: ignore
