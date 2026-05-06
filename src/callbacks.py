@@ -98,7 +98,7 @@ def update_about_button(pathname: str | None, previous_path: str | None, budget_
     Output("btn-switch-graphs", "title"),
     Input("url", "pathname"),
     Input("store-budget-id", "data"),
-    State("store-selected-id", "data"),
+    Input("store-selected-id", "data"),
     State("store-treemap-node-map", "data"),
     State("url", "search"),
 )
@@ -256,13 +256,14 @@ def select_budget_dynamic(options, clicks):
     Output("store-spending-type", "data", allow_duplicate=True),
     Output("store-unit", "data", allow_duplicate=True),
     Output("store-language", "data", allow_duplicate=True),
+    Output("store-period", "data", allow_duplicate=True),
     Input("url", "search"),
     prevent_initial_call="initial_duplicate",
 )
 def apply_filters_from_url(url_search: str | None):
     """Apply filters from URL query params on load and when the URL changes.
 
-    Recognized params: budget_id, viewby, spending_type, unit, language.
+    Recognized params: budget_id, viewby, spending_type, unit, language, period.
     Missing params leave the current store values unchanged (no_update).
     """
     if not url_search:
@@ -279,6 +280,7 @@ def apply_filters_from_url(url_search: str | None):
         spending_type = first("spending_type")
         unit = first("unit")
         language = first("language")
+        period = first("period")
 
         budget_id = int(budget_id_raw) if budget_id_raw and budget_id_raw.isdigit() else None
 
@@ -288,6 +290,7 @@ def apply_filters_from_url(url_search: str | None):
             spending_type if spending_type else no_update,
             unit if unit else no_update,
             language if language else no_update,
+            period if period else no_update,
         )
     except Exception:
         raise PreventUpdate
@@ -545,6 +548,8 @@ clientside_callback(
     State("store-viewby", "data"),
     State("store-spending-type", "data"),
     State("store-unit", "data"),
+    State("store-period", "data"),
+    State("store-language", "data"),
     State("store-selected-id", "data"),
     State("store-treemap-node-map", "data"),  # compact map: {short_id: dim_id}
     prevent_initial_call=True,

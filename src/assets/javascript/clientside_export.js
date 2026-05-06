@@ -4,7 +4,7 @@ window.dash_clientside.clientside = window.dash_clientside.clientside || {};
 Object.assign(window.dash_clientside.clientside, {
   /**
    * Build a shareable URL from current filters and selected id and copy it.
-   * Params included: budget_id, viewby, spending_type, unit, focus
+   * Params included: budget_id, viewby (treemap only), spending_type, unit, period (timeseries only), focus
    *
    * @param {number} n_clicks - Button clicks (ignored aside from triggering)
    * @param {string} pathname - Current page path, e.g., '/'
@@ -12,17 +12,22 @@ Object.assign(window.dash_clientside.clientside, {
    * @param {string} viewby
    * @param {string} spendingType
    * @param {string} unit
+   * @param {string|null} period
+   * @param {string|null} language
    * @param {string|null} selectedId
    * @returns {string} Status message in dummy output title.
    */
-  copyShareLink: function (n_clicks, pathname, budgetId, viewby, spendingType, unit, selectedId, nodeMap) {
+  copyShareLink: function (n_clicks, pathname, budgetId, viewby, spendingType, unit, period, language, selectedId, nodeMap) {
     try {
       if (!n_clicks) return 'Share not triggered';
+      const isTimeseries = pathname?.endsWith('/timeseries');
       const params = new URLSearchParams();
       if (budgetId != null) params.set('budget_id', String(budgetId));
-      if (viewby) params.set('viewby', viewby);
+      if (viewby && !isTimeseries) params.set('viewby', viewby);
       if (spendingType) params.set('spending_type', spendingType);
       if (unit) params.set('unit', unit);
+      if (period && isTimeseries) params.set('period', period);
+      if (language) params.set('language', language);
       if (selectedId) {
         // Compact nodeMap is {short_id: {leaf: dim_id, ctx: [...]}} — direct lookup by short_id.
         let focusParam = selectedId;
