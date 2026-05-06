@@ -627,6 +627,11 @@ class TimeseriesDataFetcher:
             )
         return result, budget_type
 
+    def _fetch_dimension_type(self, dimension_id: int) -> str | None:
+        stmt = select(Dimension.type).where(Dimension.id == dimension_id)
+        rows = _execute_query(stmt, unique=False)
+        return str(rows[0]["type"]) if rows else None
+
     def _fetch_chapter_original_identifier(self, dimension_id: int) -> str | None:
         """Walk up the dimension hierarchy to find the ancestor CHAPTER's original_identifier.
 
@@ -704,10 +709,13 @@ class TimeseriesDataFetcher:
                 quarterly_only=False,
                 ancestor_dim_ids=ancestor_dim_ids,
             )
-            # Also fetch TOTAL budget data for the ancestor CHAPTER so classified spending
-            # can be computed as TOTAL_chapter - open_chapter.
+            # Also fetch TOTAL budget data for the CHAPTER so classified spending
+            # can be computed as TOTAL_chapter - open_chapter. Only valid when the
+            # selected dimension IS a CHAPTER — SUBCHAPTER nodes have no classified
+            # breakdown in the data model, so using the parent chapter's TOTAL would
+            # produce a meaningless value.
             chapter_orig_id = self._fetch_chapter_original_identifier(dimension_id)
-            if chapter_orig_id:
+            if chapter_orig_id and self._fetch_dimension_type(dimension_id) == "CHAPTER":
                 total_data = self._fetch_total_law_expenses_for_chapter(chapter_orig_id)
                 return list(open_data) + list(total_data), "LAW"
             return open_data, "LAW"
