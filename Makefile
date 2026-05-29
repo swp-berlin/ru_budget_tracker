@@ -25,7 +25,8 @@ TOTALS_LAW_FILE ?= data/import_files/raw/totals/total_law_2026.csv
 	import-translations \
 	import-all-core \
 	import-all \
-	bootstrap-data
+	bootstrap-data \
+	test-frozen-db
 
 # =============================================================================
 # DATABASE MIGRATIONS
@@ -107,4 +108,8 @@ import-all: import-all-core import-translations
 
 # Reset the local database, rerun migrations, then import the full dataset.
 bootstrap-data: rebuild-db import-all
+
+# Validate a small set of frozen reference values against the final SQLite database.
+test-frozen-db:
+	uv run --group dev pytest tests/test_frozen_db.py -q
 
