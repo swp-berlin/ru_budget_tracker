@@ -38,12 +38,18 @@ make import-budget
 # Optionally filter by year:
 make import-budget years="2023 2024"
 
-# 3) Import totals (report totals or law totals) — path is required
-# Report totals (monthly budget execution, xlsx):
-make import-totals totals=data/import_files/raw/totals/total_report_2026.xlsx
+# 3) Import totals
+# Import the default report totals file (monthly budget execution, xlsx):
+make import-totals-report
 
-# Law totals (annual budget law, csv):
-make import-totals totals=data/import_files/raw/totals/total_law_2026.csv
+# Import the default law totals file (annual budget law, csv):
+make import-totals-law
+
+# Import both default totals files:
+make import-totals-all
+
+# Or import a custom totals file explicitly:
+make import-totals totals=data/import_files/raw/totals/total_report_2026.xlsx
 
 # 4) Import GDP conversion data (auto-discovers files under raw/conversion_tables/gdp/)
 make import-gdp
