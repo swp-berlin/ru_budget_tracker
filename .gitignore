@@ -19,9 +19,7 @@ wheels/
 # database files
 *_mock.db
 
-# data-files
-*.xlsx
-*.xls
+# data-binary-files
 *.pdf
 
 # Notebooks
