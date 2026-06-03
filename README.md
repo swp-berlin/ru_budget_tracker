@@ -120,7 +120,7 @@ or modify the necessary Secrets and Variables required for the deployment proces
    ```bash
    make import-fix        # fix corrupt source files first
    make import-budget     # import all budget laws and reports
-   make import-totals totals=src/data/import_files/raw/totals/total_report_2026.xlsx
+   make import-totals-all # import default report + law totals files
    make import-gdp        # GDP conversion rates
    make import-ppp        # PPP conversion rates
    make import-translations

@@ -33,7 +33,7 @@ import logging
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, noload
 from models import Budget, Dimension, Expense, ConversionRate
 from database.sessions import get_sync_session
 from parsers import (
@@ -80,25 +80,35 @@ def upsert_dimension(
     name: str,
     parent_db_id: int | None,
     name_translated: str | None = None,
+    exact_cache: Dict[tuple, "Dimension"] | None = None,
+    null_parent_cache: Dict[tuple, "Dimension"] | None = None,
 ) -> Dimension:
     """
-    Upsert dimension with special parent_id handling:
+    Upsert dimension with special parent_id handling.
+
+    When called from save_dimensions, exact_cache and null_parent_cache are
+    pre-populated from a single bulk query so no per-row DB round-trips occur.
 
     1. If exists with same parent_id → skip (return existing)
     2. If exists with parent_id=None → update to new parent_id
     3. If exists with different non-null parent_id → add new row
     """
     # First: check for exact match (same parent_id) → skip
-    exact_match = (
-        session.query(Dimension)
-        .filter_by(
-            original_identifier=original_identifier,
-            type=dim_type,
-            name=name,
-            parent_id=parent_db_id,
+    exact_key = (original_identifier, dim_type, name, parent_db_id)
+    if exact_cache is not None:
+        exact_match = exact_cache.get(exact_key)
+    else:
+        exact_match = (
+            session.query(Dimension)
+            .options(noload(Dimension.expenses))
+            .filter_by(
+                original_identifier=original_identifier,
+                type=dim_type,
+                name=name,
+                parent_id=parent_db_id,
+            )
+            .first()
         )
-        .first()
-    )
 
     if exact_match:
         logger.debug(f"Exact match found: {original_identifier} ({dim_type})")
@@ -106,23 +116,31 @@ def upsert_dimension(
 
     # Second: check for match with parent_id=None → update
     if parent_db_id is not None:
-        null_parent = (
-            session.query(Dimension)
-            .filter_by(
-                original_identifier=original_identifier,
-                type=dim_type,
-                name=name,
-                parent_id=None,
+        null_key = (original_identifier, dim_type, name)
+        if null_parent_cache is not None:
+            null_parent = null_parent_cache.get(null_key)
+        else:
+            null_parent = (
+                session.query(Dimension)
+                .options(noload(Dimension.expenses))
+                .filter_by(
+                    original_identifier=original_identifier,
+                    type=dim_type,
+                    name=name,
+                    parent_id=None,
+                )
+                .first()
             )
-            .first()
-        )
 
         if null_parent:
             logger.debug(
                 f"Updating null parent: {original_identifier} ({dim_type}) -> parent_id={parent_db_id}"
             )
             null_parent.parent_id = parent_db_id
-            session.flush()
+            if null_parent_cache is not None:
+                del null_parent_cache[null_key]
+            if exact_cache is not None:
+                exact_cache[exact_key] = null_parent
             return null_parent
 
     # Third: no match or different parent → insert new row
@@ -135,7 +153,8 @@ def upsert_dimension(
         parent_id=parent_db_id,
     )
     session.add(new_dim)
-    session.flush()
+    if exact_cache is not None:
+        exact_cache[exact_key] = new_dim
     return new_dim
 
 
@@ -159,6 +178,22 @@ def _find_parent_db_id(
     return None
 
 
+def _find_parent_db_id_in_existing(
+    parent_identifier: str,
+    expected_type: str | None,
+    existing_parent_map: Dict[tuple, Dimension],
+) -> int | None:
+    """Find parent DB id from existing database rows loaded in bulk."""
+    if expected_type is not None:
+        parent = existing_parent_map.get((parent_identifier, expected_type))
+        return parent.id if parent else None
+
+    for (orig_id, _dim_type), db_dim in existing_parent_map.items():
+        if orig_id == parent_identifier:
+            return db_dim.id
+    return None
+
+
 def save_dimensions(
     session: Session, dimensions: List[Dimension], budget_db_id: int
 ) -> Dict[tuple, Dimension]:
@@ -168,8 +203,35 @@ def save_dimensions(
     - Update if exists with parent_id=None
     - Add new row if exists with different parent_id
 
+    Bulk-fetches all potentially matching existing rows up front so the loop
+    does pure in-memory lookups instead of one SELECT per dimension.
+
     Returns: mapping of (identifier, type) -> DB dimension
     """
+    # Bulk pre-fetch: include identifiers from current dimensions and possible parent identifiers.
+    orig_ids = {
+        d.original_identifier for d in dimensions
+    }
+    orig_ids.update({str(d.parent_id) for d in dimensions if d.parent_id is not None})
+    existing_rows = (
+        session.query(Dimension)
+        .options(noload(Dimension.expenses))
+        .filter(Dimension.original_identifier.in_(orig_ids))
+        .all()
+    )
+
+    # exact_cache: (orig_id, type, name, parent_id) -> Dimension
+    exact_cache: Dict[tuple, Dimension] = {
+        (d.original_identifier, d.type, d.name, d.parent_id): d for d in existing_rows
+    }
+    # null_parent_cache: (orig_id, type, name) -> Dimension  (only rows where parent_id is None)
+    null_parent_cache: Dict[tuple, Dimension] = {
+        (d.original_identifier, d.type, d.name): d for d in existing_rows if d.parent_id is None
+    }
+    existing_parent_map: Dict[tuple, Dimension] = {
+        (d.original_identifier, d.type): d for d in existing_rows
+    }
+
     dim_map: Dict[tuple, Dimension] = {}
 
     # First pass: dimensions without parents
@@ -184,35 +246,65 @@ def save_dimensions(
             name=dim.name,
             parent_db_id=None,
             name_translated=dim.name_translated,
+            exact_cache=exact_cache,
+            null_parent_cache=null_parent_cache,
         )
         dim_map[(dim.original_identifier, dim.type)] = db_dim
 
-    # Second pass: dimensions with parents
-    for dim in dimensions:
-        if dim.parent_id is None:
-            continue
+    # Flush once to assign DB ids to newly inserted parent rows before children reference them.
+    session.flush()
 
-        # dim.parent_id is a string identifier (e.g., "01")
-        # We need to find the DB id of that parent
-        expected_parent_type = (
-            "PROGRAM" if dim.type == "PROGRAM" else "CHAPTER" if dim.type == "SUBCHAPTER" else None
-        )
-        parent_db_id = _find_parent_db_id(str(dim.parent_id), expected_parent_type, dim_map)
+    # Second pass: dimensions with parents. Iterate until no progress so order does not matter.
+    pending = [d for d in dimensions if d.parent_id is not None]
+    unresolved_warned: set[tuple] = set()
 
-        if parent_db_id is None:
-            logger.warning(
-                f"Parent '{dim.parent_id}' not found for {dim.original_identifier} ({dim.type})"
+    while pending:
+        progressed = False
+        next_pending: List[Dimension] = []
+
+        for dim in pending:
+            expected_parent_type = (
+                "PROGRAM"
+                if dim.type == "PROGRAM"
+                else "CHAPTER" if dim.type == "SUBCHAPTER" else None
             )
+            parent_db_id = _find_parent_db_id(str(dim.parent_id), expected_parent_type, dim_map)
 
-        db_dim = upsert_dimension(
-            session,
-            original_identifier=dim.original_identifier,
-            dim_type=dim.type,
-            name=dim.name,
-            parent_db_id=parent_db_id,
-            name_translated=dim.name_translated,
-        )
-        dim_map[(dim.original_identifier, dim.type)] = db_dim
+            if parent_db_id is None:
+                parent_db_id = _find_parent_db_id_in_existing(
+                    str(dim.parent_id), expected_parent_type, existing_parent_map
+                )
+
+            if parent_db_id is None:
+                next_pending.append(dim)
+                continue
+
+            db_dim = upsert_dimension(
+                session,
+                original_identifier=dim.original_identifier,
+                dim_type=dim.type,
+                name=dim.name,
+                parent_db_id=parent_db_id,
+                name_translated=dim.name_translated,
+                exact_cache=exact_cache,
+                null_parent_cache=null_parent_cache,
+            )
+            dim_map[(dim.original_identifier, dim.type)] = db_dim
+            progressed = True
+
+        if not progressed:
+            for dim in next_pending:
+                warn_key = (dim.original_identifier, dim.type, dim.parent_id)
+                if warn_key in unresolved_warned:
+                    continue
+                unresolved_warned.add(warn_key)
+                logger.warning(
+                    f"Parent '{dim.parent_id}' not found for {dim.original_identifier} ({dim.type})"
+                )
+            break
+
+        session.flush()
+        pending = next_pending
 
     session.flush()
     logger.info(f"Saved {len(dim_map)} dimensions")
@@ -257,6 +349,7 @@ def get_chapter_dimensions(session: Session, chapter_codes: List[str]) -> List[D
     """
     all_chapters = (
         session.query(Dimension)
+        .options(noload(Dimension.expenses))
         .filter(
             Dimension.type == "CHAPTER",
             Dimension.original_identifier.in_(chapter_codes),
