@@ -178,7 +178,7 @@ def generate_figure(
     # Layout adjustments
     # Change font to Source Sans 3 and make it wrapped
     fig.update_layout(
-        margin=dict(t=0, l=80, r=60, b=90, autoexpand=True),
+        margin=dict(t=0, l=70, r=50, b=90, autoexpand=True),
         font=dict(family="Source Sans 3"),
         legend=dict(
             orientation="h",
