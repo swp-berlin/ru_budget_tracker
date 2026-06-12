@@ -273,9 +273,9 @@ def _format_timeseries_title(
             node_label = node_label.split(" - ", 1)[1]
         if "<br>" in node_label:
             node_label = node_label.replace("<br>", " ")
-        title = f"Russian Budget: {node_label}"
+        title = f"Russian budget: {node_label}"
     else:
-        title = "Russian Budget Spending"
+        title = "Russian budget spending"
 
     # Append a military suffix when that filter is active.
     if spending_type == "MILITARY":

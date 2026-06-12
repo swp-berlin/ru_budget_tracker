@@ -178,7 +178,7 @@ class TreemapTransformer:
     def _create_dataframe(
         self,
         hierarchy: dict[str, dict[str, int | float | str]],
-        root_name: str = "Federal Budget",
+        root_name: str = "Federal budget",
     ) -> pd.DataFrame:
         """Build the treemap lists (names, parents, values, metadata) from hierarchy.
 
@@ -241,26 +241,26 @@ class TreemapTransformer:
                 classified_entry: dict[str, int | float | str | None] = {
                     "VALUE": chapter.classified_spending,
                     "BUDGET_TYPE": "CLASSIFIED",
-                    "ROOT": "Federal Budget",
+                    "ROOT": "Federal budget",
                     "IS_MILITARY": None,
                     "MINISTRY_DIM_ID": CLASSIFIED_PARENT_ID,
                     "MINISTRY_ORIG_ID": "CLASSIFIED_PARENT",
-                    "MINISTRY_NAME": "Classified Spending",
-                    "MINISTRY_NAME_TRANSLATED": "Classified Spending",
+                    "MINISTRY_NAME": "Classified spending",
+                    "MINISTRY_NAME_TRANSLATED": "Classified spending",
                     "CHAPTER_DIM_ID": chapter.dimension_id,
                     "CHAPTER_ORIG_ID": orig_id,
                     "CHAPTER_NAME": chapter_name,
                     "CHAPTER_NAME_TRANSLATED": chapter_name_translated,
                     "SUBCHAPTER_DIM_ID": synthetic_id,
                     "SUBCHAPTER_ORIG_ID": f"CLASSIFIED_{orig_id}",
-                    "SUBCHAPTER_NAME": "Classified Spending",
-                    "SUBCHAPTER_NAME_TRANSLATED": "Classified Spending",
+                    "SUBCHAPTER_NAME": "Classified spending",
+                    "SUBCHAPTER_NAME_TRANSLATED": "Classified spending",
                 }
                 for idx in range(0, 3):
                     classified_entry[f"PROGRAM_{idx}_DIM_ID"] = synthetic_id
                     classified_entry[f"PROGRAM_{idx}_ORIG_ID"] = f"CLASSIFIED_{orig_id}"
-                    classified_entry[f"PROGRAM_{idx}_NAME"] = "Classified Spending"
-                    classified_entry[f"PROGRAM_{idx}_NAME_TRANSLATED"] = "Classified Spending"
+                    classified_entry[f"PROGRAM_{idx}_NAME"] = "Classified spending"
+                    classified_entry[f"PROGRAM_{idx}_NAME_TRANSLATED"] = "Classified spending"
 
                 new_entries.append(classified_entry)
 
@@ -272,20 +272,20 @@ class TreemapTransformer:
                 value = cs.military_classified
                 share_pct = cs.military_classified_share * 100
                 ministry_name = _wrap_label(
-                    f"Classified Spending (estimated as {share_pct:.1f}%"
+                    f"Classified spending (estimated as {share_pct:.1f}%"
                     f" of total classified spending)",
                     self.limit,
                 )
             elif cs.total_classified > 0:
                 value = cs.total_classified
-                ministry_name = "Classified Spending"
+                ministry_name = "Classified spending"
             else:
                 return df
 
             root_row: dict[str, int | float | str | None] = {
                 "VALUE": value,
                 "BUDGET_TYPE": "CLASSIFIED",
-                "ROOT": "Federal Budget",
+                "ROOT": "Federal budget",
                 "MINISTRY_DIM_ID": CLASSIFIED_PARENT_ID,
                 "MINISTRY_ORIG_ID": "CLASSIFIED_PARENT",
                 "MINISTRY_NAME": ministry_name,
@@ -312,7 +312,7 @@ class TreemapTransformer:
         """Fast path: build DataFrame from pre-computed table rows, skipping networkx."""
         df = pd.DataFrame(flat_rows)
         df = df.drop(columns=["id", "expense_id", "budget_id"], errors="ignore")
-        df["ROOT"] = "Federal Budget"
+        df["ROOT"] = "Federal budget"
         df["VALUE"] = df["VALUE"].astype(float)
         df = self._add_classified_expenses(df)
         return df
