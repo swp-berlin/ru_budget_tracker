@@ -178,11 +178,13 @@ def generate_figure(
     # Layout adjustments
     # Change font to Source Sans 3 and make it wrapped
     fig.update_layout(
-        margin=dict(t=0, l=80, r=60, b=60, autoexpand=True),
+        margin=dict(t=0, l=80, r=60, b=90, autoexpand=True),
         font=dict(family="Source Sans 3"),
         legend=dict(
             orientation="h",
-            y=-0.15 if budget_type == "REPORT" else -0.1,
+            yref="container",
+            y=0.01,
+            yanchor="bottom",
             xanchor="center",
             x=0.5,
             title_text="",
@@ -207,7 +209,13 @@ def generate_figure(
         )
     else:
         fig.update_layout(
-            xaxis=dict(hoverformat="%Y", tickangle=-45),
+            xaxis=dict(
+                hoverformat="%Y",
+                tickformat="%Y",
+                tickangle=-45,
+                dtick="M12",
+                tick0="2000-01-01",
+            )
         )
 
     # Set custom hover templates per trace, matched by name for robustness.
