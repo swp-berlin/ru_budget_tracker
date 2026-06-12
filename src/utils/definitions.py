@@ -47,9 +47,9 @@ class ViewByConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     options: list[tuple[str, str]] = [
-        ("Ministry", "MINISTRY"),
-        ("Chapter", "CHAPTER"),
-        ("Program", "PROGRAM"),
+        ("View by ministry", "MINISTRY"),
+        ("View by chapter", "CHAPTER"),
+        ("View by program", "PROGRAM"),
     ]
 
     @computed_field  # type: ignore[prop-decorator]
