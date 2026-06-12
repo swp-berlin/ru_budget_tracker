@@ -70,19 +70,6 @@ toolbar = html.Div(
         html.Div(id="dummy-restore-zoom", style={"display": "none"}),
         dbc.Stack(
             [
-                # Logo image without button styling - only the image is visible
-                html.A(
-                    [
-                        html.Img(
-                            src=get_asset_url("logo/logo.svg"),
-                            style={"height": "2em"},
-                            alt="Logo of Stiftung Wissenschaft und Politik",
-                        ),
-                    ],
-                    style={"marginRight": "20px", "alignSelf": "center"},
-                    href=get_relative_path("/"),
-                    title="Go to Home Page",
-                ),
                 html.Div(
                     [
                         dbc.Stack(
