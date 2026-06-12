@@ -261,7 +261,7 @@ def serve_layout():
             toolbar,
             html.Div(
                 id="timeseries-title",
-                style={"marginTop": "10px", "marginBottom": "10px"},
+                style={"marginTop": "0.5rem", "marginBottom": "0.5rem"},
             ),
             html.Div(page_container, id="pages-wrapper"),
         ],
