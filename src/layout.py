@@ -245,7 +245,7 @@ toolbar = html.Div(
             },
             class_name="toolbar",
         ),
-        dbc.Row(html.Hr()),
+        dbc.Row(html.Hr(style={"margin": "0"})),
     ]
 )
 
