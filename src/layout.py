@@ -259,7 +259,10 @@ def serve_layout():
         id="app-layout",
         children=[
             toolbar,
-            html.Div(id="timeseries-title"),
+            html.Div(
+                id="timeseries-title",
+                style={"marginTop": "10px", "marginBottom": "10px"},
+            ),
             html.Div(page_container, id="pages-wrapper"),
         ],
     )

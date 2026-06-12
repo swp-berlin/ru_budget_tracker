@@ -178,7 +178,7 @@ def generate_figure(
     # Layout adjustments
     # Change font to Source Sans 3 and make it wrapped
     fig.update_layout(
-        margin=dict(t=50, l=80, r=60, b=60, autoexpand=True),
+        margin=dict(t=0, l=80, r=60, b=60, autoexpand=True),
         font=dict(family="Source Sans 3"),
         legend=dict(
             orientation="h",
@@ -271,7 +271,12 @@ def _resolve_selected_path(
 def _format_timeseries_title(
     resolved_path: str | None,
     spending_type: SpendingTypeLiteral,
+    budget_type: BudgetTypeLiteral,
 ) -> str:
+    if budget_type == "LAW":
+        title = "Russian federal budget law (spending)"
+    else:
+        title = "Russian federal budget spending"
     if resolved_path:
         node_label = resolved_path.split("/")[-1]
         # Strip the leading original identifier prefix like "123 - " for cleaner titles.
@@ -279,9 +284,7 @@ def _format_timeseries_title(
             node_label = node_label.split(" - ", 1)[1]
         if "<br>" in node_label:
             node_label = node_label.replace("<br>", " ")
-        title = f"Russian budget: {node_label}"
-    else:
-        title = "Russian budget spending"
+        title = f"{title}: {node_label}"
 
     # Append a military suffix when that filter is active.
     if spending_type == "MILITARY":
@@ -436,7 +439,7 @@ def update_figure_from_filters(
         ancestor_dim_ids=ancestor_dim_ids,
     )
     # Build a title from the resolved path so the label matches the current language.
-    title = _format_timeseries_title(resolved_path, spending_type)
+    title = _format_timeseries_title(resolved_path, spending_type, budget_type)
 
     # Provide tick metadata for the clientside responsive-tick callback.
     # Only needed for REPORT budgets shown with all periods (many quarterly ticks).
