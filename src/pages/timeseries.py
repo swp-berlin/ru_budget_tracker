@@ -211,13 +211,19 @@ def generate_figure(
         )
 
     # Set custom hover templates per trace, matched by name for robustness.
-    classified_label = "CLASSIFIED (EST.)" if spending_type == "MILITARY" else "CLASSIFIED"
+    classified_label = (
+        "Classified spending (est.)" if spending_type == "MILITARY" else "Classified spending"
+    )
+    open_label = "Open spending"
     for trace in fig.data:
         bar = cast(go.Bar, trace)
         n = len(bar.x) if bar.x is not None else 0  # type: ignore
         bar.customdata = [[unit_label]] * n
         if bar.name == "OPEN":
-            bar.hovertemplate = "<b>%{x}: OPEN</b><br>%{y:,.1f} %{customdata[0]}<br><extra></extra>"
+            bar.hovertemplate = (
+                f"<b>%{{x}}: {open_label}</b><br>%{{y:,.1f}} %{{customdata[0]}}<br><extra></extra>"
+            )
+            bar.name = open_label
         elif bar.name == "CLASSIFIED":
             bar.hovertemplate = f"<b>%{{x}}: {classified_label}</b><br>%{{y:,.1f}} %{{customdata[0]}}<br><extra></extra>"
             bar.name = classified_label
