@@ -4,7 +4,7 @@
     flex-direction: column;
     height: 100vh;
     overflow: hidden;
-    min-width: 23   0px;
+    min-width: 230px;
 }
 
 #app-layout:has(.plot-page) #pages-wrapper {
