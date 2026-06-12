@@ -72,16 +72,17 @@ toolbar = html.Div(
             [
                 html.Div(
                     [
-                        dbc.Stack(
-                            [
+                        dbc.DropdownMenu(
+                            label="Filters",
+                            id="menu-filters",
+                            children=[
                                 # Budget dataset menu
                                 dbc.DropdownMenu(
                                     label="Budget",
                                     children=[],  # will be set by callback
                                     id="menu-budget",
                                     direction="down",
-                                    class_name="me-2 scroll-menu",
-                                    # Make the dropdown list scrollable to handle many budgets
+                                    class_name="scroll-menu",
                                 ),
                                 # View-by menu (shown on treemap, hidden on timeseries)
                                 dbc.DropdownMenu(
@@ -89,7 +90,6 @@ toolbar = html.Div(
                                     children=viewby_items,
                                     id="menu-viewby",
                                     direction="down",
-                                    class_name="me-2",
                                     style={},  # controlled by callback
                                 ),
                                 # Period menu (for timeseries, hidden on treemap)
@@ -98,7 +98,6 @@ toolbar = html.Div(
                                     children=period_items,
                                     id="menu-period",
                                     direction="down",
-                                    class_name="me-2",
                                     style={"display": "none"},  # controlled by callback
                                 ),
                                 # Spending type menu
@@ -107,7 +106,6 @@ toolbar = html.Div(
                                     children=spending_type_items,
                                     id="menu-spending-type",
                                     direction="down",
-                                    class_name="me-2",
                                 ),
                                 # Unit menu
                                 dbc.DropdownMenu(
@@ -115,11 +113,8 @@ toolbar = html.Div(
                                     children=unit_items,
                                     id="menu-unit",
                                     direction="down",
-                                    class_name="me-2",
                                 ),
                             ],
-                            direction="horizontal",
-                            class_name="toolbar-group",
                         ),
                         # Stack for action buttons on the right
                         dbc.Stack(

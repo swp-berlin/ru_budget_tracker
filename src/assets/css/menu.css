@@ -90,92 +90,113 @@
   justify-content: space-between;
 }
 
-/* Medium screens: wrap action buttons onto a second row */
-@media (max-width: 1500px) {
-  .toolbar-body {
-    flex-wrap: wrap;
-    row-gap: 8px;
+.toolbar .toolbar-actions {
+  margin-left: auto;
+}
+
+/* Filters toggle: same dimensions as the other dropdown toggles */
+#menu-filters .dropdown-toggle {
+  height: 40px;
+  padding: 8px 12px;
+  width: 150px;
+  max-width: 150px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  justify-content: center;
+  gap: 6px;
+}
+
+/* Desktop (≥1061px): hide Filters toggle, show panel as inline flex row */
+@media (min-width: 1061px) {
+  #menu-filters > .dropdown-toggle {
+    display: none !important;
+  }
+  #menu-filters > .dropdown-menu {
+    display: flex !important;
+    flex-direction: row;
+    position: static !important;
+    transform: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    background: transparent !important;
+    gap: 4px;
   }
 }
 
-/* Narrower items on small screens */
-@media (max-width: 480px) {
-  #menu-budget .dropdown-toggle,
-  #menu-viewby .dropdown-toggle,
-  #menu-period .dropdown-toggle,
-  #menu-spending-type .dropdown-toggle,
-  #menu-unit .dropdown-toggle,
-  #menu-budget .dropdown-menu,
-  #menu-viewby .dropdown-menu,
-  #menu-period .dropdown-menu,
-  #menu-spending-type .dropdown-menu,
-  #menu-unit .dropdown-menu {
-    max-width: 180px;
-    min-width: 180px;
-  }
-}
-
-/* Responsive: stack menus and action buttons vertically on narrow screens */
-@media (max-width: 600px) {
-  .toolbar {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
-  }
-
-  .toolbar .toolbar-group {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    gap: 6px;
-  }
-
-  .toolbar .toolbar-actions {
-    display: flex;
-    flex-direction: row; /* override .toolbar-group's column direction */
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
+/* Inside the Filters panel (≤1060px): stack inner dropdowns full-width */
+@media (max-width: 1060x) {
+  #menu-filters .dropdown-menu > .dropdown {
     width: 100%;
   }
-
-  #menu-budget,
-  #menu-viewby,
-  #menu-period,
-  #menu-spending-type,
-  #menu-unit {
-    display: block;
+  #menu-filters .dropdown-menu > .dropdown .dropdown-toggle {
     width: 100%;
-    margin: 6px 0;
-  }
-
-  /* Dropdown triggers stretch to full width on mobile */
-  #menu-budget .dropdown-toggle,
-  #menu-viewby .dropdown-toggle,
-  #menu-period .dropdown-toggle,
-  #menu-spending-type .dropdown-toggle,
-  #menu-unit .dropdown-toggle {
-    width: 100%;
-    min-width: 100%;
     max-width: none;
     justify-content: space-between;
   }
-
-  #menu-budget .dropdown-menu,
-  #menu-viewby .dropdown-menu,
-  #menu-period .dropdown-menu,
-  #menu-spending-type .dropdown-menu,
-  #menu-unit .dropdown-menu {
+  #menu-filters .dropdown-menu > .dropdown .dropdown-menu {
     min-width: 100%;
-    max-width: 100%;
+  }
+}
+
+
+/* Narrow screens (≤640px): stack Filters dropdown and action buttons vertically */
+@media (max-width: 620px) {
+
+  #menu-filters {
+    height: 100%;
   }
 
-  .toolbar .toolbar-actions .btn {
-    padding: 4px 8px;
-    line-height: 1.2;
+  .toolbar .toolbar-actions {
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
   }
+
+  .toolbar .toolbar-actions #btn-switch-graphs,
+  .toolbar .toolbar-actions #btn-share-link,
+  .toolbar .toolbar-actions #btn-download-image,
+  .toolbar .toolbar-actions #btn-download-csv,
+  .toolbar .toolbar-actions #btn-about,
+  .toolbar .toolbar-actions #btn-switch-data-language {
+    width: 50px;
+    justify-content: center;
+  }
+
+  #btn-switch-graphs .btn-label {
+    display: none;
+  }
+
+  #btn-switch-graphs img {
+    margin-right: 0 !important;
+  }
+}
+
+/* Narrow screens (≤520px): 2-column grid — Filters left, 3×2 button grid right */
+@media (max-width: 520px) {
+  .toolbar-body {
+    display: grid;
+    grid-template-columns: 150px 1fr;
+    gap: 8px;
+    align-items: stretch;
+  }
+
+  #menu-filters {
+    display: flex;
+  }
+
+  #menu-filters > .dropdown-toggle {
+    flex: 1;
+    height: auto !important;
+  }
+
+  .toolbar .toolbar-actions {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+
 
   .toolbar .toolbar-actions #btn-switch-graphs,
   .toolbar .toolbar-actions #btn-share-link,
@@ -188,10 +209,8 @@
     justify-content: center;
   }
 
-  .toolbar .toolbar-actions img {
-    width: 1.5em;
-    height: 1.5em;
-  }
+
+
 
   #btn-switch-graphs .btn-label {
     display: none;
@@ -199,6 +218,42 @@
 
   #btn-switch-graphs img {
     margin-right: 0 !important;
+  }
+}
+
+
+/* Very narrow screens (≤300px): tighter button padding */
+@media (max-width: 350px) {
+  .toolbar-body {
+    display: grid;
+    grid-template-columns: 150px 1fr;
+    gap: 8px;
+    align-items: stretch;
+  }
+
+  #menu-filters {
+    display: flex;
+  }
+
+  #menu-filters > .dropdown-toggle {
+    flex: 1;
+    height: auto !important;
+  }
+
+  .toolbar .toolbar-actions {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+
+  .toolbar .toolbar-actions .btn {
+    padding: 4px 6px;
+    line-height: 1.2;
+  }
+
+  .toolbar .toolbar-actions img {
+    width: 1.5em;
+    height: 1.5em;
   }
 }
 
