@@ -8,19 +8,12 @@
   position: relative;
   height: 40px;
   line-height: 24px;
-  padding: 8px 28px 8px 12px; /* 28px right reserves space for caret */
+  text-align: center;
+  padding: 0px 15px 0px 15px;
   max-width: 150px;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-}
-
-#menu-budget .dropdown-toggle > *,
-#menu-viewby .dropdown-toggle > *,
-#menu-period .dropdown-toggle > *,
-#menu-spending-type .dropdown-toggle > *,
-#menu-unit .dropdown-toggle > * {
-  min-width: 0; /* allow flex children to shrink for ellipsis */
 }
 
 /* Keep the dropdown list scrollable and compact */
@@ -33,6 +26,7 @@
   overflow-y: auto;
   overflow-x: hidden;
   min-width: 180px;
+  text-align: left;
 }
 
 /* Keep caret visible by absolutely positioning it inside the toggle */
@@ -40,7 +34,8 @@
 #menu-viewby .dropdown-toggle::after,
 #menu-period .dropdown-toggle::after,
 #menu-spending-type .dropdown-toggle::after,
-#menu-unit .dropdown-toggle::after {
+#menu-unit .dropdown-toggle::after,
+#menu-filters .dropdown-toggle::after {
   position: absolute;
   right: 10px;
   top: 50%;
@@ -96,23 +91,35 @@
 
 /* Filters toggle: same dimensions as the other dropdown toggles */
 #menu-filters .dropdown-toggle {
+  display: inline-block;
+  position: relative;
   height: 40px;
-  padding: 8px 12px;
-  width: 150px;
-  max-width: 150px;
+  text-align: center;
+  width: 180px;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  justify-content: center;
-  gap: 6px;
+}
+
+#menu-filters > .dropdown-menu {
+  width: 100%;
+  gap: 4px;
+  padding: 4px;
+}
+
+#menu-filters > .dropdown-menu.show {
+  display: flex !important;
+  flex-direction: column;
 }
 
 /* Desktop (≥1061px): hide Filters toggle, show panel as inline flex row */
 @media (min-width: 1061px) {
-  #menu-filters > .dropdown-toggle {
+  #menu-filters>.dropdown-toggle {
     display: none !important;
   }
-  #menu-filters > .dropdown-menu {
+
+  #menu-filters>.dropdown-menu,
+  #menu-filters>.dropdown-menu.show {
     display: flex !important;
     flex-direction: row;
     position: static !important;
@@ -121,33 +128,29 @@
     box-shadow: none !important;
     padding: 0 !important;
     background: transparent !important;
-    gap: 4px;
+    gap: 6px;
   }
 }
 
 /* Inside the Filters panel (≤1060px): stack inner dropdowns full-width */
-@media (max-width: 1060x) {
-  #menu-filters .dropdown-menu > .dropdown {
+@media (max-width: 1060px) {
+  #menu-filters .dropdown-menu>.dropdown {
     width: 100%;
   }
-  #menu-filters .dropdown-menu > .dropdown .dropdown-toggle {
+
+  #menu-filters .dropdown-menu>.dropdown .dropdown-toggle {
     width: 100%;
     max-width: none;
-    justify-content: space-between;
   }
-  #menu-filters .dropdown-menu > .dropdown .dropdown-menu {
+
+  #menu-filters .dropdown-menu>.dropdown .dropdown-menu {
     min-width: 100%;
   }
 }
 
 
 /* Narrow screens (≤640px): stack Filters dropdown and action buttons vertically */
-@media (max-width: 620px) {
-
-  #menu-filters {
-    height: 100%;
-  }
-
+@media (max-width: 640px) {
   .toolbar .toolbar-actions {
     align-items: center;
     justify-content: center;
@@ -174,10 +177,10 @@
 }
 
 /* Narrow screens (≤520px): 2-column grid — Filters left, 3×2 button grid right */
-@media (max-width: 520px) {
+@media (max-width: 560px) {
   .toolbar-body {
     display: grid;
-    grid-template-columns: 150px 1fr;
+    grid-template-columns: 180px 1fr;
     gap: 8px;
     align-items: stretch;
   }
@@ -186,7 +189,7 @@
     display: flex;
   }
 
-  #menu-filters > .dropdown-toggle {
+  #menu-filters>.dropdown-toggle {
     flex: 1;
     height: auto !important;
   }
@@ -209,9 +212,6 @@
     justify-content: center;
   }
 
-
-
-
   #btn-switch-graphs .btn-label {
     display: none;
   }
@@ -222,33 +222,41 @@
 }
 
 
-/* Very narrow screens (≤300px): tighter button padding */
-@media (max-width: 350px) {
+/* Very narrow screens (≤380px): Filters full-width on top, buttons row below */
+@media (max-width: 380px) {
   .toolbar-body {
-    display: grid;
-    grid-template-columns: 150px 1fr;
+    display: flex;
+    flex-direction: column;
     gap: 8px;
     align-items: stretch;
+    min-width: 200px;
   }
 
   #menu-filters {
-    display: flex;
+    display: block;
+    width: 100%;
   }
 
   #menu-filters > .dropdown-toggle {
-    flex: 1;
-    height: auto !important;
+    width: 100%;
+    height: 40px !important;
+    max-width: none;
   }
 
   .toolbar .toolbar-actions {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    margin-left: 0;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
     gap: 6px;
+    width: 100%;
   }
 
   .toolbar .toolbar-actions .btn {
-    padding: 4px 6px;
+    flex: 1;
+    padding: 4px 7px;
     line-height: 1.2;
+    justify-content: center;
   }
 
   .toolbar .toolbar-actions img {
@@ -259,7 +267,9 @@
 
 /* Treemap loading spinner */
 @keyframes treemap-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .treemap-spinner {
