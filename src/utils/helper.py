@@ -29,7 +29,7 @@ def create_treemap_colors(
     spending_type: SpendingTypeLiteral,
     viewby: ViewByDimensionTypeLiteral,
     program_label_to_orig_id: dict[str, str] | None = None,
-    seed: str = "seed",
+    seed: str = "abcd",
 ) -> list[str]:
     """Return a color for each treemap node, in the same order as node_ids.
 
