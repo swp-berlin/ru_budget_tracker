@@ -36,7 +36,7 @@ app.layout = serve_layout
 
 # Validation layout includes all components that callbacks might reference.
 # This prevents "component not found" warnings during callback validation.
-app.validation_layout = validation_layout
+app.validation_layout = validation_layout  # type: ignore
 
 
 def _prewarm_treemap_cache() -> None:
@@ -71,15 +71,15 @@ def _prewarm_timeseries_cache() -> None:
     try:
         from utils.fetch_treemap import fetch_budgets_for_dropdown
         from utils.fetch_timeseries import TimeseriesDataFetcher
-        from utils.definitions import unit_config, UnitLiteral
+        from utils.definitions import unit_config, UnitTypeLiteral
         from pages.timeseries import fetch_timeseries_data
 
         logger.info("Timeseries prewarm: filling raw SQL caches")
-        for spending_type in ("ALL", "MILITARY"):
+        for spending_type in ["ALL", "MILITARY"]:
             logger.info(
                 "Timeseries prewarm: fetching execution budgets for spending_type=%s", spending_type
             )
-            fetcher = TimeseriesDataFetcher(spending_type)
+            fetcher = TimeseriesDataFetcher(spending_type)  # type: ignore
             fetcher._fetch_execution_budget_expenses()
             logger.info(
                 "Timeseries prewarm: fetching law budgets for spending_type=%s", spending_type
@@ -95,11 +95,11 @@ def _prewarm_timeseries_cache() -> None:
             if all(v is not None for v in seed_ids.values()):
                 break
 
-        units: list[UnitLiteral] = [u for _, u in unit_config.options]
+        units: list[UnitTypeLiteral] = [u for _, u in unit_config.options]
         for budget_type, budget_id in seed_ids.items():
             if budget_id is None:
                 continue
-            for spending_type in ("ALL", "MILITARY"):
+            for spending_type in ["ALL", "MILITARY"]:
                 for unit in units:
                     logger.info(
                         "Timeseries prewarm: budget_type=%s budget_id=%s spending_type=%s unit=%s",
@@ -111,7 +111,7 @@ def _prewarm_timeseries_cache() -> None:
                     try:
                         fetch_timeseries_data(
                             budget_id=budget_id,
-                            spending_type=spending_type,
+                            spending_type=spending_type,  # type: ignore
                             unit=unit,
                         )
                     except Exception:

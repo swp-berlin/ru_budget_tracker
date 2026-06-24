@@ -11,6 +11,7 @@ from dash import (
     Output,
     State,
     callback,
+    callback_context,
     dcc,
     html,
     no_update,
@@ -30,7 +31,7 @@ from utils.helper import (
     shape_for_viewby,
 )
 from utils.definitions import (
-    UnitLiteral,
+    UnitTypeLiteral,
     unit_config,
     SpendingTypeLiteral,
     ViewByDimensionTypeLiteral,
@@ -103,7 +104,7 @@ def fetch_treemap_data(
 def transform_treemap_data(
     budget_id: int,
     spending_type: SpendingTypeLiteral,
-    unit: UnitLiteral,
+    unit: UnitTypeLiteral,
 ) -> pd.DataFrame:
     dimensions, programs, classified, published_at = fetch_treemap_data(budget_id)
     budget_type: BudgetTypeLiteral = next(
@@ -123,7 +124,7 @@ def transform_treemap_data(
 def generate_figure(
     df: pd.DataFrame,
     spending_type: SpendingTypeLiteral = "ALL",
-    unit: UnitLiteral = "ABSOLUTE",
+    unit: UnitTypeLiteral = "ABSOLUTE",
     translated: bool = False,
     viewby: ViewByDimensionTypeLiteral = "MINISTRY",
 ) -> tuple[go.Figure, dict[str, str]]:
@@ -321,6 +322,7 @@ def layout(**other_kwargs) -> html.Div:
     Output("treemap-graph", "figure"),
     Output("treemap-graph", "style"),
     Output("store-treemap-node-map", "data"),
+    Output("store-selected-id", "data", allow_duplicate=True),
     Output("warning-toast", "is_open", allow_duplicate=True),
     Output("warning-toast", "children", allow_duplicate=True),
     Input("url", "pathname"),
@@ -329,6 +331,7 @@ def layout(**other_kwargs) -> html.Div:
     Input("store-spending-type", "data"),
     Input("store-unit", "data"),
     Input("store-language", "data"),
+    Input("btn-switch-graphs", "n_clicks"),
     prevent_initial_call=True,
 )
 def update_figure_from_filters(
@@ -336,15 +339,21 @@ def update_figure_from_filters(
     budget_id: int,
     viewby: ViewByDimensionTypeLiteral = "MINISTRY",
     spending_type: SpendingTypeLiteral = "ALL",
-    unit: UnitLiteral = "ABSOLUTE",
+    unit: UnitTypeLiteral = "ABSOLUTE",
     language: str = "RU",
-) -> tuple[Any, Any, Any, bool, str]:
+    n_clicks: int | None = None,
+) -> tuple[Any, Any, Any, Any, bool, str]:
     # Guard: only run when the treemap page is active.
     if pathname != get_relative_path("/"):
         raise PreventUpdate
     # Guard: wait until a budget is selected
     if budget_id is None:
         raise PreventUpdate
+
+    # Clear the selected node when spending type or viewby changes — these restructure the
+    # hierarchy entirely, so old short IDs no longer correspond to the same nodes.
+    triggered_id = callback_context.triggered_id
+    clear_selection = triggered_id in ("store-spending-type", "store-viewby")
 
     # Fetch and render using the selected values from stores
     # Use translated names when language is EN (English)
@@ -356,7 +365,7 @@ def update_figure_from_filters(
             unit=unit,
         )
     except ValueError as e:
-        return no_update, no_update, no_update, True, str(e)
+        return no_update, no_update, no_update, no_update, True, str(e)
 
     df_shaped = shape_for_spending_type(df, spending_type=spending_type)
     df_shaped = shape_for_viewby(df_shaped, viewby=viewby)
@@ -368,6 +377,7 @@ def update_figure_from_filters(
         fig,
         {"visibility": "visible"},
         compact_map,
+        None if clear_selection else no_update,
         False,
         "",
     )
@@ -404,7 +414,7 @@ def _build_download_df(
     spending_type: SpendingTypeLiteral,
     viewby: ViewByDimensionTypeLiteral,
     translated: bool,
-    unit: UnitLiteral = "ABSOLUTE",
+    unit: UnitTypeLiteral = "ABSOLUTE",
 ) -> pd.DataFrame:
     """Build a flat aggregated DataFrame for CSV download with root, Level 1, Level 2, value columns."""
     df_shaped = shape_for_spending_type(df, spending_type=spending_type)
@@ -507,7 +517,7 @@ def download_treemap_data(
     budget_options: list[dict] | None,
     viewby: ViewByDimensionTypeLiteral,
     spending_type: SpendingTypeLiteral,
-    unit: UnitLiteral,
+    unit: UnitTypeLiteral,
     language: str = "RU",
 ) -> dict[str, Any]:
     if pathname != get_relative_path("/"):

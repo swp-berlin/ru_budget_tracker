@@ -1,7 +1,7 @@
 """App-level callbacks (toolbar, filters, menus, spinners, share/download)."""
 
 from typing import Any
-from urllib.parse import parse_qs, unquote_plus
+from urllib.parse import urlparse, unquote_plus, parse_qs, urlencode
 
 import dash_bootstrap_components as dbc
 from dash import (
@@ -26,6 +26,9 @@ from utils.definitions import (
     spending_type_config,
     viewby_config,
     period_config,
+    LanguageTypeLiteral,
+    UnitTypeLiteral,
+    SpendingTypeLiteral,
 )
 
 # Dropdown labels differ from chart-title maps for unit and spending type,
@@ -96,50 +99,88 @@ def update_about_button(pathname: str | None, previous_path: str | None, budget_
     Output("btn-switch-graphs", "href"),
     Output("btn-switch-graphs", "children"),
     Output("btn-switch-graphs", "title"),
+    State("url", "href"),
     Input("url", "pathname"),
     Input("store-budget-id", "data"),
     Input("store-selected-id", "data"),
     State("store-treemap-node-map", "data"),
-    State("url", "search"),
+    State("store-language", "data"),
+    State("store-unit", "data"),
+    State("store-spending-type", "data"),
+    prevent_initial_call="initial_duplicate",
 )
 def switch_graphs(
-    pathname: str | None,
+    url: str,
+    url_pathname: str | None,
     budget_id: int | None,
     selected_id: str | None,
     compact_node_map: dict | None,
-    url_search: str | None,
+    language: LanguageTypeLiteral | None,
+    unit: UnitTypeLiteral | None,
+    spending_type: SpendingTypeLiteral | None,
 ):
     """Swap destination, icon, and label based on current page."""
-    params: list[str] = []
-    if budget_id is not None:
-        params.append(f"budget_id={budget_id}")
-    focus_added = False
-    if selected_id and compact_node_map:
-        entry = compact_node_map.get(str(selected_id))
-        if entry:
-            dim_id_str = entry.get("leaf") if isinstance(entry, dict) else entry
-            if dim_id_str and str(dim_id_str).isdigit():
-                params.append(f"focus={dim_id_str}")
-                focus_added = True
-    # If no focus was resolved from the node map, pass through any existing ?focus= from the URL.
-    if not focus_added and url_search:
-        qs = parse_qs(url_search.lstrip("?"))
-        focus_raw = qs.get("focus", [None])[0]
-        if focus_raw and unquote_plus(focus_raw).strip().isdigit():
-            params.append(f"focus={unquote_plus(focus_raw).strip()}")
-    query_string = f"?{'&'.join(params)}" if params else ""
+    # Collect query params
+    url_parsed = urlparse(url)
+    query_param_dict = parse_qs(url_parsed.query)
+    timeseries_path = get_relative_path("/timeseries")
+    treemap_path = get_relative_path("/")
 
-    if pathname == get_relative_path("/timeseries"):
+    # Check for focus on a Node
+    leaf_node: dict[str, str | list[int]] | None = None
+    leaf_node_id: str = ""
+    if selected_id and compact_node_map:
+        leaf_node = compact_node_map.get(str(selected_id), None)
+    if leaf_node is not None and isinstance(leaf_node, dict):
+        leaf = str(leaf_node.get("leaf", ""))
+        if leaf:
+            # Encode the full ancestor chain ending with the leaf dim_id, comma-joined.
+            # e.g. ctx=[100], leaf="200" → "100,200". Top-level nodes get just the leaf.
+            ctx: list = leaf_node.get("ctx", []) or []  # type: ignore[assignment]
+            leaf_node_id = ",".join([str(c) for c in ctx] + [leaf])
+
+    # In any other case than the 2 below we keep the url as is
+    if language:
+        query_param_dict["language"] = [str(language)]
+    if budget_id:
+        query_param_dict["budget_id"] = [str(budget_id)]
+    if unit:
+        query_param_dict["unit"] = [str(unit)]
+    if spending_type:
+        query_param_dict["spending_type"] = [str(spending_type)]
+
+    # Case 1: leaf_node resolved to actual node = User clicked on node
+    # -> Set focus to leaf_node_id (full ancestor chain, comma-joined)
+    if leaf_node_id:
+        query_param_dict["focus"] = [leaf_node_id]
+
+    # Case 2: leaf_node did not resolve correctly, but focus is still part of URL
+    # and compact_node_map has been calculated = User focused on ROOT after focus on a node
+    # -> Remove focus parameter from query
+    if (
+        url_pathname == treemap_path
+        and not leaf_node_id
+        and query_param_dict.get("focus", None) is not None
+        and len(compact_node_map or dict()) > 0
+        and len(selected_id or "") > 0
+    ):
+        query_param_dict.pop("focus")
+
+    # If we switch between pages, switch out button
+    query_string = urlencode(query_param_dict, doseq=True)
+    timeseries_path = get_relative_path("/timeseries")
+    if url_pathname == timeseries_path:
         return (
-            f"{get_relative_path('/')}{query_string}",
+            f"{treemap_path}?{query_string}",
             [
                 html.Img(src=get_asset_url("icons/dashboard.svg"), alt="Treemap icon"),
                 html.Span("Treemap", className="btn-label"),
             ],
             "Switch to Treemap View",
         )
+
     return (
-        f"{get_relative_path('/timeseries')}{query_string}",
+        f"{timeseries_path}?{query_string}",
         [
             html.Img(src=get_asset_url("icons/stacked_bar_chart.svg"), alt="Timeseries icon"),
             html.Span("Timeseries", className="btn-label"),
@@ -433,17 +474,25 @@ def highlight_budget(current, ids, options):
 @callback(
     Output("btn-switch-data-language", "children"),
     Output("store-language", "data", allow_duplicate=True),
+    Input("url", "search"),
     Input("btn-switch-data-language", "n_clicks"),
     State("store-language", "data"),
     prevent_initial_call=True,
 )
-def toggle_language(n_clicks: int | None, current_lang: str | None):
+def toggle_language(url: str, n_clicks: int | None, current_lang: str | None):
     """Toggle the language between RU and EN."""
-    if not n_clicks:
-        raise PreventUpdate
-    new_lang = "EN" if (current_lang or "RU") == "RU" else "RU"
-    btn_label = "RU" if new_lang == "EN" else "EN"
-    return [html.Span(btn_label, className="btn-label")], new_lang
+    url_parsed = urlparse(url)
+    query_param_dict = parse_qs(url_parsed.query)
+    url_language_raw = query_param_dict.get("language")
+    url_language = current_lang
+    if url_language_raw is not None:
+        url_language = url_language_raw[0].upper()
+
+    if url_language != current_lang or (n_clicks is not None and n_clicks > 0):
+        new_lang = "EN" if (current_lang or url_language) == "RU" else "RU"
+        btn_label = "RU" if new_lang == "EN" else "EN"
+        return [html.Span(btn_label, className="btn-label")], new_lang
+    raise PreventUpdate
 
 
 # --- Share ---
@@ -532,22 +581,19 @@ clientside_callback(
     prevent_initial_call=True,
 )
 
-# Build URL with current filters and selected id, copy to clipboard.
+# Copy current URL to clipboard, appending focus param from selected treemap node.
 clientside_callback(
     ClientsideFunction(namespace="clientside", function_name="copyShareLink"),
     Output("dummy-output", "title"),
     Input("btn-share-link", "n_clicks"),
-    State("url", "pathname"),
-    State("store-budget-id", "data"),
-    State("store-viewby", "data"),
-    State("store-spending-type", "data"),
-    State("store-unit", "data"),
-    State("store-period", "data"),
-    State("store-language", "data"),
     State("store-selected-id", "data"),
-    State(
-        "store-treemap-node-map", "data"
-    ),  # compact map: {short_id: {leaf: dim_id, ctx: [ancestor_dim_ids]}}
+    State("store-treemap-node-map", "data"),
+    State("store-language", "data"),
+    State("store-viewby", "data"),
+    State("store-unit", "data"),
+    State("store-spending-type", "data"),
+    State("store-period", "data"),
+    State("store-budget-id", "data"),
     prevent_initial_call=True,
 )
 

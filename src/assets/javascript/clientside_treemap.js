@@ -52,20 +52,30 @@ Object.assign(window.dash_clientside.clientside, {
 
     let nodeId = decodeURIComponent(focusParam).trim();
 
-    // ?focus= stores a numeric dimension_id (set by copyShareLink).
-    // Translate it to the short node id used in the current figure.
-    // nodeMap is keyed by short_id; we scan for the entry whose "leaf" matches.
-    // The figure only contains ids for the active language, so we also verify
-    // that the candidate short_id is actually present in the figure's id list
-    // before using it — otherwise we might zoom into a node that isn't rendered.
-    const dimId = parseInt(nodeId, 10);
-    if (!isNaN(dimId) && nodeMap) {
+    // ?focus= encodes the full ancestor chain ending with the leaf dim_id, comma-joined.
+    // e.g. "100,200" means ancestor dim_id=100, leaf dim_id=200.
+    // A single value like "100" means a top-level node with no ancestors.
+    // We match against nodeMap entries on both leaf AND ctx so that nodes sharing
+    // the same dim_id under different parents (e.g. Chapter "02" under Ministry A
+    // vs Ministry B) are always resolved to the exact intended node.
+    const focusParts = nodeId.split(",").map(s => parseInt(s, 10));
+    const focusLeaf = focusParts[focusParts.length - 1];
+    const focusCtx = focusParts.slice(0, -1);
+
+    if (!isNaN(focusLeaf) && nodeMap) {
       const figureIds = figure?.data?.[0]?.ids;
       for (const [shortId, entry] of Object.entries(nodeMap)) {
-        if (String(entry?.leaf ?? entry) === String(dimId)) {
+        if (String(entry?.leaf ?? entry) === String(focusLeaf)) {
+          const entryCtx = entry.ctx || [];
+          if (
+            entryCtx.length !== focusCtx.length ||
+            !entryCtx.every((id, i) => id === focusCtx[i])
+          ) {
+            continue;
+          }
           if (!figureIds || figureIds.includes(shortId)) {
             nodeId = shortId;
-            console.debug("[Treemap Focus] Resolved dim_id", dimId, "→ node", nodeId);
+            console.debug("[Treemap Focus] Resolved", nodeId, "→ node", shortId);
             break;
           }
         }

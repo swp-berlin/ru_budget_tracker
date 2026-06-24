@@ -29,7 +29,7 @@ from utils.calculate import Calculator
 from utils.definitions import (
     BudgetTypeLiteral,
     LanguageTypeLiteral,
-    UnitLiteral,
+    UnitTypeLiteral,
     SpendingTypeLiteral,
     unit_config,
     period_config,
@@ -61,7 +61,7 @@ unit_labels = {
 
 
 def _calculate_values(
-    df: pd.DataFrame, budget_id: int, unit: UnitLiteral, budget_type: BudgetTypeLiteral
+    df: pd.DataFrame, budget_id: int, unit: UnitTypeLiteral, budget_type: BudgetTypeLiteral
 ) -> pd.DataFrame:
     df = df[df["dates"].notna()].copy()
     rows_to_drop: list = []
@@ -97,7 +97,7 @@ _timeseries_cache: dict[tuple, tuple[pd.DataFrame, str, BudgetTypeLiteral]] = {}
 def fetch_timeseries_data(
     budget_id: int,
     spending_type: SpendingTypeLiteral = "ALL",
-    unit: UnitLiteral = "ABSOLUTE",
+    unit: UnitTypeLiteral = "ABSOLUTE",
     period: PeriodLiteral = "ALL",
     selected_dimension: dict[str, int | str] | None = None,
     classified_only: bool = False,
@@ -153,7 +153,7 @@ def fetch_timeseries_data(
 def generate_figure(
     df: pd.DataFrame,
     metadata: list[str] = [],
-    unit: UnitLiteral = "ABSOLUTE",
+    unit: UnitTypeLiteral = "ABSOLUTE",
     spending_type: SpendingTypeLiteral = "ALL",
     language: LanguageTypeLiteral = "EN",
     budget_type: BudgetTypeLiteral = "LAW",
@@ -369,7 +369,7 @@ def update_figure_from_filters(
     budget_id: int,
     period: PeriodLiteral = "ALL",
     spending_type: SpendingTypeLiteral = "ALL",
-    unit: UnitLiteral = "ABSOLUTE",
+    unit: UnitTypeLiteral = "ABSOLUTE",
     selected_node_id: str | None = None,
     language: LanguageTypeLiteral = "RU",
     compact_node_map: dict | None = None,
@@ -468,7 +468,7 @@ def download_timeseries_data(
     budget_options: list[dict] | None = None,
     period: PeriodLiteral = "ALL",
     spending_type: SpendingTypeLiteral = "ALL",
-    unit: UnitLiteral = "ABSOLUTE",
+    unit: UnitTypeLiteral = "ABSOLUTE",
     selected_node_id: str | None = None,
 ) -> dict[str, Any]:
     """

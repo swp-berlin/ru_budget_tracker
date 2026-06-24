@@ -12,14 +12,14 @@ from utils.definitions import (
     Colors,
     MilitarySpending,
     SpendingTypeLiteral,
-    UnitLiteral,
+    UnitTypeLiteral,
     ViewByDimensionTypeLiteral,
     unit_config,
 )
 from plotly import graph_objects as go
 
 
-def get_unit_label(unit: UnitLiteral) -> str:
+def get_unit_label(unit: UnitTypeLiteral) -> str:
     """Return the human-readable label for a unit (used as CSV column header)."""
     return next(label for label, u in unit_config.options if u == unit)
 
@@ -190,7 +190,7 @@ def shape_for_viewby(
 
 @lru_cache(maxsize=10)
 def build_server_node_map(
-    budget_id: int, spending_type: SpendingTypeLiteral, unit: UnitLiteral
+    budget_id: int, spending_type: SpendingTypeLiteral, unit: UnitTypeLiteral
 ) -> dict:
     """Server-side cached node map for dimension resolution. Never sent to the browser.
 

@@ -12,7 +12,7 @@ ViewByDimensionTypeLiteral = Literal["MINISTRY", "CHAPTER", "PROGRAM"]
 LanguageTypeLiteral = Literal["EN", "RU"]
 SpendingTypeLiteral = Literal["ALL", "MILITARY"]
 PeriodLiteral = Literal["ALL", "Q1", "Q2", "Q3", "Q4"]
-UnitLiteral = Literal[
+UnitTypeLiteral = Literal[
     "ABSOLUTE",
     "DOLLARS",
     "PERCENT_GDP_FULL_YEAR",
@@ -89,7 +89,7 @@ class PeriodConfig(BaseModel):
 class UnitConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    options: list[tuple[str, UnitLiteral]] = [
+    options: list[tuple[str, UnitTypeLiteral]] = [
         ("Billion RUB", "ABSOLUTE"),
         ("Billion PPP Dollars", "DOLLARS"),
         ("% full-year GDP", "PERCENT_GDP_FULL_YEAR"),
@@ -100,7 +100,7 @@ class UnitConfig(BaseModel):
     ]
     # ABSOLUTE and DOLLARS carry a leading space for direct number concatenation:
     # "100.5" + " Billion RUB". Cannot be derived from options.
-    map: dict[UnitLiteral, str] = {
+    map: dict[UnitTypeLiteral, str] = {
         "ABSOLUTE": " Billion RUB",
         "DOLLARS": " Billion PPP Dollars",
         "PERCENT_GDP_FULL_YEAR": "% full-year GDP",
