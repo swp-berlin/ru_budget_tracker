@@ -25,7 +25,14 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["nbformat>=5.10.4", "faker>=37.12.0", "pytest>=8.4.0", "types-python-dateutil>=2.9.0", "types-requests>=2.32.0"]
+dev = [
+    "nbformat>=5.10.4",
+    "faker>=37.12.0",
+    "pytest>=8.4.0",
+    "types-python-dateutil>=2.9.0",
+    "types-requests>=2.32.0",
+    "mypy>=2.1.0",
+]
 
 [tool.uv]
 package = false
@@ -40,9 +47,23 @@ line-length = 100
 lint.select = ["T20"]
 
 [tool.mypy]
-python_version = "3.14"
-plugins = ["pydantic.mypy"]
+python_version = "3.13"
+explicit_package_bases = true
+mypy_path = "src"
 
 [[tool.mypy.overrides]]
-module = ["dateutil.*", "requests.*"]
+module = [
+    "dateutil.*",
+    "requests.*",
+    "dash.*",
+    "dash_bootstrap_components.*",
+    "plotly.*",
+    "alembic.*",
+    "openai.*",
+    "pandas.*",
+    "networkx.*",
+    "openpyxl.*",
+    "xlrd.*",
+    "aiosqlite.*",
+]
 ignore_missing_imports = true
