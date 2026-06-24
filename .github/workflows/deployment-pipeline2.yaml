@@ -46,7 +46,7 @@ jobs:
           context: .
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/app:${{ github.sha:7 }}
+            ghcr.io/${{ github.repository }}/app:${{ substr(github.sha, 0, 7) }}
             ghcr.io/${{ github.repository }}/app:latest
 
   build-importer:
