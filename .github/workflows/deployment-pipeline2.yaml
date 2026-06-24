@@ -1,4 +1,4 @@
-name: Build & Push Docker Images
+name: Deployment Workflow 2
 
 on:
   workflow_dispatch:
@@ -80,3 +80,4 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+  
