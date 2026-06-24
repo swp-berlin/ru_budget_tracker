@@ -7,8 +7,8 @@ from pydantic import BaseModel, ConfigDict, computed_field
 
 BudgetTypeLiteral = Literal["DRAFT", "LAW", "REPORT", "TOTAL"]
 BudgetScopeLiteral = Literal["YEARLY", "QUARTERLY", "MONTHLY"]
-DimensionTypeLiteral = Literal["MINISTRY", "CHAPTER", "SUBCHAPTER", "PROGRAMM", "EXPENSE_TYPE"]
-ViewByDimensionTypeLiteral = Literal["MINISTRY", "CHAPTER", "PROGRAMM"]
+DimensionTypeLiteral = Literal["MINISTRY", "CHAPTER", "SUBCHAPTER", "PROGRAM", "EXPENSE_TYPE"]
+ViewByDimensionTypeLiteral = Literal["MINISTRY", "CHAPTER", "PROGRAM"]
 LanguageTypeLiteral = Literal["EN", "RU"]
 SpendingTypeLiteral = Literal["ALL", "MILITARY"]
 PeriodLiteral = Literal["ALL", "Q1", "Q2", "Q3", "Q4"]
@@ -30,7 +30,7 @@ class BudgetConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     # Hierarchy levels used throughout the data model
-    hierarchy_objects: tuple[str, ...] = ("MINISTRY", "CHAPTER", "SUBCHAPTER", "PROGRAMM")
+    hierarchy_objects: tuple[str, ...] = ("MINISTRY", "CHAPTER", "SUBCHAPTER", "PROGRAM")
     # Months that mark the end of a quarter, used for execution budget filtering
     quarterly_months: list[int] = [3, 6, 9, 12]
     # LAW budget totals are stored in thousands in the source data

@@ -120,7 +120,7 @@ class Dimension(Base):  # type: ignore[misc]
     __tablename__ = "dimensions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    # Optional parent dimension for hierarchical structuring (e.g., programm -> subprogramm)
+    # Optional parent dimension for hierarchical structuring (e.g., program -> subprogram)
     parent_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("dimensions.id", ondelete="SET NULL"),
@@ -129,7 +129,7 @@ class Dimension(Base):  # type: ignore[misc]
     )
     # The original identifier from the data source
     original_identifier: Mapped[str] = mapped_column(String, nullable=False)
-    # Type of the dimension (e.g., MINISTRY, CHAPTER, PROGRAMM, EXPENSE_TYPE)
+    # Type of the dimension (e.g., MINISTRY, CHAPTER, PROGRAM, EXPENSE_TYPE)
     type: Mapped[DimensionTypeLiteral] = mapped_column(String, nullable=False, index=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
     # Translated to english

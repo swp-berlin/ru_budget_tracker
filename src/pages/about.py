@@ -130,7 +130,7 @@ layout = html.Div(
                                         ),
                                         html.Li(
                                             [
-                                                "PPP Dollar by the OECD PPP Programme, published by World Bank "
+                                                "PPP Dollar by the OECD PPP Program, published by World Bank "
                                                 "(current year uses PPP rate of last year): ",
                                                 html.A(
                                                     "Link to source",

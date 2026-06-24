@@ -29,5 +29,6 @@ repos:
         entry: mypy --config-file ./pyproject.toml
         files: ^src/
         additional_dependencies:
+          - alembic
           - pydantic
           - pydantic-settings

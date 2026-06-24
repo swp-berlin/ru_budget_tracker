@@ -210,7 +210,7 @@ class TimeseriesDataFetcher:
             if part_queries:
                 combo_sq = part_queries[0]
                 for pq in part_queries[1:]:
-                    combo_sq = intersect(combo_sq, pq)
+                    combo_sq = intersect(combo_sq, pq)  # type: ignore
                 military_conditions.append(Expense.id.in_(combo_sq))
 
         return military_conditions
@@ -230,7 +230,7 @@ class TimeseriesDataFetcher:
         based on the defined patterns.
         """
         # Select distinct expenses to avoid double counting across multiple dimensions.
-        expenses_subquery = (
+        expenses_query = (
             select(
                 Expense.id.label("expense_id"),
                 Expense.budget_id.label("budget_id"),
@@ -260,7 +260,7 @@ class TimeseriesDataFetcher:
             # ALL dimension associations of each expense. Filtering the join directly would
             # hide non-chapter dimension rows and cause military_value to be computed as 0
             # for expenses that match military patterns via a different dimension type.
-            expenses_subquery = expenses_subquery.where(
+            expenses_query = expenses_query.where(
                 Expense.id.in_(
                     select(assoc_table.c.expense_id).where(
                         assoc_table.c.dimension_id.in_(dimension_ids)
@@ -272,22 +272,22 @@ class TimeseriesDataFetcher:
         # For each ancestor dim, keep only expenses that are ALSO associated with that dim.
         if ancestor_dim_ids:
             for anc_id in ancestor_dim_ids:
-                expenses_subquery = expenses_subquery.where(
+                expenses_query = expenses_query.where(
                     Expense.id.in_(
                         select(assoc_table.c.expense_id).where(assoc_table.c.dimension_id == anc_id)
                     )
                 )
 
         if budget_type == "REPORT":
-            expenses_subquery = expenses_subquery.join(
+            expenses_query = expenses_query.join(
                 Budget, and_(Expense.budget_id == Budget.id, Budget.type == "REPORT")
             )
         if budget_type == "LAW":
-            expenses_subquery = expenses_subquery.join(
+            expenses_query = expenses_query.join(
                 Budget, and_(Expense.budget_id == Budget.id, Budget.type == "LAW")
             )
 
-        expenses_subquery = expenses_subquery.group_by(Expense.id).subquery()
+        expenses_subquery = expenses_query.group_by(Expense.id).subquery()
 
         return expenses_subquery
 
@@ -409,7 +409,7 @@ class TimeseriesDataFetcher:
 
         if self.spending_type == "MILITARY":
             # Use the pre-computed military view which already aggregates all military
-            # patterns (Chapter 02, PROGRAMM 31%, Ministry 187, Chapter 03 + Ministry 180).
+            # patterns (Chapter 02, PROGRAM 31%, Ministry 187, Chapter 03 + Ministry 180).
             # LAW rows: sum open_spending per budget from the view.
             law_stmt = (
                 select(

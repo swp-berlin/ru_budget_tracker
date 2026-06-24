@@ -48,7 +48,7 @@ def _build_military_expense_ids_cte():
 
     Covers:
       - CHAPTER = '02'  (National Defense)
-      - PROGRAMM LIKE '31%'  (federal programs starting with 31)
+      - PROGRAM LIKE '31%'  (federal programs starting with 31)
       - MINISTRY = '187'  (Rosgvardia)
       - CHAPTER = '03' AND MINISTRY = '180'  (FSB combination)
     """
@@ -62,7 +62,7 @@ def _build_military_expense_ids_cte():
         )
 
     chapter_02_sq = _expense_ids_for_dim("CHAPTER", Dimension.original_identifier == "02")
-    programm_31_sq = _expense_ids_for_dim("PROGRAMM", Dimension.original_identifier.like("31%"))
+    program_31_sq = _expense_ids_for_dim("PROGRAM", Dimension.original_identifier.like("31%"))
     ministry_187_sq = _expense_ids_for_dim("MINISTRY", Dimension.original_identifier == "187")
     ministry_180_sq = _expense_ids_for_dim("MINISTRY", Dimension.original_identifier == "180")
     combo_sq = (
@@ -73,7 +73,7 @@ def _build_military_expense_ids_cte():
         .where(assoc_table.c.expense_id.in_(ministry_180_sq))
     )
 
-    return union(chapter_02_sq, programm_31_sq, ministry_187_sq, combo_sq).cte(
+    return union(chapter_02_sq, program_31_sq, ministry_187_sq, combo_sq).cte(
         "military_expense_ids"
     )
 

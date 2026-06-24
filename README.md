@@ -171,7 +171,7 @@ erDiagram
     Dimension {
         INTEGER id PK
         STRING original_identifier "Not Nullable"
-        ENUM type "Not Nullable; MINISTRY | CHAPTER | SUBCHAPTER | PROGRAMM | EXPENSE_TYPE"
+        ENUM type "Not Nullable; MINISTRY | CHAPTER | SUBCHAPTER | PROGRAM | EXPENSE_TYPE"
         STRING name "Not Nullable"
         STRING name_translated "Nullable"
         INTEGER parent_id FK "Nullable; self-ref"
