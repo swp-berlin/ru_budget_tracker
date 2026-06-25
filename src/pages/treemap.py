@@ -280,7 +280,6 @@ def layout(**other_kwargs) -> html.Div:
     Input("store-spending-type", "data"),
     Input("store-unit", "data"),
     Input("store-language", "data"),
-    Input("btn-switch-graphs", "n_clicks"),
     prevent_initial_call=True,
 )
 def update_figure_from_filters(
@@ -290,7 +289,6 @@ def update_figure_from_filters(
     spending_type: SpendingTypeLiteral = "ALL",
     unit: UnitTypeLiteral = "ABSOLUTE",
     language: str = "RU",
-    n_clicks: int | None = None,
 ) -> tuple[Any, Any, Any, Any, bool, str]:
     # Guard: only run when the treemap page is active.
     if pathname != get_relative_path("/"):
@@ -337,24 +335,18 @@ def update_figure_from_filters(
     Input("treemap-graph", "clickData"),
 )
 def update_selected_id(click_data: dict | None) -> Optional[str]:
-    """Store the currently selected treemap node id from clickData.customdata[3]."""
+    """Store the currently selected treemap node id."""
     if not click_data:
         raise PreventUpdate
     try:
         pts = click_data.get("points", [])
         if not pts:
             raise PreventUpdate
-        # Prefer explicit id provided by Plotly for treemap nodes.
         node_id = pts[0].get("id")
-        if not node_id:
-            # Legacy fallback: older Plotly versions didn't include "id" in clickData.
-            custom = pts[0].get("customdata", [])
-            node_id = custom[3] if len(custom) >= 4 else None
         if not node_id:
             raise PreventUpdate
         return str(node_id)
     except Exception:
-        # Malformed clickData (e.g. missing keys) — silently ignore rather than crash.
         raise PreventUpdate
 
 
