@@ -279,7 +279,6 @@ def select_budget_dynamic(options, clicks):
 
 
 @callback(
-    Output("store-budget-id", "data", allow_duplicate=True),
     Output("store-viewby", "data", allow_duplicate=True),
     Output("store-spending-type", "data", allow_duplicate=True),
     Output("store-unit", "data", allow_duplicate=True),
@@ -291,8 +290,9 @@ def select_budget_dynamic(options, clicks):
 def apply_filters_from_url(url_search: str | None):
     """Apply filters from URL query params on load and when the URL changes.
 
-    Recognized params: budget_id, viewby, spending_type, unit, language, period.
+    Recognized params: viewby, spending_type, unit, language, period.
     Missing params leave the current store values unchanged (no_update).
+    budget_id is intentionally excluded — init_budgets owns that store.
     """
     if not url_search:
         raise PreventUpdate
@@ -303,17 +303,13 @@ def apply_filters_from_url(url_search: str | None):
             vals = params.get(key)
             return unquote_plus(vals[0]).strip() if vals else None
 
-        budget_id_raw = first("budget_id")
         viewby = first("viewby")
         spending_type = first("spending_type")
         unit = first("unit")
         language = first("language")
         period = first("period")
 
-        budget_id = int(budget_id_raw) if budget_id_raw and budget_id_raw.isdigit() else None
-
         return (
-            budget_id if budget_id is not None else no_update,
             viewby if viewby else no_update,
             spending_type if spending_type else no_update,
             unit if unit else no_update,
@@ -460,26 +456,23 @@ def highlight_budget(current, ids, options):
 
 @callback(
     Output("btn-switch-data-language", "children"),
+    Input("store-language", "data"),
+)
+def update_language_button_label(current_lang: str | None):
+    """Keep the language button label in sync with the store (shows the language you'd switch to)."""
+    btn_label = "RU" if current_lang == "EN" else "EN"
+    return [html.Span(btn_label, className="btn-label")]
+
+
+@callback(
     Output("store-language", "data", allow_duplicate=True),
-    Input("url", "search"),
     Input("btn-switch-data-language", "n_clicks"),
     State("store-language", "data"),
     prevent_initial_call=True,
 )
-def toggle_language(url: str, n_clicks: int | None, current_lang: str | None):
-    """Toggle the language between RU and EN."""
-    url_parsed = urlparse(url)
-    query_param_dict = parse_qs(url_parsed.query)
-    url_language_raw = query_param_dict.get("language")
-    url_language = current_lang
-    if url_language_raw is not None:
-        url_language = url_language_raw[0].upper()
-
-    if url_language != current_lang or (n_clicks is not None and n_clicks > 0):
-        new_lang = "EN" if (current_lang or url_language) == "RU" else "RU"
-        btn_label = "RU" if new_lang == "EN" else "EN"
-        return [html.Span(btn_label, className="btn-label")], new_lang
-    raise PreventUpdate
+def toggle_language(n_clicks: int | None, current_lang: str | None):
+    """Toggle the language store between RU and EN on button click."""
+    return "EN" if current_lang == "RU" else "RU"
 
 
 # --- Share ---
