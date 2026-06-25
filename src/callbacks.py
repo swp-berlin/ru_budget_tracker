@@ -323,40 +323,22 @@ def apply_filters_from_url(url_search: str | None):
 # --- Filter selections (pattern-matched menu items) ---
 
 
-@callback(
-    Output("store-viewby", "data"),
-    Input({"type": "viewby-item", "value": ALL}, "n_clicks"),
-    prevent_initial_call=True,
-)
-def select_viewby(_clicks):
-    return _triggered_value("viewby-item")
+def _make_select_callback(item_type: str, store: str) -> None:
+    @callback(
+        Output(store, "data"),
+        Input({"type": item_type, "value": ALL}, "n_clicks"),
+        prevent_initial_call=True,
+    )
+    def _cb(_clicks):
+        return _triggered_value(item_type)
+
+    _cb.__name__ = f"select_{item_type.replace('-', '_')}"
 
 
-@callback(
-    Output("store-period", "data"),
-    Input({"type": "period-item", "value": ALL}, "n_clicks"),
-    prevent_initial_call=True,
-)
-def select_period(_clicks):
-    return _triggered_value("period-item")
-
-
-@callback(
-    Output("store-spending-type", "data"),
-    Input({"type": "spending-type-item", "value": ALL}, "n_clicks"),
-    prevent_initial_call=True,
-)
-def select_spending_type(_clicks):
-    return _triggered_value("spending-type-item")
-
-
-@callback(
-    Output("store-unit", "data"),
-    Input({"type": "unit-item", "value": ALL}, "n_clicks"),
-    prevent_initial_call=True,
-)
-def select_unit(_clicks):
-    return _triggered_value("unit-item")
+_make_select_callback("viewby-item", "store-viewby")
+_make_select_callback("period-item", "store-period")
+_make_select_callback("spending-type-item", "store-spending-type")
+_make_select_callback("unit-item", "store-unit")
 
 
 # --- Menu label updates ---
@@ -400,42 +382,22 @@ def update_menu_labels(
 # --- Menu item highlight ---
 
 
-@callback(
-    Output({"type": "viewby-item", "value": ALL}, "children"),
-    Input("store-viewby", "data"),
-    State({"type": "viewby-item", "value": ALL}, "id"),
-)
-def highlight_viewby(current, ids):
-    return [_item_span(viewby_config.map[item["value"]], item["value"] == current) for item in ids]
+def _make_highlight_callback(item_type: str, store: str, label_map: dict) -> None:
+    @callback(
+        Output({"type": item_type, "value": ALL}, "children"),
+        Input(store, "data"),
+        State({"type": item_type, "value": ALL}, "id"),
+    )
+    def _cb(current, ids):
+        return [_item_span(label_map[item["value"]], item["value"] == current) for item in ids]
+
+    _cb.__name__ = f"highlight_{item_type.replace('-', '_')}"
 
 
-@callback(
-    Output({"type": "spending-type-item", "value": ALL}, "children"),
-    Input("store-spending-type", "data"),
-    State({"type": "spending-type-item", "value": ALL}, "id"),
-)
-def highlight_spending_type(current, ids):
-    return [
-        _item_span(_spending_type_labels[item["value"]], item["value"] == current) for item in ids
-    ]
-
-
-@callback(
-    Output({"type": "unit-item", "value": ALL}, "children"),
-    Input("store-unit", "data"),
-    State({"type": "unit-item", "value": ALL}, "id"),
-)
-def highlight_unit(current, ids):
-    return [_item_span(_unit_labels[item["value"]], item["value"] == current) for item in ids]
-
-
-@callback(
-    Output({"type": "period-item", "value": ALL}, "children"),
-    Input("store-period", "data"),
-    State({"type": "period-item", "value": ALL}, "id"),
-)
-def highlight_period(current, ids):
-    return [_item_span(period_config.map[item["value"]], item["value"] == current) for item in ids]
+_make_highlight_callback("viewby-item", "store-viewby", viewby_config.map)
+_make_highlight_callback("spending-type-item", "store-spending-type", _spending_type_labels)
+_make_highlight_callback("unit-item", "store-unit", _unit_labels)
+_make_highlight_callback("period-item", "store-period", period_config.map)
 
 
 @callback(
