@@ -192,6 +192,7 @@ def switch_graphs(
 @callback(
     Output("menu-viewby", "style"),
     Output("menu-period", "style"),
+    Output("menu-period", "disabled"),
     Input("url", "pathname"),
     Input("store-budget-id", "data"),
     State("store-budget-options", "data"),
@@ -199,25 +200,11 @@ def switch_graphs(
 def toggle_viewby_period_menu(
     pathname: str | None, budget_id: int | None, options: list[dict[str, Any]] | None
 ):
-    """Toggle visibility of View By and Period menus based on current page."""
+    """Toggle visibility/style of View By and Period menus, and disable Period for LAW budgets."""
+    is_law = _get_budget_type(budget_id, options) == "LAW"
     if pathname == get_relative_path("/timeseries"):
-        period_style: dict[str, Any] = {}
-        if _get_budget_type(budget_id, options) == "LAW":
-            period_style = {"cursor": "not-allowed"}
-        return {"display": "none"}, period_style
-    return {}, {"display": "none"}
-
-
-@callback(
-    Output("menu-period", "disabled"),
-    Input("store-budget-id", "data"),
-    State("store-budget-options", "data"),
-)
-def toggle_period_menu_disabled(
-    budget_id: int | None, options: list[dict[str, Any]] | None
-) -> bool:
-    """Disable the period menu for LAW budgets where quarter selection does not apply."""
-    return _get_budget_type(budget_id, options) == "LAW"
+        return {"display": "none"}, {"cursor": "not-allowed"} if is_law else {}, is_law
+    return {}, {"display": "none"}, False
 
 
 @callback(
