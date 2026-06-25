@@ -30,3 +30,4 @@ wheels/
 *.pdf
 
 sanity_check*.json
+cache/

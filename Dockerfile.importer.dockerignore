@@ -1,0 +1,5 @@
+__pycache__
+src/data/*.db
+src/data/import_files/raw
+src/pages
+src/assets

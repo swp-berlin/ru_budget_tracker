@@ -8,16 +8,16 @@ RUN groupadd -g 1001 svc && \
 
 WORKDIR /home/appuser/app
 
-COPY --chown=appuser:svc pyproject.toml README.md ./
-COPY --chown=appuser:svc src ./src
+COPY --chown=appuser:svc src ./
+COPY --chown=appuser:svc pyproject.toml uv.lock src/importer/README.md ./
 
 # Install dependencies (clean cache, upgrade packages)
 RUN apt-get update && \
     apt-get upgrade -y && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \
-    uv sync
-    #chown -R appuser:svc /app
+    uv sync --locked --no-dev && \
+    chown -R appuser:svc .
 
 # Switch to non-root user
 USER appuser

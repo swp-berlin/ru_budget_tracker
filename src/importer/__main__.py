@@ -16,7 +16,8 @@ def download_file():
     :raises ValueError: if the decoding fails
     :raises OSError: If there is an error writing to the file.
     """
-    with httpx2.stream("GET", download_link, follow_redirects=True) as r:
+    download_url = download_link + "/download"
+    with httpx2.stream("GET", download_url, follow_redirects=True) as r:
         r.raise_for_status()
         with open(archive_output_path, "wb") as f:
             for chunk in r.iter_bytes():

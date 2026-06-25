@@ -22,6 +22,7 @@ dependencies = [
     "requests>=2.32.5",
     "dash-bootstrap-components>=2.0.4",
     "dash>=4.1.0",
+    "httpx2>=2.4.0",
 ]
 
 [dependency-groups]
@@ -29,11 +30,6 @@ dev = ["nbformat>=5.10.4", "faker>=37.12.0", "pytest>=8.4.0", "types-python-date
 
 [tool.uv]
 package = false
-
-[tool.uv.workspace]
-members = [
-    "importer",
-]
 
 # Ruff settings
 [tool.ruff]

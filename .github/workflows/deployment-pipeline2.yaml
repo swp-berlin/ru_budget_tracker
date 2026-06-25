@@ -39,6 +39,8 @@ jobs:
         uses: docker/metadata-action@020b7354dd55a28effcab0f3b19639fe24d3f58b #v6.1.0
         with:
           images: ghcr.io/${{ github.repository }}/app
+          flavor: |
+            latest=true
           tags: |
             type=sha
       - uses: docker/login-action@3864d6aed8ff134b2ed894ce00c87695c709c870 #v4.2.0
@@ -67,6 +69,8 @@ jobs:
         uses: docker/metadata-action@020b7354dd55a28effcab0f3b19639fe24d3f58b #v6.1.0
         with:
           images: ghcr.io/${{ github.repository }}/importer
+          flavor: |
+            latest=true
           tags: |
             type=sha
       - uses: docker/login-action@3864d6aed8ff134b2ed894ce00c87695c709c870 #v4.2.0
@@ -76,7 +80,8 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/build-push-action@ff26911fd365b0233252dfbd8eede1c0e9ef9a51 #v7.2.0
         with:
-          context: ./importer
+          context: .
+          file: Dockerfile.importer
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
