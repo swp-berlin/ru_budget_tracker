@@ -2,7 +2,7 @@ import httpx2
 from zipfile import ZipFile
 from dotenv import dotenv_values
 
-config = dotenv_values(".env")
+config = dotenv_values(".env.importer")
 download_link = config.get("NEXTCLOUD_DOWNLOAD_LINK")
 # username = config.get("NEXTCLOUD_USERNAME")
 # password = config.get("NEXTCLOUD_PASSWORD")
@@ -16,6 +16,8 @@ def download_file():
     :raises ValueError: if the decoding fails
     :raises OSError: If there is an error writing to the file.
     """
+    print("Downloading file from Nextcloud...")
+
     download_url = download_link + "/download"
     with httpx2.stream("GET", download_url, follow_redirects=True) as r:
         r.raise_for_status()
@@ -27,6 +29,7 @@ def extract_zip():
     """"
     :raises FileExistsError: If mode is 'x' and file refers to an existing file
     """
+    print("Extracting ZIP file...")
     with ZipFile(archive_output_path, "r") as zip_ref:
         zip_ref.extractall(extract_output_path)
 

@@ -6,14 +6,15 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 RUN groupadd -g 1001 svc && \
     useradd -d /home/appuser -m -u 1001 -g svc appuser
 
-WORKDIR /home/appuser/app
+WORKDIR /app
 
-COPY --chown=appuser:svc src ./
-COPY --chown=appuser:svc pyproject.toml uv.lock src/importer/README.md ./
+COPY --chown=appuser:svc src ./src
+COPY --chown=appuser:svc pyproject.toml Makefile uv.lock src/importer/README.md ./
 
 # Install dependencies (clean cache, upgrade packages)
 RUN apt-get update && \
     apt-get upgrade -y && \
+    apt-get install -y make && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \
     uv sync --locked --no-dev && \
@@ -22,4 +23,4 @@ RUN apt-get update && \
 # Switch to non-root user
 USER appuser
 
-CMD ["uv", "run", "python", "-m", "importer"]
+CMD uv run python -m src.importer && make rebuild-db

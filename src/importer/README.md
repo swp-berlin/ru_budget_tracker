@@ -10,7 +10,11 @@ Responsible to import Data from Nextcloud and build the sqlite budget.db requrie
 | ARCHIVE_OUTPUT_PATH     | PATH  | Path where to store the downloaded archive, e.g. /tmp/ru_budget_raw.zip                                                                        |
 | EXTRACT_OUTPUT_PATH     | PATH  | Path where the extracted archive data is stored, e.g. /tmp/ru_budget_raw                                                                       |
 
-### How to Build and Run Examples
+### Run project
+
+`uv run python -m src.importer`
+
+### How to Build and Run Container Examples
 
 #### build
 
@@ -18,13 +22,13 @@ Responsible to import Data from Nextcloud and build the sqlite budget.db requrie
 
 #### Run
 
-1. create a .env file (see [Required Env Vars](#required-env-vars))
+1. create a .env.importer file (see [Required Env Vars](#required-env-vars))
 
 ```sh
-# .env example
+# .env.importer example
 NEXTCLOUD_DOWNLOAD_LINK=...
 ARCHIVE_OUTPUT_PATH=/tmp/ru_budget_raw.zip 
-EXTRACT_OUTPUT_PATH=/tmp/ru_budget_raw
+EXTRACT_OUTPUT_PATH=/app/src/data/import_files
 ```
 2. run container
 
@@ -37,8 +41,8 @@ EXTRACT_OUTPUT_PATH=/tmp/ru_budget_raw
 
 podman run -it \
     --userns=keep-id:uid=UID,gid=GID \
-    -v ./cache:/tmp/ru_budget_raw \
-    -v ./.env:/home/appuser/app/.env \
+    -v ./src/data:/app/src/data:z,shared \
+    -v ./.env.importer:/app/.env.importer \
     importer_t \
     /bin/bash
 ```

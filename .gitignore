@@ -9,6 +9,7 @@ wheels/
 
 # environemnt files
 .env
+.env.importer
 
 # IDE files
 .DS_Store

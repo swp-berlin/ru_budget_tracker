@@ -17,6 +17,8 @@
   - [Database Schema Overview](#database-schema-overview)
     - [Writable Tables](#writable-tables)
     - [View-Backed Read-Only Models](#view-backed-read-only-models)
+  - [Importer Component](#importer-component)
+    - [How to mount volumes](#how-to-mount-volumes)
 
 ## Description
 
@@ -32,10 +34,10 @@ is deployed to the staging server using SSH.
 
 ### Docker Compose Files
 
-| File | Purpose |
-|------|---------|
-| `docker-compose.yaml` | Local testing — builds image from source, mounts local data directory |
-| `docker-compose.yaml.j2` | Deployment template — rendered by CI/CD before use on the server |
+| File                     | Purpose                                                               |
+| ------------------------ | --------------------------------------------------------------------- |
+| `docker-compose.yaml`    | Local testing — builds image from source, mounts local data directory |
+| `docker-compose.yaml.j2` | Deployment template — rendered by CI/CD before use on the server      |
 
 **`docker-compose.yaml.j2`** is a Jinja2 template. Before deployment, the CI pipeline renders it into a plain `docker-compose.yaml` on the server by substituting `{{ image_tag }}` with the short SHA of the deployed commit (e.g. `a1b2c3d`). This ensures each deployment pulls the exact image that was built and pushed in the same pipeline run.
 
@@ -262,4 +264,30 @@ erDiagram
         FLOAT classified_spending "Estimated from LAW share"
         FLOAT classified_share_of_budget
     }
+```
+
+## Importer Component
+
+Component to import data and generate the budget.db
+See [here for documentation](src/importer/README.md)
+
+
+### How to mount volumes
+
+| Path                      | Description                               |
+| ------------------------- | ----------------------------------------- |
+| /app                      | Workdir in App Container, content of src/ |
+| data/budget.db            | App loads db from here                    |
+| /app                      | Workdir in Importer Container             |
+| src/data/import_files/raw | Alembic expects data here                 |
+
+
+**Mountpoint Example**
+
+```sh
+# Importer
+/var/lib/data/ru_budget/:/app/src/data/:Z
+
+# App
+/var/lib/data/ru_budget/:/app/data/:Z
 ```
