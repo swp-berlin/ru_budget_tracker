@@ -8,7 +8,7 @@ RUN groupadd -g 1001 svc && \
 
 WORKDIR /home/appuser/app
 
-COPY --chown=appuser:svc pyproject.toml README.md .env ./
+COPY --chown=appuser:svc pyproject.toml README.md ./
 COPY --chown=appuser:svc src ./src
 
 # Install dependencies (clean cache, upgrade packages)
