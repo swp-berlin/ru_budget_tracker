@@ -46,7 +46,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@ff26911fd365b0233252dfbd8eede1c0e9ef9a51 #v7.2.0
         with:
           context: .
           push: true
@@ -74,7 +74,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@ff26911fd365b0233252dfbd8eede1c0e9ef9a51 #v7.2.0
         with:
           context: ./importer
           push: true
