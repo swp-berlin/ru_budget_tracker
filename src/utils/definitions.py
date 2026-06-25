@@ -11,7 +11,7 @@ DimensionTypeLiteral = Literal["MINISTRY", "CHAPTER", "SUBCHAPTER", "PROGRAM", "
 ViewByDimensionTypeLiteral = Literal["MINISTRY", "CHAPTER", "PROGRAM"]
 LanguageTypeLiteral = Literal["EN", "RU"]
 SpendingTypeLiteral = Literal["ALL", "MILITARY"]
-PeriodLiteral = Literal["ALL", "Q1", "Q2", "Q3", "Q4"]
+PeriodTypeLiteral = Literal["ALL", "Q1", "Q2", "Q3", "Q4"]
 UnitTypeLiteral = Literal[
     "ABSOLUTE",
     "DOLLARS",

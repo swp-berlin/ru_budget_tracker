@@ -34,7 +34,7 @@ from utils.definitions import (
     unit_config,
     period_config,
     spending_type_config,
-    PeriodLiteral,
+    PeriodTypeLiteral,
 )
 
 logger = logging.getLogger(__name__)
@@ -82,7 +82,7 @@ def _calculate_values(
 _PERIOD_MONTH = {"Q1": 3, "Q2": 6, "Q3": 9, "Q4": 12}
 
 
-def _shape_for_period(df: pd.DataFrame, period: PeriodLiteral) -> pd.DataFrame:
+def _shape_for_period(df: pd.DataFrame, period: PeriodTypeLiteral) -> pd.DataFrame:
     if period == "ALL":
         return df
     month = _PERIOD_MONTH.get(period)
@@ -98,7 +98,7 @@ def fetch_timeseries_data(
     budget_id: int,
     spending_type: SpendingTypeLiteral = "ALL",
     unit: UnitTypeLiteral = "ABSOLUTE",
-    period: PeriodLiteral = "ALL",
+    period: PeriodTypeLiteral = "ALL",
     selected_dimension: dict[str, int | str] | None = None,
     classified_only: bool = False,
     ancestor_dim_ids: tuple[int, ...] = (),
@@ -367,7 +367,7 @@ def layout(**other_kwargs) -> html.Div:
 def update_figure_from_filters(
     pathname: str | None,
     budget_id: int,
-    period: PeriodLiteral = "ALL",
+    period: PeriodTypeLiteral = "ALL",
     spending_type: SpendingTypeLiteral = "ALL",
     unit: UnitTypeLiteral = "ABSOLUTE",
     selected_node_id: str | None = None,
@@ -404,8 +404,11 @@ def update_figure_from_filters(
         focus_raw = params.get("focus", [None])[0]
         if focus_raw:
             focus_raw = unquote_plus(focus_raw).strip()
-            if focus_raw.isdigit():
-                focus_dim_id = int(focus_raw)
+            # ?focus= is "leaf" (single dim_id) or "ctx1,ctx2,...,leaf" (ancestor chain).
+            # Always use the leaf (last element) for timeseries lookup.
+            leaf_str = focus_raw.split(",")[-1]
+            if leaf_str.isdigit():
+                focus_dim_id = int(leaf_str)
                 resolved_path = _find_path_by_dimension_id(focus_dim_id, node_map, language or "RU")
     selected_dimension = node_map.get(resolved_path) if resolved_path else None
     # If the focus dim isn't in the current budget's node_map (e.g. it only exists in
@@ -466,7 +469,7 @@ def download_timeseries_data(
     pathname: str | None,
     budget_id: int | None = None,
     budget_options: list[dict] | None = None,
-    period: PeriodLiteral = "ALL",
+    period: PeriodTypeLiteral = "ALL",
     spending_type: SpendingTypeLiteral = "ALL",
     unit: UnitTypeLiteral = "ABSOLUTE",
     selected_node_id: str | None = None,

@@ -26,7 +26,10 @@ from utils.definitions import (
     spending_type_config,
     viewby_config,
     period_config,
+    BudgetTypeLiteral,
+    PeriodTypeLiteral,
     LanguageTypeLiteral,
+    ViewByDimensionTypeLiteral,
     UnitTypeLiteral,
     SpendingTypeLiteral,
 )
@@ -45,15 +48,16 @@ def _triggered_value(item_type: str):
     raise PreventUpdate
 
 
-def _get_budget_type(budget_id: int | None, options: list[dict] | None) -> str | None:
-    if not budget_id or not options:
-        return None
-    return next((opt.get("type") for opt in options if opt.get("value") == budget_id), None)
-
-
 def _item_span(label: str, selected: bool) -> html.Span:
     style = {"fontWeight": "bold"} if selected else {}
     return html.Span(label, title=label, style=style)
+
+
+def _update_search_param(current_search: str | None, key: str, value: str) -> str:
+    """Return a new URL search string with one key replaced, preserving all other params."""
+    params = parse_qs((current_search or "").lstrip("?"))
+    params[key] = [value]
+    return "?" + urlencode(params, doseq=True)
 
 
 # --- Navigation ---
@@ -104,72 +108,61 @@ def update_about_button(pathname: str | None, previous_path: str | None, budget_
     Input("store-budget-id", "data"),
     Input("store-selected-id", "data"),
     State("store-treemap-node-map", "data"),
-    State("store-language", "data"),
-    State("store-unit", "data"),
-    State("store-spending-type", "data"),
+    State("store-viewby", "data"),
+    State("store-period", "data"),
     prevent_initial_call="initial_duplicate",
 )
 def switch_graphs(
     url: str,
     url_pathname: str | None,
-    budget_id: int | None,
+    _budget_id: int | None,
     selected_id: str | None,
     compact_node_map: dict | None,
-    language: LanguageTypeLiteral | None,
-    unit: UnitTypeLiteral | None,
-    spending_type: SpendingTypeLiteral | None,
+    viewby: str | None,
+    period: str | None,
 ):
-    """Swap destination, icon, and label based on current page."""
-    # Collect query params
+    """Swap destination, icon, and label based on current page.
+
+    URL is always current (write-through), so filter params are read directly
+    from it. Only focus needs computing from the node map.
+    """
     url_parsed = urlparse(url)
     query_param_dict = parse_qs(url_parsed.query)
-    timeseries_path = get_relative_path("/timeseries")
     treemap_path = get_relative_path("/")
+    timeseries_path = get_relative_path("/timeseries")
 
-    # Check for focus on a Node
-    leaf_node: dict[str, str | list[int]] | None = None
+    # Compute focus from the currently selected node.
     leaf_node_id: str = ""
     if selected_id and compact_node_map:
-        leaf_node = compact_node_map.get(str(selected_id), None)
-    if leaf_node is not None and isinstance(leaf_node, dict):
-        leaf = str(leaf_node.get("leaf", ""))
-        if leaf:
-            # Encode the full ancestor chain ending with the leaf dim_id, comma-joined.
-            # e.g. ctx=[100], leaf="200" → "100,200". Top-level nodes get just the leaf.
-            ctx: list = leaf_node.get("ctx", []) or []  # type: ignore[assignment]
-            leaf_node_id = ",".join([str(c) for c in ctx] + [leaf])
+        leaf_node = compact_node_map.get(str(selected_id))
+        if isinstance(leaf_node, dict):
+            leaf = str(leaf_node.get("leaf", ""))
+            if leaf:
+                # Encode the full ancestor chain ending with the leaf dim_id, comma-joined.
+                # e.g. ctx=[100], leaf="200" → "100,200". Top-level nodes get just the leaf.
+                ctx: list = leaf_node.get("ctx", []) or []  # type: ignore[assignment]
+                leaf_node_id = ",".join([str(c) for c in ctx] + [leaf])
 
-    # In any other case than the 2 below we keep the url as is
-    if language:
-        query_param_dict["language"] = [str(language)]
-    if budget_id:
-        query_param_dict["budget_id"] = [str(budget_id)]
-    if unit:
-        query_param_dict["unit"] = [str(unit)]
-    if spending_type:
-        query_param_dict["spending_type"] = [str(spending_type)]
-
-    # Case 1: leaf_node resolved to actual node = User clicked on node
-    # -> Set focus to leaf_node_id (full ancestor chain, comma-joined)
+    # Case 1: node selected → set focus param
     if leaf_node_id:
         query_param_dict["focus"] = [leaf_node_id]
 
-    # Case 2: leaf_node did not resolve correctly, but focus is still part of URL
-    # and compact_node_map has been calculated = User focused on ROOT after focus on a node
-    # -> Remove focus parameter from query
+    # Case 2: back to root but focus still in URL → clear it
     if (
         url_pathname == treemap_path
         and not leaf_node_id
-        and query_param_dict.get("focus", None) is not None
-        and len(compact_node_map or dict()) > 0
+        and query_param_dict.get("focus") is not None
+        and len(compact_node_map or {}) > 0
         and len(selected_id or "") > 0
     ):
         query_param_dict.pop("focus")
 
-    # If we switch between pages, switch out button
-    query_string = urlencode(query_param_dict, doseq=True)
-    timeseries_path = get_relative_path("/timeseries")
     if url_pathname == timeseries_path:
+        # Going back to treemap: strip period (timeseries-only), ensure viewby is present.
+        dest_params = {k: v for k, v in query_param_dict.items() if k != "period"}
+        if viewby:
+            dest_params.setdefault("viewby", [str(viewby)])
+        query_string = urlencode(dest_params, doseq=True)
         return (
             f"{treemap_path}?{query_string}",
             [
@@ -179,6 +172,11 @@ def switch_graphs(
             "Switch to Treemap View",
         )
 
+    # Going to timeseries: strip viewby (treemap-only), ensure period is present.
+    dest_params = {k: v for k, v in query_param_dict.items() if k != "viewby"}
+    if period:
+        dest_params.setdefault("period", [str(period)])
+    query_string = urlencode(dest_params, doseq=True)
     return (
         f"{timeseries_path}?{query_string}",
         [
@@ -194,14 +192,11 @@ def switch_graphs(
     Output("menu-period", "style"),
     Output("menu-period", "disabled"),
     Input("url", "pathname"),
-    Input("store-budget-id", "data"),
-    State("store-budget-options", "data"),
+    Input("store-budget-type", "data"),
 )
-def toggle_viewby_period_menu(
-    pathname: str | None, budget_id: int | None, options: list[dict[str, Any]] | None
-):
+def toggle_viewby_period_menu(pathname: str | None, budget_type: str | None):
     """Toggle visibility/style of View By and Period menus, and disable Period for LAW budgets."""
-    is_law = _get_budget_type(budget_id, options) == "LAW"
+    is_law = budget_type == "LAW"
     if pathname == get_relative_path("/timeseries"):
         return {"display": "none"}, {"cursor": "not-allowed"} if is_law else {}, is_law
     return {}, {"display": "none"}, False
@@ -224,9 +219,10 @@ def toggle_resize_interval(pathname: str | None) -> bool:
     Output("menu-budget", "children"),
     Input("url", "pathname"),  # fire once on load
     State("url", "search"),
+    State("store-budget-id", "data"),
     prevent_initial_call=False,
 )
-def init_budgets(_, url_search: str | None):
+def init_budgets(_, url_search: str | None, store_budget_id: int | None):
     """Fetch available budgets, build menu items, and resolve the initially selected budget."""
     options = [
         {"label": b["original_identifier"], "value": b["id"], "type": b["type"]}
@@ -239,6 +235,10 @@ def init_budgets(_, url_search: str | None):
         )
         for opt in options
     ]
+
+    # On page switches the store is already set — don't overwrite it.
+    if store_budget_id is not None:
+        return options, no_update, items
 
     default_value = options[0]["value"] if options else None
     if url_search:
@@ -255,14 +255,51 @@ def init_budgets(_, url_search: str | None):
 
 
 @callback(
+    Output("store-budget-type", "data"),
+    Input("store-budget-id", "data"),
+    State("store-budget-options", "data"),
+)
+def update_budget_type(budget_id: int | None, options: list[dict] | None) -> str | None:
+    if not budget_id or not options:
+        return None
+    return next((opt.get("type") for opt in options if opt.get("value") == budget_id), None)
+
+
+@callback(
+    Output("url", "search"),
+    Output("store-period", "data", allow_duplicate=True),
+    Input("store-budget-type", "data"),
+    State("url", "search"),
+    State("url", "pathname"),
+    prevent_initial_call=True,
+)
+def update_period_on_budget_update(
+    budget_type: BudgetTypeLiteral | None, current_search: str | None, current_pathname: str | None
+) -> tuple[str | None, PeriodTypeLiteral | None]:
+    if not budget_type:
+        raise PreventUpdate
+    params = parse_qs((current_search or "").lstrip("?"))
+    is_timeseries: bool = get_relative_path("/timeseries") == current_pathname
+
+    if is_timeseries and budget_type != "REPORT":
+        period: PeriodTypeLiteral = "ALL"
+        params["period"] = [period]
+        return "?" + urlencode(params, doseq=True), period
+
+    raise PreventUpdate
+
+
+@callback(
+    Output("url", "search", allow_duplicate=True),
     Output("store-budget-id", "data", allow_duplicate=True),
     Output("store-selected-id", "data", allow_duplicate=True),
     Input("store-budget-options", "data"),
     Input({"type": "budget-item", "value": ALL}, "n_clicks"),
+    State("url", "search"),
     prevent_initial_call=True,
 )
-def select_budget_dynamic(options, clicks):
-    """Update selected budget_id when a budget menu item is clicked, clearing any treemap selection."""
+def select_budget_dynamic(options, clicks, current_search):
+    """Update budget_id in URL and store when a budget menu item is clicked, clearing focus."""
     ctx = callback_context
     if not ctx.triggered:
         raise PreventUpdate
@@ -272,7 +309,10 @@ def select_budget_dynamic(options, clicks):
     selected_value = trig.get("value")
     if selected_value is None:
         raise PreventUpdate
-    return selected_value, None
+    params = parse_qs((current_search or "").lstrip("?"))
+    params["budget_id"] = [str(selected_value)]
+    params.pop("focus", None)
+    return "?" + urlencode(params, doseq=True), selected_value, None
 
 
 # --- Filter stores from URL ---
@@ -284,18 +324,26 @@ def select_budget_dynamic(options, clicks):
     Output("store-unit", "data", allow_duplicate=True),
     Output("store-language", "data", allow_duplicate=True),
     Output("store-period", "data", allow_duplicate=True),
-    Input("url", "search"),
+    Input("url", "pathname"),
+    State("url", "search"),
+    State("store-budget-type", "data"),
     prevent_initial_call="initial_duplicate",
 )
-def apply_filters_from_url(url_search: str | None):
-    """Apply filters from URL query params on load and when the URL changes.
+def init_filters_from_url(
+    url_pathname: str | None, url_search: str | None, budget_type: BudgetTypeLiteral | None
+):
+    """Initialise filter stores from URL params on page load.
 
-    Recognized params: viewby, spending_type, unit, language, period.
-    Missing params leave the current store values unchanged (no_update).
-    budget_id is intentionally excluded — init_budgets owns that store.
+    Fires on pathname changes (page navigation), not on filter changes — those
+    write both the URL and the store together via write-through callbacks.
     """
     if not url_search:
         raise PreventUpdate
+    if not url_pathname:
+        raise PreventUpdate
+    is_timeseries: bool = url_pathname == get_relative_path("/timeseries")
+    if not budget_type:
+        budget_type = "LAW"
     try:
         params = parse_qs(url_search.replace("?", ""))
 
@@ -303,11 +351,14 @@ def apply_filters_from_url(url_search: str | None):
             vals = params.get(key)
             return unquote_plus(vals[0]).strip() if vals else None
 
-        viewby = first("viewby")
-        spending_type = first("spending_type")
-        unit = first("unit")
-        language = first("language")
-        period = first("period")
+        viewby: ViewByDimensionTypeLiteral = first("viewby")  # type: ignore
+        spending_type: SpendingTypeLiteral | None = first("spending_type")  # type: ignore
+        unit: UnitTypeLiteral | None = first("unit")  # type: ignore
+        language: LanguageTypeLiteral | None = first("language")  # type: ignore
+        period: PeriodTypeLiteral | None = first("period")  # type: ignore
+
+        if not is_timeseries and budget_type != "REPORT":
+            period = "ALL"
 
         return (
             viewby if viewby else no_update,
@@ -323,22 +374,25 @@ def apply_filters_from_url(url_search: str | None):
 # --- Filter selections (pattern-matched menu items) ---
 
 
-def _make_select_callback(item_type: str, store: str) -> None:
+def _make_select_callback(item_type: str, store: str, url_param: str) -> None:
     @callback(
+        Output("url", "search", allow_duplicate=True),
         Output(store, "data"),
         Input({"type": item_type, "value": ALL}, "n_clicks"),
+        State("url", "search"),
         prevent_initial_call=True,
     )
-    def _cb(_clicks):
-        return _triggered_value(item_type)
+    def _cb(_clicks, current_search):
+        value = _triggered_value(item_type)
+        return _update_search_param(current_search, url_param, str(value)), value
 
     _cb.__name__ = f"select_{item_type.replace('-', '_')}"
 
 
-_make_select_callback("viewby-item", "store-viewby")
-_make_select_callback("period-item", "store-period")
-_make_select_callback("spending-type-item", "store-spending-type")
-_make_select_callback("unit-item", "store-unit")
+_make_select_callback("viewby-item", "store-viewby", "viewby")
+_make_select_callback("period-item", "store-period", "period")
+_make_select_callback("spending-type-item", "store-spending-type", "spending_type")
+_make_select_callback("unit-item", "store-unit", "unit")
 
 
 # --- Menu label updates ---
@@ -427,14 +481,17 @@ def update_language_button_label(current_lang: str | None):
 
 
 @callback(
+    Output("url", "search", allow_duplicate=True),
     Output("store-language", "data", allow_duplicate=True),
     Input("btn-switch-data-language", "n_clicks"),
     State("store-language", "data"),
+    State("url", "search"),
     prevent_initial_call=True,
 )
-def toggle_language(n_clicks: int | None, current_lang: str | None):
-    """Toggle the language store between RU and EN on button click."""
-    return "EN" if current_lang == "RU" else "RU"
+def toggle_language(n_clicks: int | None, current_lang: str | None, current_search: str | None):
+    """Toggle the language in URL and store between RU and EN on button click."""
+    new_lang = "EN" if current_lang == "RU" else "RU"
+    return _update_search_param(current_search, "language", new_lang), new_lang
 
 
 # --- Share ---
@@ -530,12 +587,6 @@ clientside_callback(
     Input("btn-share-link", "n_clicks"),
     State("store-selected-id", "data"),
     State("store-treemap-node-map", "data"),
-    State("store-language", "data"),
-    State("store-viewby", "data"),
-    State("store-unit", "data"),
-    State("store-spending-type", "data"),
-    State("store-period", "data"),
-    State("store-budget-id", "data"),
     prevent_initial_call=True,
 )
 

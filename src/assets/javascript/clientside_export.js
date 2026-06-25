@@ -6,40 +6,11 @@ const EXPORT_FONT = 'Source Sans 3';
 const EXPORT_FONT_FILE = 'assets/fonts/Source_Sans_3/SourceSans3-VariableFont_wght.ttf';
 
 Object.assign(window.dash_clientside.clientside, {
-  copyShareLink: function (n_clicks, selectedId, nodeMap, language, viewby, unit, spendingType, period, budgetId) {
+  copyShareLink: function (n_clicks, selectedId, nodeMap) {
     try {
       if (!n_clicks) return 'Share not triggered';
+      // URL is always current (write-through); only focus needs computing from the node map.
       const url = new URL(window.location.href);
-      if (budgetId) {
-        url.searchParams.set('budget_id', String(budgetId));
-      } else {
-        url.searchParams.delete('budget_id');
-      }
-      if (language) {
-        url.searchParams.set('language', language);
-      } else {
-        url.searchParams.delete('language');
-      }
-      if (viewby && !window.location.pathname.endsWith('/timeseries')) {
-        url.searchParams.set('viewby', viewby);
-      } else {
-        url.searchParams.delete('viewby');
-      }
-      if (unit) {
-        url.searchParams.set('unit', unit);
-      } else {
-        url.searchParams.delete('unit');
-      }
-      if (spendingType) {
-        url.searchParams.set('spending_type', spendingType);
-      } else {
-        url.searchParams.delete('spending_type');
-      }
-      if (period && window.location.pathname.endsWith('/timeseries')) {
-        url.searchParams.set('period', period);
-      } else {
-        url.searchParams.delete('period');
-      }
       if (selectedId) {
         if (nodeMap) {
           const entry = nodeMap[String(selectedId)];
