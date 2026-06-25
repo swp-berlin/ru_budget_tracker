@@ -25,6 +25,7 @@ from utils.fetch_treemap import ClassifiedSpendingData, TreemapDataFetcher, fetc
 from utils.transform_treemap import TreemapTransformer
 from utils.calculate import Calculator
 from utils.helper import (
+    build_compact_node_map,
     create_treemap_colors,
     get_unit_label,
     shape_for_spending_type,
@@ -221,58 +222,6 @@ def generate_figure(
     return fig, path_to_short_id
 
 
-def _build_compact_node_map(
-    df: pd.DataFrame, path_to_short_id: dict[str, str] | None = None
-) -> dict[str, dict]:
-    """Build a compact {short_id: {leaf: dim_id, ctx: [ancestor_dim_ids]}} map.
-
-    Each short_id is unique (assigned per path), so the same dim_id appearing under
-    multiple parents gets a separate entry with distinct ancestor context. This allows
-    the timeseries to filter by the same subchapter/chapter context as the clicked node.
-    """
-    compact: dict[str, dict] = {}
-    records = df.to_dict("records")
-
-    # path_to_short_id covers only the figure's current language; assign fresh IDs for the other.
-    next_id = (
-        max((int(v) for v in path_to_short_id.values()), default=-1) + 1 if path_to_short_id else 0
-    )
-    extra_path_to_id: dict[str, str] = {}
-
-    for name_ending in ("_NAME", "_NAME_TRANSLATED"):
-        name_cols = ["ROOT"] + [col for col in df.columns if col.endswith(name_ending)]
-
-        for record in records:
-            labels: list[str] = []
-            seen_dim_ids: list[int] = []  # ancestor dim_ids accumulated along the path
-            for col in name_cols:
-                label = record.get(col)
-                if not label or pd.isna(label):
-                    continue
-                labels.append(str(label))
-                if col == "ROOT":
-                    continue
-                dim_id = record.get(f"{col.replace(name_ending, '')}_DIM_ID")
-                if pd.isnull(dim_id):
-                    continue
-                path = "/".join(labels)
-                if path_to_short_id and path in path_to_short_id:
-                    node_ref = path_to_short_id[path]
-                elif path in extra_path_to_id:
-                    node_ref = extra_path_to_id[path]
-                else:
-                    node_ref = str(next_id)
-                    extra_path_to_id[path] = node_ref
-                    next_id += 1
-                dim_id_int = int(dim_id)
-                # ctx is stored before appending dim_id_int, so it contains only ancestors,
-                # not the node itself. The timeseries uses this to filter by hierarchy context.
-                compact[node_ref] = {"leaf": str(dim_id_int), "ctx": list(seen_dim_ids)}
-                seen_dim_ids.append(dim_id_int)
-
-    return compact
-
-
 def layout(**other_kwargs) -> html.Div:
     """
     Defines the static layout of the page. The graph is empty initially and
@@ -372,7 +321,7 @@ def update_figure_from_filters(
     fig, path_to_short_id = generate_figure(
         df_shaped, spending_type, unit=unit, translated=translated, viewby=viewby
     )
-    compact_map = _build_compact_node_map(df_shaped, path_to_short_id=path_to_short_id)
+    compact_map = build_compact_node_map(df_shaped, path_to_short_id=path_to_short_id)
     return (
         fig,
         {"visibility": "visible"},

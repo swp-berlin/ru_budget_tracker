@@ -188,6 +188,54 @@ def shape_for_viewby(
     return df_copy[relevant_cols]
 
 
+def build_compact_node_map(
+    df: pd.DataFrame, path_to_short_id: dict[str, str] | None = None
+) -> dict[str, dict]:
+    """Build a compact {short_id: {leaf: dim_id, ctx: [ancestor_dim_ids]}} map.
+
+    Each short_id is unique (assigned per path), so the same dim_id appearing under
+    multiple parents gets a separate entry with distinct ancestor context. This allows
+    the timeseries to filter by the same subchapter/chapter context as the clicked node.
+    """
+    compact: dict[str, dict] = {}
+    records = df.to_dict("records")
+
+    next_id = (
+        max((int(v) for v in path_to_short_id.values()), default=-1) + 1 if path_to_short_id else 0
+    )
+    extra_path_to_id: dict[str, str] = {}
+
+    for record in records:
+        for name_ending in ("_NAME", "_NAME_TRANSLATED"):
+            name_cols = ["ROOT"] + [col for col in df.columns if col.endswith(name_ending)]
+            labels: list[str] = []
+            seen_dim_ids: list[int] = []
+            for col in name_cols:
+                label = record.get(col)
+                if not label or pd.isna(label):
+                    continue
+                labels.append(str(label))
+                if col == "ROOT":
+                    continue
+                dim_id = record.get(f"{col.replace(name_ending, '')}_DIM_ID")
+                if pd.isnull(dim_id):
+                    continue
+                path = "/".join(labels)
+                if path_to_short_id and path in path_to_short_id:
+                    node_ref = path_to_short_id[path]
+                elif path in extra_path_to_id:
+                    node_ref = extra_path_to_id[path]
+                else:
+                    node_ref = str(next_id)
+                    extra_path_to_id[path] = node_ref
+                    next_id += 1
+                dim_id_int = int(dim_id)
+                compact[node_ref] = {"leaf": str(dim_id_int), "ctx": list(seen_dim_ids)}
+                seen_dim_ids.append(dim_id_int)
+
+    return compact
+
+
 @lru_cache(maxsize=10)
 def build_server_node_map(
     budget_id: int, spending_type: SpendingTypeLiteral, unit: UnitTypeLiteral
