@@ -22,6 +22,7 @@ and adjust the font-family value here and in clientsides_export.js accordingly.
 }
 
 /* Dark text color for dropdown toggles and items */
+#menu-filters .dropdown-toggle,
 #menu-budget .dropdown-toggle,
 #menu-viewby .dropdown-toggle,
 #menu-period .dropdown-toggle,

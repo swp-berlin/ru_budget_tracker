@@ -178,11 +178,13 @@ def generate_figure(
     # Layout adjustments
     # Change font to Source Sans 3 and make it wrapped
     fig.update_layout(
-        margin=dict(t=50, l=80, r=60, b=60, autoexpand=True),
+        margin=dict(t=0, l=70, r=50, b=90, autoexpand=True),
         font=dict(family="Source Sans 3"),
         legend=dict(
             orientation="h",
-            y=-0.15 if budget_type == "REPORT" else -0.1,
+            yref="container",
+            y=0.01,
+            yanchor="bottom",
             xanchor="center",
             x=0.5,
             title_text="",
@@ -207,17 +209,29 @@ def generate_figure(
         )
     else:
         fig.update_layout(
-            xaxis=dict(hoverformat="%Y", tickangle=-45),
+            xaxis=dict(
+                hoverformat="%Y",
+                tickformat="%Y",
+                tickangle=-45,
+                dtick="M12",
+                tick0="2000-01-01",
+            )
         )
 
     # Set custom hover templates per trace, matched by name for robustness.
-    classified_label = "CLASSIFIED (EST.)" if spending_type == "MILITARY" else "CLASSIFIED"
+    classified_label = (
+        "Classified spending (est.)" if spending_type == "MILITARY" else "Classified spending"
+    )
+    open_label = "Open spending"
     for trace in fig.data:
         bar = cast(go.Bar, trace)
         n = len(bar.x) if bar.x is not None else 0  # type: ignore
         bar.customdata = [[unit_label]] * n
         if bar.name == "OPEN":
-            bar.hovertemplate = "<b>%{x}: OPEN</b><br>%{y:,.1f} %{customdata[0]}<br><extra></extra>"
+            bar.hovertemplate = (
+                f"<b>%{{x}}: {open_label}</b><br>%{{y:,.1f}} %{{customdata[0]}}<br><extra></extra>"
+            )
+            bar.name = open_label
         elif bar.name == "CLASSIFIED":
             bar.hovertemplate = f"<b>%{{x}}: {classified_label}</b><br>%{{y:,.1f}} %{{customdata[0]}}<br><extra></extra>"
             bar.name = classified_label
@@ -265,7 +279,12 @@ def _resolve_selected_path(
 def _format_timeseries_title(
     resolved_path: str | None,
     spending_type: SpendingTypeLiteral,
+    budget_type: BudgetTypeLiteral,
 ) -> str:
+    if budget_type == "LAW":
+        title = "Russian federal budget law (spending)"
+    else:
+        title = "Russian federal budget spending"
     if resolved_path:
         node_label = resolved_path.split("/")[-1]
         # Strip the leading original identifier prefix like "123 - " for cleaner titles.
@@ -273,9 +292,7 @@ def _format_timeseries_title(
             node_label = node_label.split(" - ", 1)[1]
         if "<br>" in node_label:
             node_label = node_label.replace("<br>", " ")
-        title = f"Russian Budget: {node_label}"
-    else:
-        title = "Russian Budget Spending"
+        title = f"{title}: {node_label}"
 
     # Append a military suffix when that filter is active.
     if spending_type == "MILITARY":
@@ -430,7 +447,7 @@ def update_figure_from_filters(
         ancestor_dim_ids=ancestor_dim_ids,
     )
     # Build a title from the resolved path so the label matches the current language.
-    title = _format_timeseries_title(resolved_path, spending_type)
+    title = _format_timeseries_title(resolved_path, spending_type, budget_type)
 
     # Provide tick metadata for the clientside responsive-tick callback.
     # Only needed for REPORT budgets shown with all periods (many quarterly ticks).

@@ -190,6 +190,7 @@ def generate_figure(
         ids=new_ids,
         parents=new_parents,
         marker_colors=colors,
+        pathbar_textfont_size=18,  # Max size of pathbar text. Increase with text size.
         marker_pad=dict(t=25, l=5, r=5, b=5),
         customdata=list(
             zip(
@@ -201,11 +202,11 @@ def generate_figure(
             [
                 "<b>%{label}</b>",
                 "<br>%{value:,.1f}" + unit_config.map[unit],
-                "<i>%{customdata[0]:.1f}%" + " of parent</i>",
-                "<i>%{customdata[1]:.1f}%" + " of total</i>",
+                "%{customdata[0]:.1f}%" + " of parent",
+                "%{customdata[1]:.1f}%" + " of total",
             ]
         ),
-        texttemplate="%{label}<br><sub>%{value:,.1f}" + unit_config.map[unit] + "</sub>",
+        texttemplate="%{label}<br>%{value:,.1f}" + unit_config.map[unit],
     )
 
     # Layout adjustments
@@ -213,7 +214,7 @@ def generate_figure(
         autosize=True,
         width=None,  # don't hardcode width
         height=None,  # don't hardcode height
-        margin=dict(t=20, l=10, r=10, b=10),
+        margin=dict(t=27, l=10, r=10, b=10),
         font=dict(family="Source Sans 3", color="#444444"),
     )
 
@@ -416,7 +417,7 @@ def _build_download_df(
     leaf1_col = name_cols[0] if len(name_cols) > 0 else None
     leaf2_col = name_cols[1] if len(name_cols) > 1 else None
 
-    root_name = df_shaped["ROOT"].iloc[0] if len(df_shaped) > 0 else "Federal Budget"
+    root_name = df_shaped["ROOT"].iloc[0] if len(df_shaped) > 0 else "Federal budget"
     value_col = get_unit_label(unit)
 
     def clean(val: Any) -> str | None:

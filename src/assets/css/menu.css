@@ -1,46 +1,34 @@
-/* Dropdown toggle base layout */
-#menu-budget .dropdown-toggle,
-#menu-viewby .dropdown-toggle,
-#menu-period .dropdown-toggle,
-#menu-spending-type .dropdown-toggle,
-#menu-unit .dropdown-toggle {
+/* Inner filter dropdown toggles (Budget, View By, Period, Spending Type, Unit).
+   Fixed height and width; text truncates with ellipsis when the selected label
+   is long. Right padding leaves room for the absolute-positioned caret. */
+#menu-filters .dropdown-menu > .dropdown > .dropdown-toggle {
   display: inline-block;
   position: relative;
   height: 40px;
   line-height: 24px;
-  padding: 8px 28px 8px 12px; /* 28px right reserves space for caret */
-  max-width: 150px;
+  text-align: center;
+  padding: 0px 15px 0px 15px;
+  width: 150px;
+  max-width: 200px;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
-#menu-budget .dropdown-toggle > *,
-#menu-viewby .dropdown-toggle > *,
-#menu-period .dropdown-toggle > *,
-#menu-spending-type .dropdown-toggle > *,
-#menu-unit .dropdown-toggle > * {
-  min-width: 0; /* allow flex children to shrink for ellipsis */
-}
-
-/* Keep the dropdown list scrollable and compact */
-#menu-budget .dropdown-menu,
-#menu-viewby .dropdown-menu,
-#menu-period .dropdown-menu,
-#menu-spending-type .dropdown-menu,
-#menu-unit .dropdown-menu {
+/* Dropdown lists for the inner filter items. Capped height with scroll so
+   long lists (e.g. many budget years) don't overflow the viewport. */
+#menu-filters .dropdown-menu > .dropdown > .dropdown-menu {
   max-height: 300px;
   overflow-y: auto;
   overflow-x: hidden;
   min-width: 180px;
+  text-align: left;
 }
 
-/* Keep caret visible by absolutely positioning it inside the toggle */
-#menu-budget .dropdown-toggle::after,
-#menu-viewby .dropdown-toggle::after,
-#menu-period .dropdown-toggle::after,
-#menu-spending-type .dropdown-toggle::after,
-#menu-unit .dropdown-toggle::after {
+/* Caret for every toggle inside #menu-filters — both the Filters wrapper button
+   and the inner filter toggles. Absolutely positioned so it never shifts the
+   text; vertically centred via transform. */
+#menu-filters .dropdown-toggle::after {
   position: absolute;
   right: 10px;
   top: 50%;
@@ -48,6 +36,8 @@
   margin-left: 0;
 }
 
+/* Graph-switch button: fixed width so the toolbar doesn't reflow when the
+   label alternates between 'Treemap' and 'Timeseries'. */
 #btn-switch-graphs {
   display: inline-flex;
   align-items: center;
@@ -57,12 +47,7 @@
   justify-content: center;
 }
 
-#btn-switch-graphs .btn-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* Toolbar button sizing: make all action buttons same height */
+/* Uniform height and padding for all toolbar action buttons. */
 .toolbar .btn {
   height: 40px;
   padding: 8px 12px;
@@ -71,18 +56,20 @@
   align-items: center;
 }
 
-/* Default toolbar icon size */
+/* Default icon size inside toolbar buttons. */
 .toolbar .btn img {
   width: 24px;
   height: 24px;
 }
 
+/* Language toggle button: icon-only width, content centred. */
 #btn-switch-data-language {
   width: 50px;
   justify-content: center;
 }
 
-/* toolbar-body: sits between logo and edge; owns the wrapping behaviour */
+/* Flex row that fills the space between the toolbar edges and distributes
+   the filter group and action buttons to opposite ends via space-between. */
 .toolbar-body {
   display: flex;
   flex: 1;
@@ -90,91 +77,127 @@
   justify-content: space-between;
 }
 
-/* Medium screens: wrap action buttons onto a second row */
-@media (max-width: 1500px) {
-  .toolbar-body {
-    flex-wrap: wrap;
-    row-gap: 8px;
-  }
+/* The 'Filters' collapsible toggle shown on narrow screens (hidden on desktop
+   via the min-width media query below). Fixed width matches the inner dropdowns. */
+#menu-filters > .dropdown-toggle {
+  display: inline-block;
+  position: relative;
+  height: 40px;
+  text-align: center;
+  width: 180px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
-/* Narrower items on small screens */
-@media (max-width: 480px) {
-  #menu-budget .dropdown-toggle,
-  #menu-viewby .dropdown-toggle,
-  #menu-period .dropdown-toggle,
-  #menu-spending-type .dropdown-toggle,
-  #menu-unit .dropdown-toggle,
-  #menu-budget .dropdown-menu,
-  #menu-viewby .dropdown-menu,
-  #menu-period .dropdown-menu,
-  #menu-spending-type .dropdown-menu,
-  #menu-unit .dropdown-menu {
-    max-width: 180px;
-    min-width: 180px;
-  }
+/* The panel that wraps all inner filter dropdowns. On mobile it opens as a
+   dropdown column; on desktop it is overridden to a static flex row. */
+#menu-filters > .dropdown-menu {
+  width: 100%;
+  gap: 4px;
+  padding: 4px;
 }
 
-/* Responsive: stack menus and action buttons vertically on narrow screens */
-@media (max-width: 600px) {
-  .toolbar {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
+/* When the Filters panel is open on mobile, stack the inner dropdowns
+   vertically. Overridden to a row on desktop (see min-width query below). */
+#menu-filters > .dropdown-menu.show {
+  display: flex !important;
+  flex-direction: column;
+}
+
+/* Desktop (≥1101px): hide the 'Filters' wrapper toggle entirely and show the
+   filter panel as a static inline flex row so all dropdowns are always
+   visible in the toolbar without any click to reveal. */
+@media (min-width: 1101px) {
+  #menu-filters>.dropdown-toggle {
+    display: none !important;
   }
 
-  .toolbar .toolbar-group {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
+  #menu-filters>.dropdown-menu,
+  #menu-filters>.dropdown-menu.show {
+    display: flex !important;
+    flex-direction: row;
+    position: static !important;
+    transform: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    background: transparent !important;
     gap: 6px;
   }
+}
 
+/* Tablet / collapsed-filter mode (≤1100px): when the Filters panel opens as
+   a dropdown, stretch each inner dropdown to full width so they're easy to tap. */
+@media (max-width: 1100px) {
+  #menu-filters .dropdown-menu>.dropdown {
+    width: 100%;
+  }
+
+  #menu-filters .dropdown-menu>.dropdown .dropdown-toggle {
+    width: 100%;
+    max-width: none;
+  }
+
+  #menu-filters .dropdown-menu>.dropdown .dropdown-menu {
+    min-width: 100%;
+  }
+}
+
+
+/* Narrow screens (≤640px): shrink action buttons to icon-only width (50px)
+   and hide the graph-switch text label. Buttons stay in a single row. */
+@media (max-width: 640px) {
   .toolbar .toolbar-actions {
-    display: flex;
-    flex-direction: row; /* override .toolbar-group's column direction */
-    flex-wrap: wrap;
     align-items: center;
     justify-content: center;
     gap: 6px;
-    width: 100%;
   }
 
-  #menu-budget,
-  #menu-viewby,
-  #menu-period,
-  #menu-spending-type,
-  #menu-unit {
-    display: block;
-    width: 100%;
-    margin: 6px 0;
+  .toolbar .toolbar-actions #btn-switch-graphs,
+  .toolbar .toolbar-actions #btn-share-link,
+  .toolbar .toolbar-actions #btn-download-image,
+  .toolbar .toolbar-actions #btn-download-csv,
+  .toolbar .toolbar-actions #btn-about,
+  .toolbar .toolbar-actions #btn-switch-data-language {
+    width: 50px;
+    justify-content: center;
   }
 
-  /* Dropdown triggers stretch to full width on mobile */
-  #menu-budget .dropdown-toggle,
-  #menu-viewby .dropdown-toggle,
-  #menu-period .dropdown-toggle,
-  #menu-spending-type .dropdown-toggle,
-  #menu-unit .dropdown-toggle {
-    width: 100%;
-    min-width: 100%;
-    max-width: none;
-    justify-content: space-between;
+  #btn-switch-graphs .btn-label {
+    display: none;
   }
 
-  #menu-budget .dropdown-menu,
-  #menu-viewby .dropdown-menu,
-  #menu-period .dropdown-menu,
-  #menu-spending-type .dropdown-menu,
-  #menu-unit .dropdown-menu {
-    min-width: 100%;
-    max-width: 100%;
+  #btn-switch-graphs img {
+    margin-right: 0 !important;
+  }
+}
+
+/* Very narrow screens (≤560px): switch toolbar-body to a 2-column CSS grid —
+   Filters toggle on the left (180px), 3-column button grid on the right. */
+@media (max-width: 560px) {
+  .toolbar-body {
+    display: grid;
+    grid-template-columns: 180px 1fr;
+    gap: 8px;
+    align-items: stretch;
   }
 
-  .toolbar .toolbar-actions .btn {
-    padding: 4px 8px;
-    line-height: 1.2;
+  #menu-filters {
+    display: flex;
+  }
+
+  /* Filters toggle stretches to fill its grid cell. */
+  #menu-filters>.dropdown-toggle {
+    flex: 1;
+    height: auto !important;
+  }
+
+  /* 3-column equal-width grid for the 6 action buttons (2 rows of 3). */
+  .toolbar .toolbar-actions {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
   }
 
   .toolbar .toolbar-actions #btn-switch-graphs,
@@ -188,23 +211,59 @@
     justify-content: center;
   }
 
+}
+
+
+/* Smallest screens (≤380px): stack Filters toggle and button row vertically.
+   Filters toggle spans full width; buttons use flex-wrap to fill the row. */
+@media (max-width: 380px) {
+  .toolbar-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: stretch;
+    min-width: 200px;
+  }
+
+  #menu-filters {
+    display: block;
+    width: 100%;
+  }
+
+  #menu-filters > .dropdown-toggle {
+    width: 100%;
+    height: 40px !important;
+    max-width: none;
+  }
+
+  .toolbar .toolbar-actions {
+    margin-left: 0;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 6px;
+    width: 100%;
+  }
+
+  /* Each button takes an equal share of the row width. */
+  .toolbar .toolbar-actions .btn {
+    flex: 1;
+    padding: 4px 7px;
+    line-height: 1.2;
+    justify-content: center;
+  }
+
   .toolbar .toolbar-actions img {
     width: 1.5em;
     height: 1.5em;
   }
-
-  #btn-switch-graphs .btn-label {
-    display: none;
-  }
-
-  #btn-switch-graphs img {
-    margin-right: 0 !important;
-  }
 }
 
-/* Treemap loading spinner */
+/* Loading spinner shown over the treemap while data is being fetched. */
 @keyframes treemap-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .treemap-spinner {

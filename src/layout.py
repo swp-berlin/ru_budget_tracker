@@ -70,31 +70,19 @@ toolbar = html.Div(
         html.Div(id="dummy-restore-zoom", style={"display": "none"}),
         dbc.Stack(
             [
-                # Logo image without button styling - only the image is visible
-                html.A(
-                    [
-                        html.Img(
-                            src=get_asset_url("logo/logo.svg"),
-                            style={"height": "2em"},
-                            alt="Logo of Stiftung Wissenschaft und Politik",
-                        ),
-                    ],
-                    style={"marginRight": "20px", "alignSelf": "center"},
-                    href=get_relative_path("/"),
-                    title="Go to Home Page",
-                ),
                 html.Div(
                     [
-                        dbc.Stack(
-                            [
+                        dbc.DropdownMenu(
+                            label="Filters",
+                            id="menu-filters",
+                            children=[
                                 # Budget dataset menu
                                 dbc.DropdownMenu(
                                     label="Budget",
                                     children=[],  # will be set by callback
                                     id="menu-budget",
                                     direction="down",
-                                    class_name="me-2 scroll-menu",
-                                    # Make the dropdown list scrollable to handle many budgets
+                                    class_name="scroll-menu",
                                 ),
                                 # View-by menu (shown on treemap, hidden on timeseries)
                                 dbc.DropdownMenu(
@@ -102,7 +90,6 @@ toolbar = html.Div(
                                     children=viewby_items,
                                     id="menu-viewby",
                                     direction="down",
-                                    class_name="me-2",
                                     style={},  # controlled by callback
                                 ),
                                 # Period menu (for timeseries, hidden on treemap)
@@ -111,7 +98,6 @@ toolbar = html.Div(
                                     children=period_items,
                                     id="menu-period",
                                     direction="down",
-                                    class_name="me-2",
                                     style={"display": "none"},  # controlled by callback
                                 ),
                                 # Spending type menu
@@ -120,7 +106,6 @@ toolbar = html.Div(
                                     children=spending_type_items,
                                     id="menu-spending-type",
                                     direction="down",
-                                    class_name="me-2",
                                 ),
                                 # Unit menu
                                 dbc.DropdownMenu(
@@ -128,11 +113,8 @@ toolbar = html.Div(
                                     children=unit_items,
                                     id="menu-unit",
                                     direction="down",
-                                    class_name="me-2",
                                 ),
                             ],
-                            direction="horizontal",
-                            class_name="toolbar-group",
                         ),
                         # Stack for action buttons on the right
                         dbc.Stack(
@@ -245,7 +227,7 @@ toolbar = html.Div(
             },
             class_name="toolbar",
         ),
-        dbc.Row(html.Hr()),
+        dbc.Row(html.Hr(style={"margin": "0"})),
     ]
 )
 
@@ -259,7 +241,10 @@ def serve_layout():
         id="app-layout",
         children=[
             toolbar,
-            html.Div(id="timeseries-title"),
+            html.Div(
+                id="timeseries-title",
+                style={"marginTop": "0.5rem", "marginBottom": "0.5rem"},
+            ),
             html.Div(page_container, id="pages-wrapper"),
         ],
     )
