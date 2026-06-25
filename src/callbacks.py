@@ -53,9 +53,13 @@ def _item_span(label: str, selected: bool) -> html.Span:
     return html.Span(label, title=label, style=style)
 
 
+def _parse_search(search: str | None) -> dict:
+    return parse_qs((search or "").lstrip("?"))
+
+
 def _update_search_param(current_search: str | None, key: str, value: str) -> str:
     """Return a new URL search string with one key replaced, preserving all other params."""
-    params = parse_qs((current_search or "").lstrip("?"))
+    params = _parse_search(current_search)
     params[key] = [value]
     return "?" + urlencode(params, doseq=True)
 
@@ -242,7 +246,7 @@ def init_budgets(_, url_search: str | None, store_budget_id: int | None):
 
     default_value = options[0]["value"] if options else None
     if url_search:
-        params = parse_qs(url_search.replace("?", ""))
+        params = _parse_search(url_search)
         budget_id_raw = params.get("budget_id", [None])[0]
         if budget_id_raw:
             budget_id_raw = unquote_plus(budget_id_raw).strip()
@@ -278,7 +282,7 @@ def update_period_on_budget_update(
 ) -> tuple[str | None, PeriodTypeLiteral | None]:
     if not budget_type:
         raise PreventUpdate
-    params = parse_qs((current_search or "").lstrip("?"))
+    params = _parse_search(current_search)
     is_timeseries: bool = get_relative_path("/timeseries") == current_pathname
 
     if is_timeseries and budget_type != "REPORT":
@@ -309,7 +313,7 @@ def select_budget_dynamic(options, clicks, current_search):
     selected_value = trig.get("value")
     if selected_value is None:
         raise PreventUpdate
-    params = parse_qs((current_search or "").lstrip("?"))
+    params = _parse_search(current_search)
     params["budget_id"] = [str(selected_value)]
     params.pop("focus", None)
     return "?" + urlencode(params, doseq=True), selected_value, None
@@ -345,7 +349,7 @@ def init_filters_from_url(
     if not budget_type:
         budget_type = "LAW"
     try:
-        params = parse_qs(url_search.replace("?", ""))
+        params = _parse_search(url_search)
 
         def first(key: str):
             vals = params.get(key)

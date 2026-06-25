@@ -26,10 +26,10 @@ from utils.transform_treemap import TreemapTransformer
 from utils.calculate import Calculator
 from utils.helper import (
     build_compact_node_map,
+    build_name_cols,
     create_treemap_colors,
     get_unit_label,
-    shape_for_spending_type,
-    shape_for_viewby,
+    shape_dataframe,
 )
 from utils.definitions import (
     UnitTypeLiteral,
@@ -200,7 +200,7 @@ def generate_figure(
 ) -> tuple[go.Figure, dict[str, str]]:
     """Build a treemap with stable ids and clean hover info."""
     name_ending = "_NAME_TRANSLATED" if translated else "_NAME"
-    name_cols = ["ROOT"] + [col for col in df.columns if col.endswith(name_ending)]
+    name_cols = build_name_cols(df, name_ending, include_root=True)
     keep_cols = [c for c in name_cols + ["VALUE", "BUDGET_TYPE"] if c in df.columns]
 
     fig = px.treemap(
@@ -319,8 +319,7 @@ def update_figure_from_filters(
     except ValueError as e:
         return no_update, no_update, no_update, no_update, True, str(e)
 
-    df_shaped = shape_for_spending_type(df, spending_type=spending_type)
-    df_shaped = shape_for_viewby(df_shaped, viewby=viewby)
+    df_shaped = shape_dataframe(df, spending_type, viewby)
     fig, path_to_short_id = generate_figure(
         df_shaped, spending_type, unit=unit, translated=translated, viewby=viewby
     )
@@ -363,11 +362,10 @@ def _build_download_df(
     unit: UnitTypeLiteral = "ABSOLUTE",
 ) -> pd.DataFrame:
     """Build a flat aggregated DataFrame for CSV download with root, Level 1, Level 2, value columns."""
-    df_shaped = shape_for_spending_type(df, spending_type=spending_type)
-    df_shaped = shape_for_viewby(df_shaped, viewby=viewby)
+    df_shaped = shape_dataframe(df, spending_type, viewby)
 
     name_ending = "_NAME_TRANSLATED" if translated else "_NAME"
-    name_cols = [col for col in df_shaped.columns if col.endswith(name_ending)]
+    name_cols = build_name_cols(df_shaped, name_ending)
 
     leaf1_col = name_cols[0] if len(name_cols) > 0 else None
     leaf2_col = name_cols[1] if len(name_cols) > 1 else None

@@ -188,6 +188,20 @@ def shape_for_viewby(
     return df_copy[relevant_cols]
 
 
+def build_name_cols(df: pd.DataFrame, name_ending: str, include_root: bool = False) -> list[str]:
+    cols = [col for col in df.columns if col.endswith(name_ending)]
+    return (["ROOT"] + cols) if include_root else cols
+
+
+def shape_dataframe(
+    df: pd.DataFrame,
+    spending_type: SpendingTypeLiteral,
+    viewby: ViewByDimensionTypeLiteral,
+) -> pd.DataFrame:
+    """Apply spending-type and viewby shaping in one call."""
+    return shape_for_viewby(shape_for_spending_type(df, spending_type), viewby)
+
+
 def build_compact_node_map(
     df: pd.DataFrame, path_to_short_id: dict[str, str] | None = None
 ) -> dict[str, dict]:
@@ -207,7 +221,7 @@ def build_compact_node_map(
 
     for record in records:
         for name_ending in ("_NAME", "_NAME_TRANSLATED"):
-            name_cols = ["ROOT"] + [col for col in df.columns if col.endswith(name_ending)]
+            name_cols = build_name_cols(df, name_ending, include_root=True)
             labels: list[str] = []
             seen_dim_ids: list[int] = []
             for col in name_cols:
@@ -252,7 +266,7 @@ def build_server_node_map(
     records = df.to_dict("records")
     # Build entries for both languages so callers can look up paths in either RU or EN.
     for name_ending in ("_NAME", "_NAME_TRANSLATED"):
-        name_cols = ["ROOT"] + [col for col in df.columns if col.endswith(name_ending)]
+        name_cols = build_name_cols(df, name_ending, include_root=True)
         language = "EN" if name_ending == "_NAME_TRANSLATED" else "RU"
         for record in records:
             # labels accumulates the path segments as we walk the hierarchy columns left-to-right,

@@ -262,6 +262,20 @@ def _resolve_selected_path(
     return _find_path_by_dimension_id(int(raw_dim_id), node_map, language)
 
 
+def _resolve_classified_dimension(
+    selected_dimension: dict | None,
+    path: str | None,
+    node_map: dict,
+) -> tuple[bool, dict | None]:
+    """Collapse a CLASSIFIED node to its parent chapter for API filtering."""
+    if selected_dimension and "CLASSIFIED" in str(
+        selected_dimension.get("dimension_original_identifier", "")
+    ):
+        parent_path = "/".join(path.split("/")[:-1]) if path else None
+        return True, node_map.get(parent_path) if parent_path else None
+    return False, selected_dimension
+
+
 def _format_timeseries_title(
     resolved_path: str | None,
     spending_type: SpendingTypeLiteral,
@@ -415,14 +429,9 @@ def update_figure_from_filters(
     # a different budget year), use the dimension_id directly so the data is still filtered.
     if selected_dimension is None and focus_dim_id is not None:
         selected_dimension = {"dimension_id": focus_dim_id, "dimension_original_identifier": ""}
-    classified_only = False
-    if selected_dimension and "CLASSIFIED" in str(
-        selected_dimension.get("dimension_original_identifier", "")
-    ):
-        classified_only = True
-        # Use the parent chapter's dimension for the API filter.
-        parent_path = "/".join(resolved_path.split("/")[:-1]) if resolved_path else None
-        selected_dimension = node_map.get(parent_path) if parent_path else None
+    classified_only, selected_dimension = _resolve_classified_dimension(
+        selected_dimension, resolved_path, node_map
+    )
     df, _, budget_type = fetch_timeseries_data(
         budget_id=budget_id,
         spending_type=spending_type,
@@ -488,13 +497,9 @@ def download_timeseries_data(
     except ValueError:
         node_map = {}
     selected_dimension = node_map.get(selected_node_id) if selected_node_id else None
-    classified_only = False
-    if selected_dimension and "CLASSIFIED" in str(
-        selected_dimension.get("dimension_original_identifier", "")
-    ):
-        classified_only = True
-        parent_path = "/".join(selected_node_id.split("/")[:-1]) if selected_node_id else None
-        selected_dimension = node_map.get(parent_path) if parent_path else None
+    classified_only, selected_dimension = _resolve_classified_dimension(
+        selected_dimension, selected_node_id, node_map
+    )
     df, _, budget_type = fetch_timeseries_data(
         budget_id=budget_id,
         spending_type=spending_type,
