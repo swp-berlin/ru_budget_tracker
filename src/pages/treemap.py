@@ -122,34 +122,18 @@ def transform_treemap_data(
     return df
 
 
-def generate_figure(
+def _prepare_trace_overrides(
+    trace_data: Any,
     df: pd.DataFrame,
-    spending_type: SpendingTypeLiteral = "ALL",
-    unit: UnitTypeLiteral = "ABSOLUTE",
-    translated: bool = False,
-    viewby: ViewByDimensionTypeLiteral = "MINISTRY",
-) -> tuple[go.Figure, dict[str, str]]:
-    """Build a treemap with stable ids and clean hover info."""
-    # If translated, use translated names
-    # ending = "NAME_TRANSLATED" if translated else "NAME"
-    name_ending = "_NAME_TRANSLATED" if translated else "_NAME"
-    name_cols = ["ROOT"] + [col for col in df.columns if col.endswith(name_ending)]
+    viewby: ViewByDimensionTypeLiteral,
+    spending_type: SpendingTypeLiteral,
+    unit: UnitTypeLiteral,
+) -> tuple[dict, dict[str, str]]:
+    """Compute ids, colors, percentages, and templates for fig.update_traces.
 
-    # Strip columns not used in the figure to keep the serialized trace lean.
-    keep_cols = [c for c in name_cols + ["VALUE", "BUDGET_TYPE"] if c in df.columns]
-    # Build figure
-    fig = px.treemap(
-        data_frame=df[keep_cols],
-        path=name_cols,
-        values="VALUE",
-        hover_data=None,
-        custom_data=["BUDGET_TYPE"],
-        title=" ",  # Placeholder, important for download
-    )
-
-    # Extract the necessary data from the treemap trace to compute percentages
-    # and apply coloring rules.
-    trace_data = fig.data[0]
+    Returns (trace_kwargs, path_to_short_id). path_to_short_id maps original
+    Plotly path strings to compact integer ids and is needed by build_compact_node_map.
+    """
     node_ids: list[str] = list(trace_data["ids"])
     parents: list[str] = list(trace_data["parents"])
     values: list[float] = [float(v) if v is not None else 0.0 for v in trace_data["values"]]
@@ -159,7 +143,6 @@ def generate_figure(
     # Compute percentages for all nodes based on treemap aggregation.
     parent_percentages, root_percentages = _compute_percentages(parents, values)
 
-    # Safely read Plotly ids/labels (may be numpy arrays).
     # Build a label→orig_id mapping for PROGRAM_0 so colors are language-agnostic.
     # Both the Russian and translated labels map to the same orig_id.
     program_label_to_orig_id: dict[str, str] = {}
@@ -170,27 +153,23 @@ def generate_figure(
                     if label and orig_id and pd.notna(label) and pd.notna(orig_id):
                         program_label_to_orig_id[str(label)] = str(orig_id)
 
-    # Generate list of colors for each node based on classified status, node_id and spending type
     colors = create_treemap_colors(
         node_ids,
         budget_types,
         spending_type,
         viewby,
-        program_label_to_orig_id or None,  # pass None rather than {} so the helper skips the lookup
+        program_label_to_orig_id or None,
     )
 
     # Replace long path-string ids with short integer ids to reduce JSON payload.
     # The root virtual node keeps its empty-string id; all others get sequential integers.
     unique_nids = dict.fromkeys(nid for nid in node_ids if nid)
     path_to_short_id = {nid: str(i) for i, nid in enumerate(unique_nids)}
-    new_ids = [path_to_short_id.get(nid, nid) for nid in node_ids]
-    new_parents = [path_to_short_id.get(p, p) for p in parents]
+    unit_label = unit_config.map[unit]
 
-    # Combine existing customdata with new percentage data and node ids for hover and click interactions.
-    # Attach custom data for hover to every node, including id for click selection.
-    fig.update_traces(
-        ids=new_ids,
-        parents=new_parents,
+    trace_kwargs = dict(
+        ids=[path_to_short_id.get(nid, nid) for nid in node_ids],
+        parents=[path_to_short_id.get(p, p) for p in parents],
         marker_colors=colors,
         marker_pad=dict(t=25, l=5, r=5, b=5),
         customdata=list(
@@ -202,15 +181,41 @@ def generate_figure(
         hovertemplate="<br>".join(
             [
                 "<b>%{label}</b>",
-                "<br>%{value:,.1f}" + unit_config.map[unit],
-                "<i>%{customdata[0]:.1f}%" + " of parent</i>",
-                "<i>%{customdata[1]:.1f}%" + " of total</i>",
+                "<br>%{value:,.1f}" + unit_label,
+                "<i>%{customdata[0]:.1f}% of parent</i>",
+                "<i>%{customdata[1]:.1f}% of total</i>",
             ]
         ),
-        texttemplate="%{label}<br><sub>%{value:,.1f}" + unit_config.map[unit] + "</sub>",
+        texttemplate="%{label}<br><sub>%{value:,.1f}" + unit_label + "</sub>",
+    )
+    return trace_kwargs, path_to_short_id
+
+
+def generate_figure(
+    df: pd.DataFrame,
+    spending_type: SpendingTypeLiteral = "ALL",
+    unit: UnitTypeLiteral = "ABSOLUTE",
+    translated: bool = False,
+    viewby: ViewByDimensionTypeLiteral = "MINISTRY",
+) -> tuple[go.Figure, dict[str, str]]:
+    """Build a treemap with stable ids and clean hover info."""
+    name_ending = "_NAME_TRANSLATED" if translated else "_NAME"
+    name_cols = ["ROOT"] + [col for col in df.columns if col.endswith(name_ending)]
+    keep_cols = [c for c in name_cols + ["VALUE", "BUDGET_TYPE"] if c in df.columns]
+
+    fig = px.treemap(
+        data_frame=df[keep_cols],
+        path=name_cols,
+        values="VALUE",
+        hover_data=None,
+        custom_data=["BUDGET_TYPE"],
+        title=" ",  # Placeholder, important for download
     )
 
-    # Layout adjustments
+    trace_kwargs, path_to_short_id = _prepare_trace_overrides(
+        fig.data[0], df, viewby, spending_type, unit
+    )
+    fig.update_traces(**trace_kwargs)
     fig.update_layout(
         autosize=True,
         width=None,  # don't hardcode width
