@@ -1,6 +1,7 @@
 import json
 import math
 import sqlite3
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -29,7 +30,7 @@ def _case_id(check: dict) -> str:
 
 
 @pytest.fixture(scope="session")
-def db_connection() -> sqlite3.Connection:
+def db_connection() -> Iterator[sqlite3.Connection]:
     if not DB_PATH.exists():
         pytest.fail(f"Database file not found: {DB_PATH}")
 

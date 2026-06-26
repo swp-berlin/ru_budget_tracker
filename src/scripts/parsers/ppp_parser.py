@@ -47,7 +47,7 @@ CSV_PATH = _resolve_csv_path()
 def fetch_ppp_api_data() -> Dict[int, float]:
     """Fetch PPP data from World Bank API. Returns {year: value}."""
     url = f"https://api.worldbank.org/v2/country/{COUNTRY}/indicator/{INDICATOR}"
-    r = requests.get(url, params={"format": "json", "per_page": 20000}, timeout=30)  # type: ignore
+    r = requests.get(url, params={"format": "json", "per_page": 20000}, timeout=30)
     r.raise_for_status()
     data = r.json()[1]
     return {int(row["date"]): float(row["value"]) for row in data if row["value"] is not None}

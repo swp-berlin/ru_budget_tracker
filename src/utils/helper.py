@@ -232,7 +232,7 @@ def build_compact_node_map(
                 if col == "ROOT":
                     continue
                 dim_id = record.get(f"{col.replace(name_ending, '')}_DIM_ID")
-                if pd.isnull(dim_id):
+                if pd.isnull(dim_id) or dim_id is None:
                     continue
                 path = "/".join(labels)
                 if path_to_short_id and path in path_to_short_id:
@@ -282,7 +282,7 @@ def build_server_node_map(
                 base = col.replace(name_ending, "")
                 dim_id = record.get(f"{base}_DIM_ID")
                 dim_orig_id = record.get(f"{base}_ORIG_ID")
-                if pd.notnull(dim_id) and pd.notnull(dim_orig_id):
+                if dim_id is not None and pd.notnull(dim_id) and pd.notnull(dim_orig_id):
                     node_map["/".join(labels)] = {
                         "dimension_id": int(dim_id),
                         "dimension_original_identifier": str(dim_orig_id),

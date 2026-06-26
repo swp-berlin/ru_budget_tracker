@@ -208,7 +208,7 @@ def parse_law_expenses(merged_rows: List[MergedRow], dimensions: List[Dimension]
 
         if row.program_code and row.expense_type_code:
             program_id = f"{row.program_code}-{row.expense_type_code}"
-            dim = dim_lookup.get(("PROGRAM", program_id))  # type: ignore
+            dim = dim_lookup.get(("PROGRAM", program_id))
             if dim:
                 expense.dimensions.append(dim)
 

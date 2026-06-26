@@ -36,7 +36,7 @@ app.layout = serve_layout
 
 # Validation layout includes all components that callbacks might reference.
 # This prevents "component not found" warnings during callback validation.
-app.validation_layout = validation_layout  # type: ignore
+app.validation_layout = validation_layout
 
 
 def _prewarm_treemap_cache() -> None:
@@ -79,7 +79,7 @@ def _prewarm_timeseries_cache() -> None:
             logger.info(
                 "Timeseries prewarm: fetching execution budgets for spending_type=%s", spending_type
             )
-            fetcher = TimeseriesDataFetcher(spending_type)  # type: ignore
+            fetcher = TimeseriesDataFetcher(spending_type)
             fetcher._fetch_execution_budget_expenses()
             logger.info(
                 "Timeseries prewarm: fetching law budgets for spending_type=%s", spending_type
@@ -111,7 +111,7 @@ def _prewarm_timeseries_cache() -> None:
                     try:
                         fetch_timeseries_data(
                             budget_id=budget_id,
-                            spending_type=spending_type,  # type: ignore
+                            spending_type=spending_type,
                             unit=unit,
                         )
                     except Exception:

@@ -355,11 +355,11 @@ def init_filters_from_url(
             vals = params.get(key)
             return unquote_plus(vals[0]).strip() if vals else None
 
-        viewby: ViewByDimensionTypeLiteral = first("viewby")  # type: ignore
-        spending_type: SpendingTypeLiteral | None = first("spending_type")  # type: ignore
-        unit: UnitTypeLiteral | None = first("unit")  # type: ignore
-        language: LanguageTypeLiteral | None = first("language")  # type: ignore
-        period: PeriodTypeLiteral | None = first("period")  # type: ignore
+        viewby: ViewByDimensionTypeLiteral = first("viewby")
+        spending_type: SpendingTypeLiteral | None = first("spending_type")
+        unit: UnitTypeLiteral | None = first("unit")
+        language: LanguageTypeLiteral | None = first("language")
+        period: PeriodTypeLiteral | None = first("period")
 
         if not is_timeseries and budget_type != "REPORT":
             period = "ALL"
@@ -432,7 +432,7 @@ def update_menu_labels(
     return (
         viewby_config.map.get(viewby or "", "View by"),
         spending_type_config.map.get(spending_type or "", "Spending type"),
-        unit_config.map.get(unit or "", "Unit"),  # type: ignore
+        unit_config.map.get(unit or "", "Unit"),
         period_config.map.get(period or "", "Period"),
     )
 

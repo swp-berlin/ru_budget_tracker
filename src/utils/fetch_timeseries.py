@@ -210,7 +210,7 @@ class TimeseriesDataFetcher:
             if part_queries:
                 combo_sq = part_queries[0]
                 for pq in part_queries[1:]:
-                    combo_sq = intersect(combo_sq, pq)  # type: ignore
+                    combo_sq = intersect(combo_sq, pq)
                 military_conditions.append(Expense.id.in_(combo_sq))
 
         return military_conditions
