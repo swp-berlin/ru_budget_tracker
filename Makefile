@@ -97,6 +97,8 @@ import-ppp:
 
 # Run the translation pipeline to translate unseen dimension names.
 # Translates in batches of 25 by default.
+# Requires OPENAI_API_KEY to be set in the environment.
+# OPENAI_API_KEY is not loaded from .env when run locally but might work when set explicitly in the environment or in a container.
 import-translations:
 	cd src && uv run python scripts/translations.py --batch-size 25 && cd -
 
