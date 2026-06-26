@@ -513,4 +513,4 @@ def download_treemap_data(
     download_df.to_csv(
         buf, sep=";", index=False, encoding="utf-8-sig"
     )  # utf-8-sig adds BOM for Excel
-    return dcc.send_bytes(buf.getvalue(), filename)  # type: ignore
+    return dcc.send_bytes(buf.getvalue(), filename)

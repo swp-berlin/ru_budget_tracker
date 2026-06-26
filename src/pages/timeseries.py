@@ -66,7 +66,7 @@ def _calculate_values(
     df = df[df["dates"].notna()].copy()
     rows_to_drop: list = []
     for budget_date, group_idx in df.groupby(df["dates"].dt.date).groups.items():
-        calc = Calculator(budget_id=budget_id, unit=unit, date=budget_date, budget_type=budget_type)  # type: ignore
+        calc = Calculator(budget_id=budget_id, unit=unit, date=budget_date, budget_type=budget_type)
         try:
             df.loc[group_idx, "expenses"] = calc.calculate_series(
                 df.loc[group_idx, "expenses"]
@@ -225,7 +225,7 @@ def generate_figure(
     open_label = "Open spending"
     for trace in fig.data:
         bar = cast(go.Bar, trace)
-        n = len(bar.x) if bar.x is not None else 0  # type: ignore
+        n = len(bar.x) if bar.x is not None else 0
         bar.customdata = [[unit_label]] * n
         if bar.name == "OPEN":
             bar.hovertemplate = (
@@ -572,7 +572,7 @@ def download_timeseries_data(
     filename = f"timeseries_{timestamp}_{sanitized}_{unit.lower()}{military}{period_suffix}.csv"
     buf = io.BytesIO()
     pivoted.to_csv(buf, sep=";", index=False, encoding="utf-8-sig")  # utf-8-sig adds BOM for Excel
-    return dcc.send_bytes(buf.getvalue(), filename)  # type: ignore
+    return dcc.send_bytes(buf.getvalue(), filename)
 
 
 # Poll window width via a lightweight interval so resize events reach Dash.

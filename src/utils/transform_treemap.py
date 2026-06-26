@@ -201,7 +201,7 @@ class TreemapTransformer:
         # Set type for value as float
         df["VALUE"] = df["VALUE"].astype(float)
         # Preserve nulls before any string conversion for Plotly path handling.
-        df = df.where(pd.notnull(df), None)  # type: ignore
+        df = df.where(pd.notnull(df), None)
         # Normalize non-null entries to strings for id/name columns.
         str_cols = [c for c in df.columns if c != "VALUE"]
         df[str_cols] = df[str_cols].astype(str).replace("nan", None).replace("None", None)

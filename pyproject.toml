@@ -46,6 +46,9 @@ package = false
 line-length = 100
 lint.select = ["T20"]
 
+[tool.ty.environment]
+root = ["./src"]
+
 [tool.mypy]
 python_version = "3.13"
 explicit_package_bases = true

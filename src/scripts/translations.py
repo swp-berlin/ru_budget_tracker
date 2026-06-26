@@ -168,7 +168,7 @@ def upsert_translations_to_db(translations: Dict[str, str]) -> int:
                 .values(name_translated=english_name)
             )
             result = session.execute(stmt)
-            updated_count += result.rowcount  # type: ignore[union-attr]
+            updated_count += result.rowcount  # type: ignore
 
         session.commit()
 
