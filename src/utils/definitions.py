@@ -27,6 +27,13 @@ UnitTypeLiteral = Literal[
 
 
 class BudgetConfig(BaseModel):
+    """Immutable constants shared across the data model and ETL pipeline.
+
+    Captures source-data quirks (LAW totals stored in thousands, 2018–2019 values
+    doubled) as named multipliers so correction logic is centralised here rather
+    than scattered across queries and transforms.
+    """
+
     model_config = ConfigDict(frozen=True)
 
     # Hierarchy levels used throughout the data model
@@ -44,6 +51,12 @@ class BudgetConfig(BaseModel):
 
 
 class ViewByConfig(BaseModel):
+    """Options and reverse label map for the "view by" dimension selector.
+
+    ``options`` drives the dropdown; ``map`` translates a dimension value back
+    to its display label (e.g. ``"MINISTRY"`` → ``"Ministry"``).
+    """
+
     model_config = ConfigDict(frozen=True)
 
     options: list[tuple[str, str]] = [
@@ -59,6 +72,12 @@ class ViewByConfig(BaseModel):
 
 
 class SpendingTypeConfig(BaseModel):
+    """Options and label map for the spending-type filter (All / Military Only).
+
+    ``map`` labels intentionally differ from the short dropdown labels in
+    ``options`` — they are used as chart titles where more context is needed.
+    """
+
     model_config = ConfigDict(frozen=True)
 
     options: list[tuple[str, str]] = [
@@ -70,6 +89,12 @@ class SpendingTypeConfig(BaseModel):
 
 
 class PeriodConfig(BaseModel):
+    """Options and reverse label map for the period filter (All / Q1–Q4).
+
+    Period values are cumulative — Q2 means Q1+Q2, Q3 means Q1+Q2+Q3, etc.
+    ``map`` translates a period value back to its display label.
+    """
+
     model_config = ConfigDict(frozen=True)
 
     options: list[tuple[str, str]] = [
@@ -87,6 +112,14 @@ class PeriodConfig(BaseModel):
 
 
 class UnitConfig(BaseModel):
+    """Options and suffix map for the unit selector.
+
+    ``map`` values for ABSOLUTE and DOLLARS carry a leading space so they can
+    be concatenated directly after a formatted number (e.g. ``"100.5"`` +
+    ``" Billion RUB"``). Percentage suffixes have no leading space because they
+    follow the number with a ``%`` character (e.g. ``"12.3% full-year GDP"``).
+    """
+
     model_config = ConfigDict(frozen=True)
 
     options: list[tuple[str, UnitTypeLiteral]] = [
@@ -124,10 +157,13 @@ unit_config = UnitConfig()
 
 
 class _MilitarySpendingConfig(BaseModel):
-    """
-    Defines patterns used to identify military spending in the dataset.
-    Includes single-level patterns (e.g. any node with Chapter ID "02")
-    and combination patterns (e.g. Ministry 180 AND Chapter 03).
+    """Regex patterns used to identify military spending rows in the dataset.
+
+    ``simple_patterns`` match any row where a single dimension (Chapter, Program,
+    or Ministry) fits the pattern. ``combination_patterns`` require all dimensions
+    in a dict to match simultaneously (AND logic). ``custom_patterns`` are used
+    only for coloring in Military Only mode and must not be used in queries.
+    Each pattern set has a ``_sql`` counterpart for use in raw SQL WHERE clauses.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -175,6 +211,13 @@ MilitarySpending = _MilitarySpendingConfig()
 
 
 class _ColorsConfig(BaseModel):
+    """Named color constants and computed chapter color mapping for the treemap.
+
+    ``filler_colors`` is a curated palette used for program nodes that have no
+    fixed color assignment; colors are picked deterministically by CRC32 hash.
+    ``color_mapping_chapters`` maps chapter orig_ids to their official colors.
+    """
+
     model_config = ConfigDict(frozen=True)
 
     CLASSIFIED_GRAY: str = "#dddddd"
@@ -190,31 +233,31 @@ class _ColorsConfig(BaseModel):
     LAW_ENFORCEMENT_BLUE: str = "#b3c7ff"
     MASS_MEDIA_PURPLE: str = "#b3c7ff"
     MILITARY_GREEN: str = "#949d85"
-    MINISTRY_GRAY: str = "#aaaaaa"
+    MINISTRY_GRAY: str = CLASSIFIED_GRAY
     ROOT_WHITE: str = "#ffffff"
     SOCIAL_RED: str = "#e46a6a"
     SPORT_GREEN: str = "#c6e48b"
 
     # Filler palette for nodes that don't match a CHAPTER or PROGRAM color mapping.
-    color_mapping_filler: list[str] = [
-        "#93c5fd",
-        "#fbc4ab",
-        "#a3d9a5",
-        "#ffd166",
-        "#80cbc4",
-        "#b3c7ff",
-        "#f7c6c7",
-        "#b5e2a4",
-        "#e0c097",
-        "#fefaff",
-        "#cce5ff",
-        "#ffd6a5",
-        "#bfc9ad",
-        "#aec9e9",
-        "#cdb4db",
-        "#a0e4f1",
-        "#ec9d9d",
-        "#c6e48b",
+    filler_colors: list[str] = [
+        "#B37C00",
+        "#699470",
+        "#669199",
+        "#668FAD",
+        "#B07A91",
+        "#BF7873",
+        "#CDAC62",
+        "#9BB79B",
+        "#99B5BA",
+        "#99B5C7",
+        "#C9A6B5",
+        "#D4A39E",
+        # "#E8D6B0",
+        # "#D0DACD",
+        # "#CCD9DB",
+        # "#CCD9E3",
+        # "#E3D1D9",
+        # "#E6D1CF",
     ]
 
     # Color mapping for CHAPTERs based on the official color coding in the original dashboard.

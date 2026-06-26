@@ -2,8 +2,7 @@
 Miscellaneous utility functions
 """
 
-import colorsys
-import hashlib
+import zlib
 from functools import lru_cache
 
 import pandas as pd
@@ -30,23 +29,34 @@ def create_treemap_colors(
     spending_type: SpendingTypeLiteral,
     viewby: ViewByDimensionTypeLiteral,
     program_label_to_orig_id: dict[str, str] | None = None,
+    seed: str = "abcd",
 ) -> list[str]:
-    """Return marker colors for treemap nodes with ministry/root rules applied."""
+    """Return a color for each treemap node, in the same order as node_ids.
 
-    def _stable_deterministic_color(key: str) -> str:
-        """Generate a unique, deterministic pastel color for a key via HSL.
+    Color assignment follows a fixed priority: root nodes are always white (or
+    military green in MILITARY mode); classified nodes are always gray. For all
+    other nodes, the color depends on viewby — MINISTRY uses a fixed gray for
+    ministry-level nodes and chapter colors below; CHAPTER uses chapter colors
+    directly; PROGRAM derives a color deterministically from the program's
+    language-agnostic orig_id via CRC32, using seed to control the distribution.
 
-        Uses the SHA-256 hash of the key to derive a hue that is evenly spread
-        across the full 360° colour wheel, while keeping saturation and lightness
-        fixed so that all generated colours have a consistent, readable tone.
-        The same key always produces the same hex colour regardless of which
-        budget is being viewed.
-        """
-        seed_bytes = hashlib.sha256(key.encode("utf-8")).digest()
-        hue_int = int.from_bytes(seed_bytes[:2], "big")  # 0–65535
-        hue = hue_int / 65536.0  # 0.0–1.0, maps uniformly over the colour wheel
-        r, g, b = colorsys.hls_to_rgb(hue, l=0.72, s=0.50)
-        return f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
+    Args:
+        node_ids: Slash-separated node paths, e.g. ``"ROOT/02 - Defence/0200 - …"``.
+        budget_types: Budget type string for each node (e.g. ``"LAW"``, ``"CLASSIFIED"``).
+        spending_type: Whether to render all spending or military only.
+        viewby: The active hierarchy dimension driving color logic.
+        program_label_to_orig_id: Optional mapping from display label to orig_id,
+            used to keep program colors stable across UI language changes.
+        seed: Arbitrary string mixed into the PROGRAM hash so the color
+            distribution can be adjusted without changing the keys.
+
+    Returns:
+        List of hex color strings, one per node, in the same order as node_ids.
+    """
+
+    def _stable_deterministic_color(seed: str, key: str) -> str:
+        index = zlib.crc32(f"{seed}:{key}".encode()) % len(Colors.filler_colors)
+        return Colors.filler_colors[index]
 
     colors: list[str] = []
     for node_id, budget_type in zip(node_ids, budget_types):
@@ -85,7 +95,7 @@ def create_treemap_colors(
                 if program_label_to_orig_id
                 else program_label
             )
-            color = _stable_deterministic_color(main_program_key)
+            color = _stable_deterministic_color(seed, main_program_key)
         else:
             color = Colors.ROOT_WHITE
 
