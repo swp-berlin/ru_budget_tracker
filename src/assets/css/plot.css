@@ -4,6 +4,7 @@
     flex-direction: column;
     height: 100vh;
     overflow: hidden;
+    min-width: 230px;
 }
 
 #app-layout:has(.plot-page) #pages-wrapper {
@@ -35,7 +36,7 @@
 }
 
 #timeseries-title {
-    padding: 6px 30px 2px 80px;
+    padding: 6px 40px 2px 40px;
     text-align: center;
     font-size: 17px;
     font-weight: 400;
@@ -53,5 +54,10 @@
     #timeseries-title {
         white-space: normal;
         word-break: break-word;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-line-clamp: 2; /* number of lines to show */
+                line-clamp: 2;
+        -webkit-box-orient: vertical;
     }
 }

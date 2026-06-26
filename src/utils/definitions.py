@@ -60,9 +60,9 @@ class ViewByConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     options: list[tuple[str, str]] = [
-        ("Ministry", "MINISTRY"),
-        ("Chapter", "CHAPTER"),
-        ("Program", "PROGRAM"),
+        ("View by ministry", "MINISTRY"),
+        ("View by chapter", "CHAPTER"),
+        ("View by program", "PROGRAM"),
     ]
 
     @computed_field  # type: ignore[prop-decorator]
@@ -82,10 +82,10 @@ class SpendingTypeConfig(BaseModel):
 
     options: list[tuple[str, str]] = [
         ("All", "ALL"),
-        ("Military Only", "MILITARY"),
+        ("Military only", "MILITARY"),
     ]
     # Chart-title labels intentionally differ from the short dropdown labels in options.
-    map: dict[str, str] = {"ALL": "All Spending", "MILITARY": "Military Only"}
+    map: dict[str, str] = {"ALL": "All spending", "MILITARY": "Military only"}
 
 
 class PeriodConfig(BaseModel):
@@ -98,7 +98,7 @@ class PeriodConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     options: list[tuple[str, str]] = [
-        ("All Periods", "ALL"),
+        ("All periods", "ALL"),
         ("Q1", "Q1"),
         ("Q1-Q2", "Q2"),
         ("Q1-Q3", "Q3"),
@@ -123,8 +123,8 @@ class UnitConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     options: list[tuple[str, UnitTypeLiteral]] = [
-        ("Billion RUB", "ABSOLUTE"),
-        ("Billion PPP Dollars", "DOLLARS"),
+        ("billion RUB", "ABSOLUTE"),
+        ("billion PPP Dollars", "DOLLARS"),
         ("% full-year GDP", "PERCENT_GDP_FULL_YEAR"),
         ("% year-to-date GDP", "PERCENT_GDP_YEAR_TO_DATE"),
         ("% full-year spending", "PERCENT_FULL_YEAR_SPENDING"),
@@ -134,8 +134,8 @@ class UnitConfig(BaseModel):
     # ABSOLUTE and DOLLARS carry a leading space for direct number concatenation:
     # "100.5" + " Billion RUB". Cannot be derived from options.
     map: dict[UnitTypeLiteral, str] = {
-        "ABSOLUTE": " Billion RUB",
-        "DOLLARS": " Billion PPP Dollars",
+        "ABSOLUTE": " billion RUB",
+        "DOLLARS": " billion PPP Dollars",
         "PERCENT_GDP_FULL_YEAR": "% full-year GDP",
         "PERCENT_GDP_YEAR_TO_DATE": "% year-to-date GDP",
         "PERCENT_FULL_YEAR_SPENDING": "% full-year spending",

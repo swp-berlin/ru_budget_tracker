@@ -154,7 +154,7 @@ def shape_for_spending_type(
             .reset_index(drop=True)
             .copy()
         )
-        df_military["ROOT"] = "Military Spending"
+        df_military["ROOT"] = "Military spending"
         return df_military
     return df
 
