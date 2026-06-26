@@ -446,6 +446,19 @@ class TreemapDataFetcher:
         return dimensions, programs, classified
 
 
+def find_prev_report_budget_id(year: int, month: int) -> int | None:
+    """Return the Budget.id for the REPORT budget published in the given year/month, or None."""
+    stmt = (
+        select(Budget.id)
+        .where(Budget.type == "REPORT")
+        .where(extract("year", Budget.published_at) == year)
+        .where(extract("month", Budget.published_at) == month)
+        .limit(1)
+    )
+    with get_sync_session() as session:
+        return session.scalar(stmt)
+
+
 def fetch_treemap_hierarchy(budget_id: int) -> Sequence[RowMapping]:
     """Read pre-computed flat hierarchy rows for this budget from the DB table."""
     from sqlalchemy.exc import OperationalError

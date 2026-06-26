@@ -308,6 +308,18 @@ class TreemapTransformer:
 
         return df
 
+    def subtract_prev_quarter(self, df: pd.DataFrame, prev_df: pd.DataFrame) -> pd.DataFrame:
+        """Subtract previous quarter's cumulative values to produce quarterly-only values."""
+        dim_id_cols = [c for c in df.columns if c.endswith("_DIM_ID")]
+        merged = df.merge(
+            prev_df[dim_id_cols + ["VALUE"]].rename(columns={"VALUE": "PREV_VALUE"}),
+            on=dim_id_cols,
+            how="left",
+        )
+        result = df.copy()
+        result["VALUE"] = (merged["VALUE"] - merged["PREV_VALUE"].fillna(0)).clip(lower=0).values
+        return result
+
     def transform_from_flat(self, flat_rows: Sequence[RowMapping]) -> pd.DataFrame:
         """Fast path: build DataFrame from pre-computed table rows, skipping networkx."""
         df = pd.DataFrame(flat_rows)
