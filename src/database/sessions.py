@@ -21,12 +21,10 @@ engine = create_engine(
 )
 
 
-# SQLite performance pragmas: WAL mode for concurrent reads, larger cache.
 @event.listens_for(engine, "connect")
 def _set_sqlite_pragma(dbapi_connection, connection_record):
-    """Configure SQLite pragmas for better performance."""
+    """Configure SQLite per-connection pragmas for better performance."""
     cursor = dbapi_connection.cursor()
-    cursor.execute("PRAGMA journal_mode=WAL")
     cursor.execute("PRAGMA synchronous=NORMAL")
     cursor.execute("PRAGMA cache_size=-64000")  # 64MB cache
     cursor.execute("PRAGMA temp_store=MEMORY")
