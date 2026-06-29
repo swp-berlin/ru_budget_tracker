@@ -252,12 +252,12 @@ class _ColorsConfig(BaseModel):
         "#99B5C7",
         "#C9A6B5",
         "#D4A39E",
-        # "#E8D6B0",
-        # "#D0DACD",
-        # "#CCD9DB",
-        # "#CCD9E3",
-        # "#E3D1D9",
-        # "#E6D1CF",
+        "#E8D6B0",
+        "#D0DACD",
+        "#CCD9DB",
+        "#CCD9E3",
+        "#E3D1D9",
+        "#E6D1CF",
     ]
 
     # Color mapping for CHAPTERs based on the official color coding in the original dashboard.
