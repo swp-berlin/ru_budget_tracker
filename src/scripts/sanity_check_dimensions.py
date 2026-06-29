@@ -206,7 +206,7 @@ def get_expense_sums_by_dimension(session, dimension_type: str) -> pd.DataFrame:
     )
 
 
-def get_total_counts(session) -> dict[str, int]:
+def get_total_counts(session) -> dict[str, int | dict[str, int]]:
     """Get total counts of budgets, expenses, dimensions."""
     budget_count = session.execute(select(func.count(Budget.id))).scalar()
     expense_count = session.execute(select(func.count(Expense.id))).scalar()
@@ -220,7 +220,7 @@ def get_total_counts(session) -> dict[str, int]:
         "budgets": budget_count,
         "expenses": expense_count,
         "dimensions": dimension_count,
-        "dimensions_by_type": dim_type_counts,  # type: ignore
+        "dimensions_by_type": dim_type_counts,
     }
 
 

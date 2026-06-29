@@ -2,8 +2,7 @@
 Miscellaneous utility functions
 """
 
-import colorsys
-import hashlib
+import zlib
 from functools import lru_cache
 
 import pandas as pd
@@ -12,14 +11,14 @@ from utils.definitions import (
     Colors,
     MilitarySpending,
     SpendingTypeLiteral,
-    UnitLiteral,
+    UnitTypeLiteral,
     ViewByDimensionTypeLiteral,
     unit_config,
 )
 from plotly import graph_objects as go
 
 
-def get_unit_label(unit: UnitLiteral) -> str:
+def get_unit_label(unit: UnitTypeLiteral) -> str:
     """Return the human-readable label for a unit (used as CSV column header)."""
     return next(label for label, u in unit_config.options if u == unit)
 
@@ -30,23 +29,34 @@ def create_treemap_colors(
     spending_type: SpendingTypeLiteral,
     viewby: ViewByDimensionTypeLiteral,
     program_label_to_orig_id: dict[str, str] | None = None,
+    seed: str = "abcd",
 ) -> list[str]:
-    """Return marker colors for treemap nodes with ministry/root rules applied."""
+    """Return a color for each treemap node, in the same order as node_ids.
 
-    def _stable_deterministic_color(key: str) -> str:
-        """Generate a unique, deterministic pastel color for a key via HSL.
+    Color assignment follows a fixed priority: root nodes are always white (or
+    military green in MILITARY mode); classified nodes are always gray. For all
+    other nodes, the color depends on viewby — MINISTRY uses a fixed gray for
+    ministry-level nodes and chapter colors below; CHAPTER uses chapter colors
+    directly; PROGRAM derives a color deterministically from the program's
+    language-agnostic orig_id via CRC32, using seed to control the distribution.
 
-        Uses the SHA-256 hash of the key to derive a hue that is evenly spread
-        across the full 360° colour wheel, while keeping saturation and lightness
-        fixed so that all generated colours have a consistent, readable tone.
-        The same key always produces the same hex colour regardless of which
-        budget is being viewed.
-        """
-        seed_bytes = hashlib.sha256(key.encode("utf-8")).digest()
-        hue_int = int.from_bytes(seed_bytes[:2], "big")  # 0–65535
-        hue = hue_int / 65536.0  # 0.0–1.0, maps uniformly over the colour wheel
-        r, g, b = colorsys.hls_to_rgb(hue, l=0.72, s=0.50)
-        return f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
+    Args:
+        node_ids: Slash-separated node paths, e.g. ``"ROOT/02 - Defence/0200 - …"``.
+        budget_types: Budget type string for each node (e.g. ``"LAW"``, ``"CLASSIFIED"``).
+        spending_type: Whether to render all spending or military only.
+        viewby: The active hierarchy dimension driving color logic.
+        program_label_to_orig_id: Optional mapping from display label to orig_id,
+            used to keep program colors stable across UI language changes.
+        seed: Arbitrary string mixed into the PROGRAM hash so the color
+            distribution can be adjusted without changing the keys.
+
+    Returns:
+        List of hex color strings, one per node, in the same order as node_ids.
+    """
+
+    def _stable_deterministic_color(seed: str, key: str) -> str:
+        index = zlib.crc32(f"{seed}:{key}".encode()) % len(Colors.filler_colors)
+        return Colors.filler_colors[index]
 
     colors: list[str] = []
     for node_id, budget_type in zip(node_ids, budget_types):
@@ -85,7 +95,7 @@ def create_treemap_colors(
                 if program_label_to_orig_id
                 else program_label
             )
-            color = _stable_deterministic_color(main_program_key)
+            color = _stable_deterministic_color(seed, main_program_key)
         else:
             color = Colors.ROOT_WHITE
 
@@ -188,9 +198,71 @@ def shape_for_viewby(
     return df_copy[relevant_cols]
 
 
+def build_name_cols(df: pd.DataFrame, name_ending: str, include_root: bool = False) -> list[str]:
+    cols = [col for col in df.columns if col.endswith(name_ending)]
+    return (["ROOT"] + cols) if include_root else cols
+
+
+def shape_dataframe(
+    df: pd.DataFrame,
+    spending_type: SpendingTypeLiteral,
+    viewby: ViewByDimensionTypeLiteral,
+) -> pd.DataFrame:
+    """Apply spending-type and viewby shaping in one call."""
+    return shape_for_viewby(shape_for_spending_type(df, spending_type), viewby)
+
+
+def build_compact_node_map(
+    df: pd.DataFrame, path_to_short_id: dict[str, str] | None = None
+) -> dict[str, dict]:
+    """Build a compact {short_id: {leaf: dim_id, ctx: [ancestor_dim_ids]}} map.
+
+    Each short_id is unique (assigned per path), so the same dim_id appearing under
+    multiple parents gets a separate entry with distinct ancestor context. This allows
+    the timeseries to filter by the same subchapter/chapter context as the clicked node.
+    """
+    compact: dict[str, dict] = {}
+    records = df.to_dict("records")
+
+    next_id = (
+        max((int(v) for v in path_to_short_id.values()), default=-1) + 1 if path_to_short_id else 0
+    )
+    extra_path_to_id: dict[str, str] = {}
+
+    for record in records:
+        for name_ending in ("_NAME", "_NAME_TRANSLATED"):
+            name_cols = build_name_cols(df, name_ending, include_root=True)
+            labels: list[str] = []
+            seen_dim_ids: list[int] = []
+            for col in name_cols:
+                label = record.get(col)
+                if not label or pd.isna(label):
+                    continue
+                labels.append(str(label))
+                if col == "ROOT":
+                    continue
+                dim_id = record.get(f"{col.replace(name_ending, '')}_DIM_ID")
+                if pd.isnull(dim_id) or dim_id is None:
+                    continue
+                path = "/".join(labels)
+                if path_to_short_id and path in path_to_short_id:
+                    node_ref = path_to_short_id[path]
+                elif path in extra_path_to_id:
+                    node_ref = extra_path_to_id[path]
+                else:
+                    node_ref = str(next_id)
+                    extra_path_to_id[path] = node_ref
+                    next_id += 1
+                dim_id_int = int(dim_id)
+                compact[node_ref] = {"leaf": str(dim_id_int), "ctx": list(seen_dim_ids)}
+                seen_dim_ids.append(dim_id_int)
+
+    return compact
+
+
 @lru_cache(maxsize=10)
 def build_server_node_map(
-    budget_id: int, spending_type: SpendingTypeLiteral, unit: UnitLiteral
+    budget_id: int, spending_type: SpendingTypeLiteral, unit: UnitTypeLiteral
 ) -> dict:
     """Server-side cached node map for dimension resolution. Never sent to the browser.
 
@@ -204,7 +276,7 @@ def build_server_node_map(
     records = df.to_dict("records")
     # Build entries for both languages so callers can look up paths in either RU or EN.
     for name_ending in ("_NAME", "_NAME_TRANSLATED"):
-        name_cols = ["ROOT"] + [col for col in df.columns if col.endswith(name_ending)]
+        name_cols = build_name_cols(df, name_ending, include_root=True)
         language = "EN" if name_ending == "_NAME_TRANSLATED" else "RU"
         for record in records:
             # labels accumulates the path segments as we walk the hierarchy columns left-to-right,
@@ -220,7 +292,7 @@ def build_server_node_map(
                 base = col.replace(name_ending, "")
                 dim_id = record.get(f"{base}_DIM_ID")
                 dim_orig_id = record.get(f"{base}_ORIG_ID")
-                if pd.notnull(dim_id) and pd.notnull(dim_orig_id):
+                if dim_id is not None and pd.notnull(dim_id) and pd.notnull(dim_orig_id):
                     node_map["/".join(labels)] = {
                         "dimension_id": int(dim_id),
                         "dimension_original_identifier": str(dim_orig_id),

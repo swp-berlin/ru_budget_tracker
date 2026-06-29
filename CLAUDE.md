@@ -38,8 +38,8 @@ make import-translations
 
 **Lint / format / typecheck:**
 ```bash
-uv run ruff check src/
-uv run ruff format src/
+uvx ruff check src/
+uvx ruff format src/
 uv run mypy src/
 ```
 

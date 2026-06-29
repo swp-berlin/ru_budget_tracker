@@ -23,28 +23,29 @@ Notes:
   - PPP fetches from World Bank API, falls back to CSV cache on failure.
 """
 
-import sys
 import argparse
-from pathlib import Path
-from typing import List, Dict, Literal, Optional, Tuple
 import logging
+import sys
+from pathlib import Path
+from typing import Dict, List, Literal, Optional, Tuple
 
 # Add parent to path if needed
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, noload
-from models import Budget, Dimension, Expense, ConversionRate
+
 from database.sessions import get_sync_session
-from parsers import (
+from models import Budget, ConversionRate, Dimension, Expense
+from scripts.parsers import (
+    fetch_ppp_api_data,
+    fetch_ppp_rates,
+    parse_gdp_files,
     parse_law_file,
     parse_report_file,
     parse_totals_file,
-    fetch_ppp_rates,
     save_ppp_csv,
-    fetch_ppp_api_data,
 )
-
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -209,9 +210,7 @@ def save_dimensions(
     Returns: mapping of (identifier, type) -> DB dimension
     """
     # Bulk pre-fetch: include identifiers from current dimensions and possible parent identifiers.
-    orig_ids = {
-        d.original_identifier for d in dimensions
-    }
+    orig_ids = {d.original_identifier for d in dimensions}
     orig_ids.update({str(d.parent_id) for d in dimensions if d.parent_id is not None})
     existing_rows = (
         session.query(Dimension)
@@ -266,7 +265,9 @@ def save_dimensions(
             expected_parent_type = (
                 "PROGRAM"
                 if dim.type == "PROGRAM"
-                else "CHAPTER" if dim.type == "SUBCHAPTER" else None
+                else "CHAPTER"
+                if dim.type == "SUBCHAPTER"
+                else None
             )
             parent_db_id = _find_parent_db_id(str(dim.parent_id), expected_parent_type, dim_map)
 
@@ -554,8 +555,6 @@ def import_gdp_data(rosstat_path: Path, minekonom_path: Path) -> None:
     - Yearly: gdp_YYYY (e.g., gdp_2024)
     - Estimates: gdp_YYYY_qN_estimate or gdp_YYYY_estimate
     """
-    from parsers import parse_gdp_files
-    from database.sessions import get_sync_session
 
     logger.info(f"Parsing GDP files...")
     logger.info(f"  Rosstat: {rosstat_path}")

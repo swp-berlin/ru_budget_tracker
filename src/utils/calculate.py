@@ -7,7 +7,7 @@ from sqlalchemy import RowMapping, and_, extract, func, or_, select
 from models import ConversionRate, Budget, Expense, Dimension
 from database import get_sync_session
 from utils.definitions import (
-    UnitLiteral,
+    UnitTypeLiteral,
     BudgetTypeLiteral,
     BudgetScopeLiteral,
     budget_config,
@@ -24,9 +24,9 @@ class Calculator:
     """A collection of methods for various budget calculations."""
 
     def __init__(
-        self, unit: UnitLiteral, budget_id: int, date: date, budget_type: BudgetTypeLiteral
+        self, unit: UnitTypeLiteral, budget_id: int, date: date, budget_type: BudgetTypeLiteral
     ) -> None:
-        self.unit: UnitLiteral = unit
+        self.unit: UnitTypeLiteral = unit
         self.budget_id: int = budget_id
         self.budget_type: BudgetTypeLiteral = budget_type
         self.date = date

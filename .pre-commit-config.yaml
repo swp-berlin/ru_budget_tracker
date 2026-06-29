@@ -12,22 +12,17 @@ repos:
       - id: end-of-file-fixer
       - id: check-yaml
       - id: check-added-large-files
-  - repo: https://github.com/Yelp/detect-secrets
+  - repo: https://github.com/betterleaks/betterleaks
     rev: v1.5.0
     hooks:
-      - id: detect-secrets
+      - id: betterleaks
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.3
+    rev: v0.15.20
     hooks:
-      - id: ruff
+      - id: ruff-check
         args: [--fix]
       - id: ruff-format
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.18.2
+  - repo: https://github.com/astral-sh/ty-pre-commit
+    rev: v0.0.54
     hooks:
-      - id: mypy
-        entry: mypy --config-file ./pyproject.toml
-        files: ^src/
-        additional_dependencies:
-          - pydantic
-          - pydantic-settings
+      - id: ty

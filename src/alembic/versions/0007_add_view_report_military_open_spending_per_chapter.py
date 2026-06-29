@@ -36,7 +36,7 @@ def _build_view_select():
 
     Simple patterns:
         CHAPTER  = '02'           National Defense
-        PROGRAMM LIKE '31%'       Federal programs starting with 31  (DB type is 'PROGRAMM')
+        PROGRAM LIKE '31%'       Federal programs starting with 31  (DB type is 'PROGRAM')
         MINISTRY = '187'          Rosgvardia / National Guard
 
     Combination pattern:
@@ -60,7 +60,7 @@ def _build_view_select():
 
     # Simple patterns
     chapter_02_sq = _expense_ids_for_dim("CHAPTER", Dimension.original_identifier == "02")
-    programm_31_sq = _expense_ids_for_dim("PROGRAMM", Dimension.original_identifier.like("31%"))
+    program_31_sq = _expense_ids_for_dim("PROGRAM", Dimension.original_identifier.like("31%"))
     ministry_187_sq = _expense_ids_for_dim("MINISTRY", Dimension.original_identifier == "187")
 
     # Combination: Chapter-03 expenses that also have Ministry-180.
@@ -77,7 +77,7 @@ def _build_view_select():
 
     military_ids_cte = union(
         chapter_02_sq,
-        programm_31_sq,
+        program_31_sq,
         ministry_187_sq,
         combo_sq,
     ).cte("military_expense_ids")

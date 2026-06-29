@@ -114,4 +114,3 @@ bootstrap-data: rebuild-db import-all
 # Validate a small set of frozen reference values against the final SQLite database.
 test-frozen-db:
 	uv run --group dev pytest tests/test_frozen_db.py -q
-

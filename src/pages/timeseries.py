@@ -29,12 +29,12 @@ from utils.calculate import Calculator
 from utils.definitions import (
     BudgetTypeLiteral,
     LanguageTypeLiteral,
-    UnitLiteral,
+    UnitTypeLiteral,
     SpendingTypeLiteral,
     unit_config,
     period_config,
     spending_type_config,
-    PeriodLiteral,
+    PeriodTypeLiteral,
 )
 
 logger = logging.getLogger(__name__)
@@ -61,12 +61,12 @@ unit_labels = {
 
 
 def _calculate_values(
-    df: pd.DataFrame, budget_id: int, unit: UnitLiteral, budget_type: BudgetTypeLiteral
+    df: pd.DataFrame, budget_id: int, unit: UnitTypeLiteral, budget_type: BudgetTypeLiteral
 ) -> pd.DataFrame:
     df = df[df["dates"].notna()].copy()
     rows_to_drop: list = []
     for budget_date, group_idx in df.groupby(df["dates"].dt.date).groups.items():
-        calc = Calculator(budget_id=budget_id, unit=unit, date=budget_date, budget_type=budget_type)  # type: ignore
+        calc = Calculator(budget_id=budget_id, unit=unit, date=budget_date, budget_type=budget_type)
         try:
             df.loc[group_idx, "expenses"] = calc.calculate_series(
                 df.loc[group_idx, "expenses"]
@@ -82,7 +82,7 @@ def _calculate_values(
 _PERIOD_MONTH = {"Q1": 3, "Q2": 6, "Q3": 9, "Q4": 12}
 
 
-def _shape_for_period(df: pd.DataFrame, period: PeriodLiteral) -> pd.DataFrame:
+def _shape_for_period(df: pd.DataFrame, period: PeriodTypeLiteral) -> pd.DataFrame:
     if period == "ALL":
         return df
     month = _PERIOD_MONTH.get(period)
@@ -97,8 +97,8 @@ _timeseries_cache: dict[tuple, tuple[pd.DataFrame, str, BudgetTypeLiteral]] = {}
 def fetch_timeseries_data(
     budget_id: int,
     spending_type: SpendingTypeLiteral = "ALL",
-    unit: UnitLiteral = "ABSOLUTE",
-    period: PeriodLiteral = "ALL",
+    unit: UnitTypeLiteral = "ABSOLUTE",
+    period: PeriodTypeLiteral = "ALL",
     selected_dimension: dict[str, int | str] | None = None,
     classified_only: bool = False,
     ancestor_dim_ids: tuple[int, ...] = (),
@@ -153,7 +153,7 @@ def fetch_timeseries_data(
 def generate_figure(
     df: pd.DataFrame,
     metadata: list[str] = [],
-    unit: UnitLiteral = "ABSOLUTE",
+    unit: UnitTypeLiteral = "ABSOLUTE",
     spending_type: SpendingTypeLiteral = "ALL",
     language: LanguageTypeLiteral = "EN",
     budget_type: BudgetTypeLiteral = "LAW",
@@ -225,7 +225,7 @@ def generate_figure(
     open_label = "Open spending"
     for trace in fig.data:
         bar = cast(go.Bar, trace)
-        n = len(bar.x) if bar.x is not None else 0  # type: ignore
+        n = len(bar.x) if bar.x is not None else 0
         bar.customdata = [[unit_label]] * n
         if bar.name == "OPEN":
             bar.hovertemplate = (
@@ -274,6 +274,20 @@ def _resolve_selected_path(
     if not raw_dim_id:
         return None
     return _find_path_by_dimension_id(int(raw_dim_id), node_map, language)
+
+
+def _resolve_classified_dimension(
+    selected_dimension: dict | None,
+    path: str | None,
+    node_map: dict,
+) -> tuple[bool, dict | None]:
+    """Collapse a CLASSIFIED node to its parent chapter for API filtering."""
+    if selected_dimension and "CLASSIFIED" in str(
+        selected_dimension.get("dimension_original_identifier", "")
+    ):
+        parent_path = "/".join(path.split("/")[:-1]) if path else None
+        return True, node_map.get(parent_path) if parent_path else None
+    return False, selected_dimension
 
 
 def _format_timeseries_title(
@@ -384,9 +398,9 @@ def layout(**other_kwargs) -> html.Div:
 def update_figure_from_filters(
     pathname: str | None,
     budget_id: int,
-    period: PeriodLiteral = "ALL",
+    period: PeriodTypeLiteral = "ALL",
     spending_type: SpendingTypeLiteral = "ALL",
-    unit: UnitLiteral = "ABSOLUTE",
+    unit: UnitTypeLiteral = "ABSOLUTE",
     selected_node_id: str | None = None,
     language: LanguageTypeLiteral = "RU",
     compact_node_map: dict | None = None,
@@ -421,22 +435,20 @@ def update_figure_from_filters(
         focus_raw = params.get("focus", [None])[0]
         if focus_raw:
             focus_raw = unquote_plus(focus_raw).strip()
-            if focus_raw.isdigit():
-                focus_dim_id = int(focus_raw)
+            # ?focus= is "leaf" (single dim_id) or "ctx1,ctx2,...,leaf" (ancestor chain).
+            # Always use the leaf (last element) for timeseries lookup.
+            leaf_str = focus_raw.split(",")[-1]
+            if leaf_str.isdigit():
+                focus_dim_id = int(leaf_str)
                 resolved_path = _find_path_by_dimension_id(focus_dim_id, node_map, language or "RU")
     selected_dimension = node_map.get(resolved_path) if resolved_path else None
     # If the focus dim isn't in the current budget's node_map (e.g. it only exists in
     # a different budget year), use the dimension_id directly so the data is still filtered.
     if selected_dimension is None and focus_dim_id is not None:
         selected_dimension = {"dimension_id": focus_dim_id, "dimension_original_identifier": ""}
-    classified_only = False
-    if selected_dimension and "CLASSIFIED" in str(
-        selected_dimension.get("dimension_original_identifier", "")
-    ):
-        classified_only = True
-        # Use the parent chapter's dimension for the API filter.
-        parent_path = "/".join(resolved_path.split("/")[:-1]) if resolved_path else None
-        selected_dimension = node_map.get(parent_path) if parent_path else None
+    classified_only, selected_dimension = _resolve_classified_dimension(
+        selected_dimension, resolved_path, node_map
+    )
     df, _, budget_type = fetch_timeseries_data(
         budget_id=budget_id,
         spending_type=spending_type,
@@ -483,9 +495,9 @@ def download_timeseries_data(
     pathname: str | None,
     budget_id: int | None = None,
     budget_options: list[dict] | None = None,
-    period: PeriodLiteral = "ALL",
+    period: PeriodTypeLiteral = "ALL",
     spending_type: SpendingTypeLiteral = "ALL",
-    unit: UnitLiteral = "ABSOLUTE",
+    unit: UnitTypeLiteral = "ABSOLUTE",
     selected_node_id: str | None = None,
 ) -> dict[str, Any]:
     """
@@ -502,13 +514,9 @@ def download_timeseries_data(
     except ValueError:
         node_map = {}
     selected_dimension = node_map.get(selected_node_id) if selected_node_id else None
-    classified_only = False
-    if selected_dimension and "CLASSIFIED" in str(
-        selected_dimension.get("dimension_original_identifier", "")
-    ):
-        classified_only = True
-        parent_path = "/".join(selected_node_id.split("/")[:-1]) if selected_node_id else None
-        selected_dimension = node_map.get(parent_path) if parent_path else None
+    classified_only, selected_dimension = _resolve_classified_dimension(
+        selected_dimension, selected_node_id, node_map
+    )
     df, _, budget_type = fetch_timeseries_data(
         budget_id=budget_id,
         spending_type=spending_type,
@@ -564,7 +572,7 @@ def download_timeseries_data(
     filename = f"timeseries_{timestamp}_{sanitized}_{unit.lower()}{military}{period_suffix}.csv"
     buf = io.BytesIO()
     pivoted.to_csv(buf, sep=";", index=False, encoding="utf-8-sig")  # utf-8-sig adds BOM for Excel
-    return dcc.send_bytes(buf.getvalue(), filename)  # type: ignore
+    return dcc.send_bytes(buf.getvalue(), filename)
 
 
 # Poll window width via a lightweight interval so resize events reach Dash.

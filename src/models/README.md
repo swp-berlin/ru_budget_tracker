@@ -73,14 +73,14 @@ Helper property `expense_type` returns the `name` of the first dimension with `t
 
 ### Dimensions
 
-`Dimension` (`dimensions` table) describes one axis of an expense (e.g., ministry, chapter, programme, expense type).
+`Dimension` (`dimensions` table) describes one axis of an expense (e.g., ministry, chapter, program, expense type).
 
 | Field | Type | Notes |
 |---|---|---|
 | `id` | int PK | |
 | `parent_id` | int FK → `dimensions.id` (nullable) | `SET NULL` on delete; indexed |
 | `original_identifier` | str | Identifier from the source data |
-| `type` | str | `MINISTRY`, `CHAPTER`, `PROGRAMM`, `EXPENSE_TYPE`, etc.; indexed |
+| `type` | str | `MINISTRY`, `CHAPTER`, `PROGRAM`, `EXPENSE_TYPE`, etc.; indexed |
 | `name` / `name_translated` | str | Russian name and English translation |
 
 Unique constraint: `(name, type, original_identifier, parent_id)`.
@@ -186,7 +186,7 @@ Migration: `0006_add_view_law_military_open_spending_per_chapter`
 
 Aggregates military open spending from `LAW` budgets per `(budget_id, chapter)`. Military expenses are identified by:
 - `CHAPTER = '02'`
-- `PROGRAMM LIKE '31%'`
+- `PROGRAM LIKE '31%'`
 - `MINISTRY = '187'`
 - `CHAPTER = '03' AND MINISTRY = '180'`
 

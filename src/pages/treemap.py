@@ -11,6 +11,7 @@ from dash import (
     Output,
     State,
     callback,
+    callback_context,
     dcc,
     html,
     no_update,
@@ -20,17 +21,23 @@ from dash import (
 from dash.exceptions import PreventUpdate
 from sqlalchemy import RowMapping
 
-from utils.fetch_treemap import ClassifiedSpendingData, TreemapDataFetcher, fetch_treemap_hierarchy
+from utils.fetch_treemap import (
+    ClassifiedSpendingData,
+    TreemapDataFetcher,
+    fetch_treemap_hierarchy,
+    find_prev_report_budget_id,
+)
 from utils.transform_treemap import TreemapTransformer
 from utils.calculate import Calculator
 from utils.helper import (
+    build_compact_node_map,
+    build_name_cols,
     create_treemap_colors,
     get_unit_label,
-    shape_for_spending_type,
-    shape_for_viewby,
+    shape_dataframe,
 )
 from utils.definitions import (
-    UnitLiteral,
+    UnitTypeLiteral,
     unit_config,
     SpendingTypeLiteral,
     ViewByDimensionTypeLiteral,
@@ -103,7 +110,7 @@ def fetch_treemap_data(
 def transform_treemap_data(
     budget_id: int,
     spending_type: SpendingTypeLiteral,
-    unit: UnitLiteral,
+    unit: UnitTypeLiteral,
 ) -> pd.DataFrame:
     dimensions, programs, classified, published_at = fetch_treemap_data(budget_id)
     budget_type: BudgetTypeLiteral = next(
@@ -115,39 +122,44 @@ def transform_treemap_data(
         df = transformer.transform_from_flat(flat_rows)
     else:
         df = transformer.transform_data()
+    if (
+        unit in {"PERCENT_YEAR_TO_DATE_SPENDING", "PERCENT_YEAR_TO_DATE_REVENUE"}
+        and budget_type == "REPORT"
+        and published_at.month > 3
+    ):
+        prev_budget_id = find_prev_report_budget_id(
+            year=published_at.year, month=published_at.month - 3
+        )
+        if prev_budget_id is not None:
+            prev_dims, prev_progs, prev_classified, _ = fetch_treemap_data(prev_budget_id)
+            prev_transformer = TreemapTransformer(
+                prev_dims, prev_progs, prev_classified, spending_type=spending_type
+            )
+            prev_flat = fetch_treemap_hierarchy(prev_budget_id)
+            prev_df = (
+                prev_transformer.transform_from_flat(prev_flat)
+                if prev_flat
+                else prev_transformer.transform_data()
+            )
+            df = transformer.subtract_prev_quarter(df, prev_df)
+
     calculator = Calculator(unit, budget_id, published_at, budget_type)
     df["VALUE"] = calculator.calculate_series(df["VALUE"]).clip(lower=0)
     return df
 
 
-def generate_figure(
+def _prepare_trace_overrides(
+    trace_data: Any,
     df: pd.DataFrame,
-    spending_type: SpendingTypeLiteral = "ALL",
-    unit: UnitLiteral = "ABSOLUTE",
-    translated: bool = False,
-    viewby: ViewByDimensionTypeLiteral = "MINISTRY",
-) -> tuple[go.Figure, dict[str, str]]:
-    """Build a treemap with stable ids and clean hover info."""
-    # If translated, use translated names
-    # ending = "NAME_TRANSLATED" if translated else "NAME"
-    name_ending = "_NAME_TRANSLATED" if translated else "_NAME"
-    name_cols = ["ROOT"] + [col for col in df.columns if col.endswith(name_ending)]
+    viewby: ViewByDimensionTypeLiteral,
+    spending_type: SpendingTypeLiteral,
+    unit: UnitTypeLiteral,
+) -> tuple[dict, dict[str, str]]:
+    """Compute ids, colors, percentages, and templates for fig.update_traces.
 
-    # Strip columns not used in the figure to keep the serialized trace lean.
-    keep_cols = [c for c in name_cols + ["VALUE", "BUDGET_TYPE"] if c in df.columns]
-    # Build figure
-    fig = px.treemap(
-        data_frame=df[keep_cols],
-        path=name_cols,
-        values="VALUE",
-        hover_data=None,
-        custom_data=["BUDGET_TYPE"],
-        title=" ",  # Placeholder, important for download
-    )
-
-    # Extract the necessary data from the treemap trace to compute percentages
-    # and apply coloring rules.
-    trace_data = fig.data[0]
+    Returns (trace_kwargs, path_to_short_id). path_to_short_id maps original
+    Plotly path strings to compact integer ids and is needed by build_compact_node_map.
+    """
     node_ids: list[str] = list(trace_data["ids"])
     parents: list[str] = list(trace_data["parents"])
     values: list[float] = [float(v) if v is not None else 0.0 for v in trace_data["values"]]
@@ -157,7 +169,6 @@ def generate_figure(
     # Compute percentages for all nodes based on treemap aggregation.
     parent_percentages, root_percentages = _compute_percentages(parents, values)
 
-    # Safely read Plotly ids/labels (may be numpy arrays).
     # Build a label→orig_id mapping for PROGRAM_0 so colors are language-agnostic.
     # Both the Russian and translated labels map to the same orig_id.
     program_label_to_orig_id: dict[str, str] = {}
@@ -168,27 +179,23 @@ def generate_figure(
                     if label and orig_id and pd.notna(label) and pd.notna(orig_id):
                         program_label_to_orig_id[str(label)] = str(orig_id)
 
-    # Generate list of colors for each node based on classified status, node_id and spending type
     colors = create_treemap_colors(
         node_ids,
         budget_types,
         spending_type,
         viewby,
-        program_label_to_orig_id or None,  # pass None rather than {} so the helper skips the lookup
+        program_label_to_orig_id or None,
     )
 
     # Replace long path-string ids with short integer ids to reduce JSON payload.
     # The root virtual node keeps its empty-string id; all others get sequential integers.
     unique_nids = dict.fromkeys(nid for nid in node_ids if nid)
     path_to_short_id = {nid: str(i) for i, nid in enumerate(unique_nids)}
-    new_ids = [path_to_short_id.get(nid, nid) for nid in node_ids]
-    new_parents = [path_to_short_id.get(p, p) for p in parents]
+    unit_label = unit_config.map[unit]
 
-    # Combine existing customdata with new percentage data and node ids for hover and click interactions.
-    # Attach custom data for hover to every node, including id for click selection.
-    fig.update_traces(
-        ids=new_ids,
-        parents=new_parents,
+    trace_kwargs = dict(
+        ids=[path_to_short_id.get(nid, nid) for nid in node_ids],
+        parents=[path_to_short_id.get(p, p) for p in parents],
         marker_colors=colors,
         pathbar_textfont_size=18,  # Max size of pathbar text. Increase with text size.
         marker_pad=dict(t=25, l=5, r=5, b=5),
@@ -208,8 +215,34 @@ def generate_figure(
         ),
         texttemplate="%{label}<br>%{value:,.1f}" + unit_config.map[unit],
     )
+    return trace_kwargs, path_to_short_id
 
-    # Layout adjustments
+
+def generate_figure(
+    df: pd.DataFrame,
+    spending_type: SpendingTypeLiteral = "ALL",
+    unit: UnitTypeLiteral = "ABSOLUTE",
+    translated: bool = False,
+    viewby: ViewByDimensionTypeLiteral = "MINISTRY",
+) -> tuple[go.Figure, dict[str, str]]:
+    """Build a treemap with stable ids and clean hover info."""
+    name_ending = "_NAME_TRANSLATED" if translated else "_NAME"
+    name_cols = build_name_cols(df, name_ending, include_root=True)
+    keep_cols = [c for c in name_cols + ["VALUE", "BUDGET_TYPE"] if c in df.columns]
+
+    fig = px.treemap(
+        data_frame=df[keep_cols],
+        path=name_cols,
+        values="VALUE",
+        hover_data=None,
+        custom_data=["BUDGET_TYPE"],
+        title=" ",  # Placeholder, important for download
+    )
+
+    trace_kwargs, path_to_short_id = _prepare_trace_overrides(
+        fig.data[0], df, viewby, spending_type, unit
+    )
+    fig.update_traces(**trace_kwargs)
     fig.update_layout(
         autosize=True,
         width=None,  # don't hardcode width
@@ -219,58 +252,6 @@ def generate_figure(
     )
 
     return fig, path_to_short_id
-
-
-def _build_compact_node_map(
-    df: pd.DataFrame, path_to_short_id: dict[str, str] | None = None
-) -> dict[str, dict]:
-    """Build a compact {short_id: {leaf: dim_id, ctx: [ancestor_dim_ids]}} map.
-
-    Each short_id is unique (assigned per path), so the same dim_id appearing under
-    multiple parents gets a separate entry with distinct ancestor context. This allows
-    the timeseries to filter by the same subchapter/chapter context as the clicked node.
-    """
-    compact: dict[str, dict] = {}
-    records = df.to_dict("records")
-
-    # path_to_short_id covers only the figure's current language; assign fresh IDs for the other.
-    next_id = (
-        max((int(v) for v in path_to_short_id.values()), default=-1) + 1 if path_to_short_id else 0
-    )
-    extra_path_to_id: dict[str, str] = {}
-
-    for name_ending in ("_NAME", "_NAME_TRANSLATED"):
-        name_cols = ["ROOT"] + [col for col in df.columns if col.endswith(name_ending)]
-
-        for record in records:
-            labels: list[str] = []
-            seen_dim_ids: list[int] = []  # ancestor dim_ids accumulated along the path
-            for col in name_cols:
-                label = record.get(col)
-                if not label or pd.isna(label):
-                    continue
-                labels.append(str(label))
-                if col == "ROOT":
-                    continue
-                dim_id = record.get(f"{col.replace(name_ending, '')}_DIM_ID")
-                if pd.isnull(dim_id):
-                    continue
-                path = "/".join(labels)
-                if path_to_short_id and path in path_to_short_id:
-                    node_ref = path_to_short_id[path]
-                elif path in extra_path_to_id:
-                    node_ref = extra_path_to_id[path]
-                else:
-                    node_ref = str(next_id)
-                    extra_path_to_id[path] = node_ref
-                    next_id += 1
-                dim_id_int = int(dim_id)
-                # ctx is stored before appending dim_id_int, so it contains only ancestors,
-                # not the node itself. The timeseries uses this to filter by hierarchy context.
-                compact[node_ref] = {"leaf": str(dim_id_int), "ctx": list(seen_dim_ids)}
-                seen_dim_ids.append(dim_id_int)
-
-    return compact
 
 
 def layout(**other_kwargs) -> html.Div:
@@ -322,6 +303,7 @@ def layout(**other_kwargs) -> html.Div:
     Output("treemap-graph", "figure"),
     Output("treemap-graph", "style"),
     Output("store-treemap-node-map", "data"),
+    Output("store-selected-id", "data", allow_duplicate=True),
     Output("warning-toast", "is_open", allow_duplicate=True),
     Output("warning-toast", "children", allow_duplicate=True),
     Input("url", "pathname"),
@@ -337,15 +319,20 @@ def update_figure_from_filters(
     budget_id: int,
     viewby: ViewByDimensionTypeLiteral = "MINISTRY",
     spending_type: SpendingTypeLiteral = "ALL",
-    unit: UnitLiteral = "ABSOLUTE",
+    unit: UnitTypeLiteral = "ABSOLUTE",
     language: str = "RU",
-) -> tuple[Any, Any, Any, bool, str]:
+) -> tuple[Any, Any, Any, Any, bool, str]:
     # Guard: only run when the treemap page is active.
     if pathname != get_relative_path("/"):
         raise PreventUpdate
     # Guard: wait until a budget is selected
     if budget_id is None:
         raise PreventUpdate
+
+    # Clear the selected node when spending type or viewby changes — these restructure the
+    # hierarchy entirely, so old short IDs no longer correspond to the same nodes.
+    triggered_id = callback_context.triggered_id
+    clear_selection = triggered_id in ("store-spending-type", "store-viewby")
 
     # Fetch and render using the selected values from stores
     # Use translated names when language is EN (English)
@@ -357,18 +344,18 @@ def update_figure_from_filters(
             unit=unit,
         )
     except ValueError as e:
-        return no_update, no_update, no_update, True, str(e)
+        return no_update, no_update, no_update, no_update, True, str(e)
 
-    df_shaped = shape_for_spending_type(df, spending_type=spending_type)
-    df_shaped = shape_for_viewby(df_shaped, viewby=viewby)
+    df_shaped = shape_dataframe(df, spending_type, viewby)
     fig, path_to_short_id = generate_figure(
         df_shaped, spending_type, unit=unit, translated=translated, viewby=viewby
     )
-    compact_map = _build_compact_node_map(df_shaped, path_to_short_id=path_to_short_id)
+    compact_map = build_compact_node_map(df_shaped, path_to_short_id=path_to_short_id)
     return (
         fig,
         {"visibility": "visible"},
         compact_map,
+        None if clear_selection else no_update,
         False,
         "",
     )
@@ -379,24 +366,18 @@ def update_figure_from_filters(
     Input("treemap-graph", "clickData"),
 )
 def update_selected_id(click_data: dict | None) -> Optional[str]:
-    """Store the currently selected treemap node id from clickData.customdata[3]."""
+    """Store the currently selected treemap node id."""
     if not click_data:
         raise PreventUpdate
     try:
         pts = click_data.get("points", [])
         if not pts:
             raise PreventUpdate
-        # Prefer explicit id provided by Plotly for treemap nodes.
         node_id = pts[0].get("id")
-        if not node_id:
-            # Legacy fallback: older Plotly versions didn't include "id" in clickData.
-            custom = pts[0].get("customdata", [])
-            node_id = custom[3] if len(custom) >= 4 else None
         if not node_id:
             raise PreventUpdate
         return str(node_id)
     except Exception:
-        # Malformed clickData (e.g. missing keys) — silently ignore rather than crash.
         raise PreventUpdate
 
 
@@ -405,14 +386,13 @@ def _build_download_df(
     spending_type: SpendingTypeLiteral,
     viewby: ViewByDimensionTypeLiteral,
     translated: bool,
-    unit: UnitLiteral = "ABSOLUTE",
+    unit: UnitTypeLiteral = "ABSOLUTE",
 ) -> pd.DataFrame:
     """Build a flat aggregated DataFrame for CSV download with root, Level 1, Level 2, value columns."""
-    df_shaped = shape_for_spending_type(df, spending_type=spending_type)
-    df_shaped = shape_for_viewby(df_shaped, viewby=viewby)
+    df_shaped = shape_dataframe(df, spending_type, viewby)
 
     name_ending = "_NAME_TRANSLATED" if translated else "_NAME"
-    name_cols = [col for col in df_shaped.columns if col.endswith(name_ending)]
+    name_cols = build_name_cols(df_shaped, name_ending)
 
     leaf1_col = name_cols[0] if len(name_cols) > 0 else None
     leaf2_col = name_cols[1] if len(name_cols) > 1 else None
@@ -508,7 +488,7 @@ def download_treemap_data(
     budget_options: list[dict] | None,
     viewby: ViewByDimensionTypeLiteral,
     spending_type: SpendingTypeLiteral,
-    unit: UnitLiteral,
+    unit: UnitTypeLiteral,
     language: str = "RU",
 ) -> dict[str, Any]:
     if pathname != get_relative_path("/"):
@@ -533,4 +513,4 @@ def download_treemap_data(
     download_df.to_csv(
         buf, sep=";", index=False, encoding="utf-8-sig"
     )  # utf-8-sig adds BOM for Excel
-    return dcc.send_bytes(buf.getvalue(), filename)  # type: ignore
+    return dcc.send_bytes(buf.getvalue(), filename)

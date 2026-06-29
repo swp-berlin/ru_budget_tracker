@@ -1,0 +1,9 @@
+{
+    "ty.configuration": {
+        "environment": {
+            "root": [
+                "./src"
+            ]
+        }
+    }
+}

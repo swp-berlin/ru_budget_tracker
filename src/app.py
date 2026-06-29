@@ -71,11 +71,11 @@ def _prewarm_timeseries_cache() -> None:
     try:
         from utils.fetch_treemap import fetch_budgets_for_dropdown
         from utils.fetch_timeseries import TimeseriesDataFetcher
-        from utils.definitions import unit_config, UnitLiteral
+        from utils.definitions import unit_config, UnitTypeLiteral
         from pages.timeseries import fetch_timeseries_data
 
         logger.info("Timeseries prewarm: filling raw SQL caches")
-        for spending_type in ("ALL", "MILITARY"):
+        for spending_type in ["ALL", "MILITARY"]:
             logger.info(
                 "Timeseries prewarm: fetching execution budgets for spending_type=%s", spending_type
             )
@@ -95,11 +95,11 @@ def _prewarm_timeseries_cache() -> None:
             if all(v is not None for v in seed_ids.values()):
                 break
 
-        units: list[UnitLiteral] = [u for _, u in unit_config.options]
+        units: list[UnitTypeLiteral] = [u for _, u in unit_config.options]
         for budget_type, budget_id in seed_ids.items():
             if budget_id is None:
                 continue
-            for spending_type in ("ALL", "MILITARY"):
+            for spending_type in ["ALL", "MILITARY"]:
                 for unit in units:
                     logger.info(
                         "Timeseries prewarm: budget_type=%s budget_id=%s spending_type=%s unit=%s",

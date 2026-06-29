@@ -79,7 +79,7 @@ class LawMilitaryOpenSpendingPerChapter(Base):
     Aggregates all military open spending from LAW budgets per (budget_id, chapter).
     Military expenses are identified using the full treemap definition:
       - CHAPTER = '02'
-      - PROGRAMM LIKE '31%'
+      - PROGRAM LIKE '31%'
       - MINISTRY = '187'
       - CHAPTER = '03' AND MINISTRY = '180'  (combination)
 
@@ -112,7 +112,7 @@ class ReportMilitaryOpenSpendingPerChapter(Base):
     Aggregates all military open spending from REPORT budgets per (budget_id, chapter).
     Military expenses are identified using the full treemap definition:
       - CHAPTER = '02'
-      - PROGRAMM LIKE '31%'
+      - PROGRAM LIKE '31%'
       - MINISTRY = '187'
       - CHAPTER = '03' AND MINISTRY = '180'  (combination)
 

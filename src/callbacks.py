@@ -1,7 +1,7 @@
 """App-level callbacks (toolbar, filters, menus, spinners, share/download)."""
 
 from typing import Any
-from urllib.parse import parse_qs, unquote_plus
+from urllib.parse import urlparse, unquote_plus, parse_qs, urlencode
 
 import dash_bootstrap_components as dbc
 from dash import (
@@ -26,6 +26,12 @@ from utils.definitions import (
     spending_type_config,
     viewby_config,
     period_config,
+    BudgetTypeLiteral,
+    PeriodTypeLiteral,
+    LanguageTypeLiteral,
+    ViewByDimensionTypeLiteral,
+    UnitTypeLiteral,
+    SpendingTypeLiteral,
 )
 
 # Dropdown labels differ from chart-title maps for unit and spending type,
@@ -42,15 +48,20 @@ def _triggered_value(item_type: str):
     raise PreventUpdate
 
 
-def _get_budget_type(budget_id: int | None, options: list[dict] | None) -> str | None:
-    if not budget_id or not options:
-        return None
-    return next((opt.get("type") for opt in options if opt.get("value") == budget_id), None)
-
-
 def _item_span(label: str, selected: bool) -> html.Span:
     style = {"fontWeight": "bold"} if selected else {}
     return html.Span(label, title=label, style=style)
+
+
+def _parse_search(search: str | None) -> dict:
+    return parse_qs((search or "").lstrip("?"))
+
+
+def _update_search_param(current_search: str | None, key: str, value: str) -> str:
+    """Return a new URL search string with one key replaced, preserving all other params."""
+    params = _parse_search(current_search)
+    params[key] = [value]
+    return "?" + urlencode(params, doseq=True)
 
 
 # --- Navigation ---
@@ -96,50 +107,82 @@ def update_about_button(pathname: str | None, previous_path: str | None, budget_
     Output("btn-switch-graphs", "href"),
     Output("btn-switch-graphs", "children"),
     Output("btn-switch-graphs", "title"),
+    State("url", "href"),
     Input("url", "pathname"),
     Input("store-budget-id", "data"),
     Input("store-selected-id", "data"),
     State("store-treemap-node-map", "data"),
-    State("url", "search"),
+    State("store-viewby", "data"),
+    State("store-period", "data"),
+    prevent_initial_call="initial_duplicate",
 )
 def switch_graphs(
-    pathname: str | None,
-    budget_id: int | None,
+    url: str,
+    url_pathname: str | None,
+    _budget_id: int | None,
     selected_id: str | None,
     compact_node_map: dict | None,
-    url_search: str | None,
+    viewby: str | None,
+    period: str | None,
 ):
-    """Swap destination, icon, and label based on current page."""
-    params: list[str] = []
-    if budget_id is not None:
-        params.append(f"budget_id={budget_id}")
-    focus_added = False
-    if selected_id and compact_node_map:
-        entry = compact_node_map.get(str(selected_id))
-        if entry:
-            dim_id_str = entry.get("leaf") if isinstance(entry, dict) else entry
-            if dim_id_str and str(dim_id_str).isdigit():
-                params.append(f"focus={dim_id_str}")
-                focus_added = True
-    # If no focus was resolved from the node map, pass through any existing ?focus= from the URL.
-    if not focus_added and url_search:
-        qs = parse_qs(url_search.lstrip("?"))
-        focus_raw = qs.get("focus", [None])[0]
-        if focus_raw and unquote_plus(focus_raw).strip().isdigit():
-            params.append(f"focus={unquote_plus(focus_raw).strip()}")
-    query_string = f"?{'&'.join(params)}" if params else ""
+    """Swap destination, icon, and label based on current page.
 
-    if pathname == get_relative_path("/timeseries"):
+    URL is always current (write-through), so filter params are read directly
+    from it. Only focus needs computing from the node map.
+    """
+    url_parsed = urlparse(url)
+    query_param_dict = parse_qs(url_parsed.query)
+    treemap_path = get_relative_path("/")
+    timeseries_path = get_relative_path("/timeseries")
+
+    # Compute focus from the currently selected node.
+    leaf_node_id: str = ""
+    if selected_id and compact_node_map:
+        leaf_node = compact_node_map.get(str(selected_id))
+        if isinstance(leaf_node, dict):
+            leaf = str(leaf_node.get("leaf", ""))
+            if leaf:
+                # Encode the full ancestor chain ending with the leaf dim_id, comma-joined.
+                # e.g. ctx=[100], leaf="200" → "100,200". Top-level nodes get just the leaf.
+                ctx: list = leaf_node.get("ctx", []) or []  # type: ignore[assignment]
+                leaf_node_id = ",".join([str(c) for c in ctx] + [leaf])
+
+    # Case 1: node selected → set focus param
+    if leaf_node_id:
+        query_param_dict["focus"] = [leaf_node_id]
+
+    # Case 2: back to root but focus still in URL → clear it
+    if (
+        url_pathname == treemap_path
+        and not leaf_node_id
+        and query_param_dict.get("focus") is not None
+        and len(compact_node_map or {}) > 0
+        and len(selected_id or "") > 0
+    ):
+        query_param_dict.pop("focus")
+
+    if url_pathname == timeseries_path:
+        # Going back to treemap: strip period (timeseries-only), ensure viewby is present.
+        dest_params = {k: v for k, v in query_param_dict.items() if k != "period"}
+        if viewby:
+            dest_params.setdefault("viewby", [str(viewby)])
+        query_string = urlencode(dest_params, doseq=True)
         return (
-            f"{get_relative_path('/')}{query_string}",
+            f"{treemap_path}?{query_string}",
             [
                 html.Img(src=get_asset_url("icons/dashboard.svg"), alt="Treemap icon"),
                 html.Span("Treemap", className="btn-label"),
             ],
             "Switch to Treemap View",
         )
+
+    # Going to timeseries: strip viewby (treemap-only), ensure period is present.
+    dest_params = {k: v for k, v in query_param_dict.items() if k != "viewby"}
+    if period:
+        dest_params.setdefault("period", [str(period)])
+    query_string = urlencode(dest_params, doseq=True)
     return (
-        f"{get_relative_path('/timeseries')}{query_string}",
+        f"{timeseries_path}?{query_string}",
         [
             html.Img(src=get_asset_url("icons/stacked_bar_chart.svg"), alt="Timeseries icon"),
             html.Span("Timeseries", className="btn-label"),
@@ -151,32 +194,16 @@ def switch_graphs(
 @callback(
     Output("menu-viewby", "style"),
     Output("menu-period", "style"),
-    Input("url", "pathname"),
-    Input("store-budget-id", "data"),
-    State("store-budget-options", "data"),
-)
-def toggle_viewby_period_menu(
-    pathname: str | None, budget_id: int | None, options: list[dict[str, Any]] | None
-):
-    """Toggle visibility of View By and Period menus based on current page."""
-    if pathname == get_relative_path("/timeseries"):
-        period_style: dict[str, Any] = {}
-        if _get_budget_type(budget_id, options) == "LAW":
-            period_style = {"cursor": "not-allowed"}
-        return {"display": "none"}, period_style
-    return {}, {"display": "none"}
-
-
-@callback(
     Output("menu-period", "disabled"),
-    Input("store-budget-id", "data"),
-    State("store-budget-options", "data"),
+    Input("url", "pathname"),
+    Input("store-budget-type", "data"),
 )
-def toggle_period_menu_disabled(
-    budget_id: int | None, options: list[dict[str, Any]] | None
-) -> bool:
-    """Disable the period menu for LAW budgets where quarter selection does not apply."""
-    return _get_budget_type(budget_id, options) == "LAW"
+def toggle_viewby_period_menu(pathname: str | None, budget_type: str | None):
+    """Toggle visibility/style of View By and Period menus, and disable Period for LAW budgets."""
+    is_law = budget_type == "LAW"
+    if pathname == get_relative_path("/timeseries"):
+        return {"display": "none"}, {"cursor": "not-allowed"} if is_law else {}, is_law
+    return {}, {"display": "none"}, False
 
 
 @callback(
@@ -196,9 +223,10 @@ def toggle_resize_interval(pathname: str | None) -> bool:
     Output("menu-budget", "children"),
     Input("url", "pathname"),  # fire once on load
     State("url", "search"),
+    State("store-budget-id", "data"),
     prevent_initial_call=False,
 )
-def init_budgets(_, url_search: str | None):
+def init_budgets(_, url_search: str | None, store_budget_id: int | None):
     """Fetch available budgets, build menu items, and resolve the initially selected budget."""
     options = [
         {"label": b["original_identifier"], "value": b["id"], "type": b["type"]}
@@ -212,9 +240,13 @@ def init_budgets(_, url_search: str | None):
         for opt in options
     ]
 
+    # On page switches the store is already set — don't overwrite it.
+    if store_budget_id is not None:
+        return options, no_update, items
+
     default_value = options[0]["value"] if options else None
     if url_search:
-        params = parse_qs(url_search.replace("?", ""))
+        params = _parse_search(url_search)
         budget_id_raw = params.get("budget_id", [None])[0]
         if budget_id_raw:
             budget_id_raw = unquote_plus(budget_id_raw).strip()
@@ -227,14 +259,51 @@ def init_budgets(_, url_search: str | None):
 
 
 @callback(
+    Output("store-budget-type", "data"),
+    Input("store-budget-id", "data"),
+    State("store-budget-options", "data"),
+)
+def update_budget_type(budget_id: int | None, options: list[dict] | None) -> str | None:
+    if not budget_id or not options:
+        return None
+    return next((opt.get("type") for opt in options if opt.get("value") == budget_id), None)
+
+
+@callback(
+    Output("url", "search"),
+    Output("store-period", "data", allow_duplicate=True),
+    Input("store-budget-type", "data"),
+    State("url", "search"),
+    State("url", "pathname"),
+    prevent_initial_call=True,
+)
+def update_period_on_budget_update(
+    budget_type: BudgetTypeLiteral | None, current_search: str | None, current_pathname: str | None
+) -> tuple[str | None, PeriodTypeLiteral | None]:
+    if not budget_type:
+        raise PreventUpdate
+    params = _parse_search(current_search)
+    is_timeseries: bool = get_relative_path("/timeseries") == current_pathname
+
+    if is_timeseries and budget_type != "REPORT":
+        period: PeriodTypeLiteral = "ALL"
+        params["period"] = [period]
+        return "?" + urlencode(params, doseq=True), period
+
+    raise PreventUpdate
+
+
+@callback(
+    Output("url", "search", allow_duplicate=True),
     Output("store-budget-id", "data", allow_duplicate=True),
     Output("store-selected-id", "data", allow_duplicate=True),
     Input("store-budget-options", "data"),
     Input({"type": "budget-item", "value": ALL}, "n_clicks"),
+    State("url", "search"),
     prevent_initial_call=True,
 )
-def select_budget_dynamic(options, clicks):
-    """Update selected budget_id when a budget menu item is clicked, clearing any treemap selection."""
+def select_budget_dynamic(options, clicks, current_search):
+    """Update budget_id in URL and store when a budget menu item is clicked, clearing focus."""
     ctx = callback_context
     if not ctx.triggered:
         raise PreventUpdate
@@ -244,48 +313,58 @@ def select_budget_dynamic(options, clicks):
     selected_value = trig.get("value")
     if selected_value is None:
         raise PreventUpdate
-    return selected_value, None
+    params = _parse_search(current_search)
+    params["budget_id"] = [str(selected_value)]
+    params.pop("focus", None)
+    return "?" + urlencode(params, doseq=True), selected_value, None
 
 
 # --- Filter stores from URL ---
 
 
 @callback(
-    Output("store-budget-id", "data", allow_duplicate=True),
     Output("store-viewby", "data", allow_duplicate=True),
     Output("store-spending-type", "data", allow_duplicate=True),
     Output("store-unit", "data", allow_duplicate=True),
     Output("store-language", "data", allow_duplicate=True),
     Output("store-period", "data", allow_duplicate=True),
-    Input("url", "search"),
+    Input("url", "pathname"),
+    State("url", "search"),
+    State("store-budget-type", "data"),
     prevent_initial_call="initial_duplicate",
 )
-def apply_filters_from_url(url_search: str | None):
-    """Apply filters from URL query params on load and when the URL changes.
+def init_filters_from_url(
+    url_pathname: str | None, url_search: str | None, budget_type: BudgetTypeLiteral | None
+):
+    """Initialise filter stores from URL params on page load.
 
-    Recognized params: budget_id, viewby, spending_type, unit, language, period.
-    Missing params leave the current store values unchanged (no_update).
+    Fires on pathname changes (page navigation), not on filter changes — those
+    write both the URL and the store together via write-through callbacks.
     """
     if not url_search:
         raise PreventUpdate
+    if not url_pathname:
+        raise PreventUpdate
+    is_timeseries: bool = url_pathname == get_relative_path("/timeseries")
+    if not budget_type:
+        budget_type = "LAW"
     try:
-        params = parse_qs(url_search.replace("?", ""))
+        params = _parse_search(url_search)
 
         def first(key: str):
             vals = params.get(key)
             return unquote_plus(vals[0]).strip() if vals else None
 
-        budget_id_raw = first("budget_id")
-        viewby = first("viewby")
-        spending_type = first("spending_type")
-        unit = first("unit")
-        language = first("language")
-        period = first("period")
+        viewby: ViewByDimensionTypeLiteral = first("viewby")
+        spending_type: SpendingTypeLiteral | None = first("spending_type")
+        unit: UnitTypeLiteral | None = first("unit")
+        language: LanguageTypeLiteral | None = first("language")
+        period: PeriodTypeLiteral | None = first("period")
 
-        budget_id = int(budget_id_raw) if budget_id_raw and budget_id_raw.isdigit() else None
+        if not is_timeseries and budget_type != "REPORT":
+            period = "ALL"
 
         return (
-            budget_id if budget_id is not None else no_update,
             viewby if viewby else no_update,
             spending_type if spending_type else no_update,
             unit if unit else no_update,
@@ -299,40 +378,25 @@ def apply_filters_from_url(url_search: str | None):
 # --- Filter selections (pattern-matched menu items) ---
 
 
-@callback(
-    Output("store-viewby", "data"),
-    Input({"type": "viewby-item", "value": ALL}, "n_clicks"),
-    prevent_initial_call=True,
-)
-def select_viewby(_clicks):
-    return _triggered_value("viewby-item")
+def _make_select_callback(item_type: str, store: str, url_param: str) -> None:
+    @callback(
+        Output("url", "search", allow_duplicate=True),
+        Output(store, "data"),
+        Input({"type": item_type, "value": ALL}, "n_clicks"),
+        State("url", "search"),
+        prevent_initial_call=True,
+    )
+    def _cb(_clicks, current_search):
+        value = _triggered_value(item_type)
+        return _update_search_param(current_search, url_param, str(value)), value
+
+    _cb.__name__ = f"select_{item_type.replace('-', '_')}"
 
 
-@callback(
-    Output("store-period", "data"),
-    Input({"type": "period-item", "value": ALL}, "n_clicks"),
-    prevent_initial_call=True,
-)
-def select_period(_clicks):
-    return _triggered_value("period-item")
-
-
-@callback(
-    Output("store-spending-type", "data"),
-    Input({"type": "spending-type-item", "value": ALL}, "n_clicks"),
-    prevent_initial_call=True,
-)
-def select_spending_type(_clicks):
-    return _triggered_value("spending-type-item")
-
-
-@callback(
-    Output("store-unit", "data"),
-    Input({"type": "unit-item", "value": ALL}, "n_clicks"),
-    prevent_initial_call=True,
-)
-def select_unit(_clicks):
-    return _triggered_value("unit-item")
+_make_select_callback("viewby-item", "store-viewby", "viewby")
+_make_select_callback("period-item", "store-period", "period")
+_make_select_callback("spending-type-item", "store-spending-type", "spending_type")
+_make_select_callback("unit-item", "store-unit", "unit")
 
 
 # --- Menu label updates ---
@@ -368,7 +432,7 @@ def update_menu_labels(
     return (
         viewby_config.map.get(viewby or "", "View by"),
         spending_type_config.map.get(spending_type or "", "Spending type"),
-        unit_config.map.get(unit or "", "Unit"),  # type: ignore
+        unit_config.map.get(unit or "", "Unit"),
         period_config.map.get(period or "", "Period"),
     )
 
@@ -376,42 +440,22 @@ def update_menu_labels(
 # --- Menu item highlight ---
 
 
-@callback(
-    Output({"type": "viewby-item", "value": ALL}, "children"),
-    Input("store-viewby", "data"),
-    State({"type": "viewby-item", "value": ALL}, "id"),
-)
-def highlight_viewby(current, ids):
-    return [_item_span(viewby_config.map[item["value"]], item["value"] == current) for item in ids]
+def _make_highlight_callback(item_type: str, store: str, label_map: dict) -> None:
+    @callback(
+        Output({"type": item_type, "value": ALL}, "children"),
+        Input(store, "data"),
+        State({"type": item_type, "value": ALL}, "id"),
+    )
+    def _cb(current, ids):
+        return [_item_span(label_map[item["value"]], item["value"] == current) for item in ids]
+
+    _cb.__name__ = f"highlight_{item_type.replace('-', '_')}"
 
 
-@callback(
-    Output({"type": "spending-type-item", "value": ALL}, "children"),
-    Input("store-spending-type", "data"),
-    State({"type": "spending-type-item", "value": ALL}, "id"),
-)
-def highlight_spending_type(current, ids):
-    return [
-        _item_span(_spending_type_labels[item["value"]], item["value"] == current) for item in ids
-    ]
-
-
-@callback(
-    Output({"type": "unit-item", "value": ALL}, "children"),
-    Input("store-unit", "data"),
-    State({"type": "unit-item", "value": ALL}, "id"),
-)
-def highlight_unit(current, ids):
-    return [_item_span(_unit_labels[item["value"]], item["value"] == current) for item in ids]
-
-
-@callback(
-    Output({"type": "period-item", "value": ALL}, "children"),
-    Input("store-period", "data"),
-    State({"type": "period-item", "value": ALL}, "id"),
-)
-def highlight_period(current, ids):
-    return [_item_span(period_config.map[item["value"]], item["value"] == current) for item in ids]
+_make_highlight_callback("viewby-item", "store-viewby", viewby_config.map)
+_make_highlight_callback("spending-type-item", "store-spending-type", _spending_type_labels)
+_make_highlight_callback("unit-item", "store-unit", _unit_labels)
+_make_highlight_callback("period-item", "store-period", period_config.map)
 
 
 @callback(
@@ -432,18 +476,26 @@ def highlight_budget(current, ids, options):
 
 @callback(
     Output("btn-switch-data-language", "children"),
+    Input("store-language", "data"),
+)
+def update_language_button_label(current_lang: str | None):
+    """Keep the language button label in sync with the store (shows the language you'd switch to)."""
+    btn_label = "RU" if current_lang == "EN" else "EN"
+    return [html.Span(btn_label, className="btn-label")]
+
+
+@callback(
+    Output("url", "search", allow_duplicate=True),
     Output("store-language", "data", allow_duplicate=True),
     Input("btn-switch-data-language", "n_clicks"),
     State("store-language", "data"),
+    State("url", "search"),
     prevent_initial_call=True,
 )
-def toggle_language(n_clicks: int | None, current_lang: str | None):
-    """Toggle the language between RU and EN."""
-    if not n_clicks:
-        raise PreventUpdate
-    new_lang = "EN" if (current_lang or "RU") == "RU" else "RU"
-    btn_label = "RU" if new_lang == "EN" else "EN"
-    return [html.Span(btn_label, className="btn-label")], new_lang
+def toggle_language(n_clicks: int | None, current_lang: str | None, current_search: str | None):
+    """Toggle the language in URL and store between RU and EN on button click."""
+    new_lang = "EN" if current_lang == "RU" else "RU"
+    return _update_search_param(current_search, "language", new_lang), new_lang
 
 
 # --- Share ---
@@ -532,22 +584,13 @@ clientside_callback(
     prevent_initial_call=True,
 )
 
-# Build URL with current filters and selected id, copy to clipboard.
+# Copy current URL to clipboard, appending focus param from selected treemap node.
 clientside_callback(
     ClientsideFunction(namespace="clientside", function_name="copyShareLink"),
     Output("dummy-output", "title"),
     Input("btn-share-link", "n_clicks"),
-    State("url", "pathname"),
-    State("store-budget-id", "data"),
-    State("store-viewby", "data"),
-    State("store-spending-type", "data"),
-    State("store-unit", "data"),
-    State("store-period", "data"),
-    State("store-language", "data"),
     State("store-selected-id", "data"),
-    State(
-        "store-treemap-node-map", "data"
-    ),  # compact map: {short_id: {leaf: dim_id, ctx: [ancestor_dim_ids]}}
+    State("store-treemap-node-map", "data"),
     prevent_initial_call=True,
 )
 

@@ -47,6 +47,7 @@ toolbar = html.Div(
         # Store currently selected filter values (these replace dcc.Dropdown.value)
         dcc.Store(id="store-budget-options"),
         dcc.Store(id="store-budget-id"),
+        dcc.Store(id="store-budget-type"),
         # Store the treemap selection for cross-page filtering.
         dcc.Store(id="store-selected-id"),
         dcc.Store(id="store-viewby", data="CHAPTER"),
@@ -64,7 +65,7 @@ toolbar = html.Div(
         dcc.Store(id="store-window-width", data=1280),
         dcc.Interval(id="timeseries-resize-interval", interval=300, disabled=True),
         # Location component to access URL parameters
-        dcc.Location(id="url"),
+        dcc.Location(id="url", refresh=False),
         # Dummy div target for clientside callbacks (requires an Output but is invisible).
         html.Div(id="dummy-output", style={"display": "none"}),
         html.Div(id="dummy-restore-zoom", style={"display": "none"}),

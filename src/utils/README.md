@@ -7,7 +7,7 @@ Shared utilities for the budget tracker backend. All modules in this folder are 
 ### `definitions.py`
 Central source of truth for types, constants, and configuration.
 
-- **Type literals** — `BudgetTypeLiteral`, `UnitLiteral`, `SpendingTypeLiteral`, etc. Used as type annotations across the codebase.
+- **Type literals** — `BudgetTypeLiteral`, `UnitTypeLiteral`, `SpendingTypeLiteral`, etc. Used as type annotations across the codebase.
 - **`BudgetConfig`** — immutable constants for data quirks (value multipliers, quarterly months).
 - **UI option configs** — `ViewByConfig`, `UnitConfig`, `PeriodConfig`, `SpendingTypeConfig` — each holds dropdown `options` tuples and a `map` dict for label lookups.
 - **`MilitarySpending`** — regex patterns (Python and SQL variants) used to classify expenses as military, both for simple single-dimension matches and multi-dimension combination rules.
@@ -33,7 +33,7 @@ Also exposes `fetch_budgets_for_dropdown()` (used by the sidebar) and `_execute_
 ### `helper.py`
 Miscellaneous utility functions used across views:
 
-- `get_unit_label` — maps a `UnitLiteral` to its human-readable dropdown label.
+- `get_unit_label` — maps a `UnitTypeLiteral` to its human-readable dropdown label.
 - `create_treemap_colors` — returns per-node hex colors based on dimension type, viewby mode, military status, and spending type.
 - `shape_for_spending_type` — filters a DataFrame to military-only rows when `spending_type == "MILITARY"`.
 - `shape_for_viewby` — drops irrelevant hierarchy columns based on the selected `viewby` dimension (MINISTRY / CHAPTER / PROGRAM).

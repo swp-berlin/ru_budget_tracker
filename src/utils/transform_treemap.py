@@ -201,7 +201,7 @@ class TreemapTransformer:
         # Set type for value as float
         df["VALUE"] = df["VALUE"].astype(float)
         # Preserve nulls before any string conversion for Plotly path handling.
-        df = df.where(pd.notnull(df), None)  # type: ignore
+        df = df.where(pd.notnull(df), None)
         # Normalize non-null entries to strings for id/name columns.
         str_cols = [c for c in df.columns if c != "VALUE"]
         df[str_cols] = df[str_cols].astype(str).replace("nan", None).replace("None", None)
@@ -307,6 +307,18 @@ class TreemapTransformer:
             df = pd.concat([df, pd.DataFrame([root_row])], ignore_index=True)
 
         return df
+
+    def subtract_prev_quarter(self, df: pd.DataFrame, prev_df: pd.DataFrame) -> pd.DataFrame:
+        """Subtract previous quarter's cumulative values to produce quarterly-only values."""
+        dim_id_cols = [c for c in df.columns if c.endswith("_DIM_ID")]
+        merged = df.merge(
+            prev_df[dim_id_cols + ["VALUE"]].rename(columns={"VALUE": "PREV_VALUE"}),
+            on=dim_id_cols,
+            how="left",
+        )
+        result = df.copy()
+        result["VALUE"] = (merged["VALUE"] - merged["PREV_VALUE"].fillna(0)).clip(lower=0).values
+        return result
 
     def transform_from_flat(self, flat_rows: Sequence[RowMapping]) -> pd.DataFrame:
         """Fast path: build DataFrame from pre-computed table rows, skipping networkx."""

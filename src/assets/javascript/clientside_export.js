@@ -6,48 +6,34 @@ const EXPORT_FONT = 'Source Sans 3';
 const EXPORT_FONT_FILE = 'assets/fonts/Source_Sans_3/SourceSans3-VariableFont_wght.ttf';
 
 Object.assign(window.dash_clientside.clientside, {
-  /**
-   * Build a shareable URL from current filters and selected id and copy it.
-   * Params included: budget_id, viewby (treemap only), spending_type, unit, period (timeseries only), focus
-   *
-   * @param {number} n_clicks - Button clicks (ignored aside from triggering)
-   * @param {string} pathname - Current page path, e.g., '/'
-   * @param {number|null} budgetId
-   * @param {string} viewby
-   * @param {string} spendingType
-   * @param {string} unit
-   * @param {string|null} period
-   * @param {string|null} language
-   * @param {string|null} selectedId
-   * @returns {string} Status message in dummy output title.
-   */
-  copyShareLink: function (n_clicks, pathname, budgetId, viewby, spendingType, unit, period, language, selectedId, nodeMap) {
+  copyShareLink: function (n_clicks, selectedId, nodeMap) {
     try {
       if (!n_clicks) return 'Share not triggered';
-      const isTimeseries = pathname?.endsWith('/timeseries');
-      const params = new URLSearchParams();
-      if (budgetId != null) params.set('budget_id', String(budgetId));
-      if (viewby && !isTimeseries) params.set('viewby', viewby);
-      if (spendingType) params.set('spending_type', spendingType);
-      if (unit) params.set('unit', unit);
-      if (period && isTimeseries) params.set('period', period);
-      if (language) params.set('language', language);
+      // URL is always current (write-through); only focus needs computing from the node map.
+      const url = new URL(window.location.href);
       if (selectedId) {
-        // Compact nodeMap is {short_id: {leaf: dim_id, ctx: [...]}} — direct lookup by short_id.
-        let focusParam = selectedId;
         if (nodeMap) {
           const entry = nodeMap[String(selectedId)];
-          if (entry) focusParam = entry.leaf ?? entry;
+          if (entry && entry.leaf) {
+            // Encode the full ancestor chain ending with the leaf dim_id, comma-joined.
+            // e.g. ctx=[100] + leaf=200 → "100,200". Top-level nodes get just "100".
+            const fullPath = [...(entry.ctx || []), entry.leaf].join(',');
+            url.searchParams.set('focus', fullPath);
+          } else {
+            // No entry or empty leaf — root was clicked, clear any stale focus.
+            url.searchParams.delete('focus');
+          }
+        } else {
+          url.searchParams.delete('focus');
         }
-        params.set('focus', focusParam);
       }
-
-      const url = `${window.location.origin}${pathname || '/'}?${params.toString()}`;
+      // If selectedId is null, leave the existing ?focus= in the URL untouched.
+      const urlStr = url.toString();
 
       // navigator.clipboard requires HTTPS; fall back to execCommand for HTTP.
       const copyViaTextarea = () => {
         const el = document.createElement('textarea');
-        el.value = url;
+        el.value = urlStr;
         document.body.appendChild(el);
         el.select();
         document.execCommand('copy');
@@ -55,7 +41,7 @@ Object.assign(window.dash_clientside.clientside, {
       };
 
       if (navigator.clipboard?.writeText) {
-        navigator.clipboard.writeText(url).catch(copyViaTextarea);
+        navigator.clipboard.writeText(urlStr).catch(copyViaTextarea);
       } else {
         copyViaTextarea();
       }
