@@ -117,6 +117,13 @@ import-all: import-all-core import-translations import-rename
 # Reset the local database, rerun migrations, then import the full dataset.
 bootstrap-data: rebuild-db import-all
 
+# Download data from Nextcloud
+download-data:
+	cd src && uv run python -m importer && cd -
+
+# Download data from Nextcloud and bootstrap the database with the full dataset.
+download-and-bootstrap-data: download-data bootstrap-data
+
 # Validate a small set of frozen reference values against the final SQLite database.
 test-frozen-db:
 	uv run --group dev pytest tests/test_frozen_db.py -q

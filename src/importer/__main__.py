@@ -1,42 +1,16 @@
-import os
 import httpx2
 from zipfile import ZipFile
-from dotenv import load_dotenv
-from pathlib import Path
 import logging
+from settings import importer_settings
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
-ENV_FILE = ".env.importer"
 
-if os.environ.get("OPENAI_API_KEY") is None:
-    log.warning(
-        "OPENAI_API_KEY environment variable is not set. "
-        f"OPENAI_API_KEY must be set via environment variable and not via {ENV_FILE} file. "
-        "Because Make requires OPENAI_API_KEY to be set in the environment, and python-dotenv does not automatically set environment variables."
-    )
-
-if Path(ENV_FILE).exists():
-    load_dotenv(ENV_FILE)
-    log.info(f"Loaded environment variables from {ENV_FILE}")
-
-config = {**os.environ}
-openai_api_key = config.get("OPENAI_API_KEY")
-download_link = config.get("NEXTCLOUD_DOWNLOAD_LINK")
-archive_output_path = config.get("ARCHIVE_OUTPUT_PATH")
-extract_output_path = config.get("EXTRACT_OUTPUT_PATH")
-
-if (
-    not download_link
-    or not archive_output_path
-    or not extract_output_path
-    or not openai_api_key
-):
-    log.error(
-        "Missing required environment variables: NEXTCLOUD_DOWNLOAD_LINK, ARCHIVE_OUTPUT_PATH, EXTRACT_OUTPUT_PATH, OPENAI_API_KEY"
-    )
-    exit(1)
+openai_api_key = importer_settings.deepl_api_key
+download_link = importer_settings.nextcloud_download_link
+archive_output_path = importer_settings.archive_output_file
+extract_output_dir = importer_settings.base_dir
 
 
 def download_file():
@@ -63,7 +37,7 @@ def extract_zip():
     """
     log.info("Extracting ZIP file...")
     with ZipFile(archive_output_path, "r") as zip_ref:
-        zip_ref.extractall(extract_output_path)
+        zip_ref.extractall(extract_output_dir)
 
 
 def main():
