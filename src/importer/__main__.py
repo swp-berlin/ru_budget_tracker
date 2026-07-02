@@ -1,7 +1,7 @@
 import httpx2
 from zipfile import ZipFile
 import logging
-from settings import importer_settings
+from settings_importer import importer_settings
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)

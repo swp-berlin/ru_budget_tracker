@@ -46,7 +46,7 @@ from scripts.parsers import (
     parse_totals_file,
     save_ppp_csv,
 )
-from settings import importer_settings
+from settings_importer import importer_settings
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)

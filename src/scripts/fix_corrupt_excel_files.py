@@ -6,7 +6,7 @@ import shutil
 import zipfile
 from pathlib import Path
 import logging
-from settings import importer_settings
+from settings_importer import importer_settings
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)

@@ -32,7 +32,8 @@ import deepl
 from sqlalchemy import select, update
 from models import Dimension
 from database.sessions import get_sync_session
-from settings import settings, importer_settings
+from settings import settings
+from settings_importer import importer_settings
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
