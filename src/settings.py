@@ -118,4 +118,3 @@ class ImporterSettings(BaseSettings):
 
 
 settings = Settings()
-importer_settings = ImporterSettings()

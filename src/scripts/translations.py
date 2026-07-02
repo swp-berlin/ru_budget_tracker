@@ -32,7 +32,6 @@ import deepl
 from sqlalchemy import select, update
 from models import Dimension
 from database.sessions import get_sync_session
-from settings import settings
 from settings_importer import importer_settings
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -216,7 +215,7 @@ def main():
     parser.add_argument("--limit", type=int, default=None, help="Limit to first N dimension names (for testing)")
     args = parser.parse_args()
 
-    api_key = os.environ.get("DEEPL_API_KEY") or settings.deepl_api_key
+    api_key = os.environ.get("DEEPL_API_KEY") or importer_settings.deepl_api_key
     if not api_key and not args.dry_run:
         logger.error("DEEPL_API_KEY not found")
         sys.exit(1)
