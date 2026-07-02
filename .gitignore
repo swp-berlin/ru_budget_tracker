@@ -24,6 +24,7 @@ wheels/
 
 # data-binary-files
 *.pdf
+*.zip
 
 # Notebooks
 **/*.ipynb

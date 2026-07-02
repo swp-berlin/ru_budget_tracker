@@ -23,6 +23,7 @@ TOTALS_LAW_FILE ?= data/import_files/raw/totals/total_law_2026.csv
 	import-gdp \
 	import-ppp \
 	import-translations \
+	import-rename \
 	import-all-core \
 	import-all \
 	bootstrap-data \
@@ -102,11 +103,16 @@ import-ppp:
 import-translations:
 	cd src && uv run python scripts/translations.py --batch-size 25 && cd -
 
+# Normalize dimension names for display (strip program prefixes, shorten "Russian Federation").
+# Idempotent; run after translations so translated names are present.
+import-rename:
+	cd src && uv run python scripts/rename_dimensions.py && cd -
+
 # Import all required data except translations.
 import-all-core: import-fix import-budget import-totals-all import-gdp import-ppp
 
-# Import the full dataset, including translations.
-import-all: import-all-core import-translations
+# Import the full dataset, including translations and name normalization.
+import-all: import-all-core import-translations import-rename
 
 # Reset the local database, rerun migrations, then import the full dataset.
 bootstrap-data: rebuild-db import-all

@@ -59,8 +59,8 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         env_nested_delimiter="__",
     )
-    # OpenAI API key for translation scripts (optional)
-    openai_api_key: str | None = None
+    # DeepL API key for translation scripts (optional)
+    deepl_api_key: str | None = None
     database: Database = Field(default_factory=lambda: Database())
     app: AppSettings = Field(default_factory=lambda: AppSettings())
 
