@@ -46,6 +46,7 @@ from scripts.parsers import (
     parse_totals_file,
     save_ppp_csv,
 )
+from settings import importer_settings
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -689,7 +690,7 @@ def main():
     p_budget.add_argument(
         "--data-dir",
         type=Path,
-        default=Path(__file__).parent.parent / "data" / "import_files" / "clean",
+        default=importer_settings.data_dir, #Path(__file__).parent.parent / "data" / "import_files" / "clean",
         help="Directory with import files",
     )
 
@@ -701,7 +702,7 @@ def main():
     p_totals.add_argument(
         "--data-dir",
         type=Path,
-        default=Path(__file__).parent.parent / "data" / "import_files" / "clean",
+        default=importer_settings.data_dir,
         help="Directory with import files (used to locate related dirs if needed)",
     )
 
@@ -712,7 +713,7 @@ def main():
     p_gdp.add_argument(
         "--data-dir",
         type=Path,
-        default=Path(__file__).parent.parent / "data" / "import_files" / "clean",
+        default=importer_settings.data_dir, #Path(__file__).parent.parent / "data" / "import_files" / "clean",
         help="Directory with import files (used to locate raw/ for auto-discovery)",
     )
     p_gdp.add_argument("--rosstat", type=Path, help="Path to Rosstat quarterly GDP file")
@@ -803,7 +804,7 @@ def main():
                     "Provide both --rosstat and --minekonom, or neither (for auto-discovery)."
                 )
             else:
-                raw_dir = args.data_dir.parent / "raw"
+                raw_dir = importer_settings.raw_dir #args.data_dir.parent / "raw"
                 rosstat_path, minekonom_path = find_gdp_files(raw_dir)
 
             import_gdp_data(rosstat_path, minekonom_path)

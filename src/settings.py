@@ -99,6 +99,14 @@ class ImporterSettings(BaseSettings):
     def translation_dir(self) -> Path:
         return self.data_dir / "translations"
     
+    @property
+    def totals_report_file(self) -> Path:
+        return self.raw_dir / "totals/totals_report_2026.xlsx"
+    
+    @property
+    def totals_law_file(self) -> Path:
+        return self.raw_dir / "totals/totals_law_2026.xlsx"
+    
     # @property
     # def laws_dir(self) -> Path:
     #     return self.data_dir / "laws"

@@ -32,7 +32,7 @@ import deepl
 from sqlalchemy import select, update
 from models import Dimension
 from database.sessions import get_sync_session
-from settings import settings
+from settings import settings, importer_settings
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -41,7 +41,9 @@ logger = logging.getLogger(__name__)
 # CONFIGURATION
 # =============================================================================
 
-TRANSLATIONS_DIR = Path(__file__).parent.parent / "data" / "import_files" / "clean" / "translations"
+# TRANSLATIONS_DIR = Path(__file__).parent.parent / "data" / "import_files" / "clean" / "translations"
+# TRANSLATIONS_FILE = TRANSLATIONS_DIR / "dimension_translations.csv"
+TRANSLATIONS_DIR = importer_settings.translation_dir
 TRANSLATIONS_FILE = TRANSLATIONS_DIR / "dimension_translations.csv"
 
 BATCH_SIZE = 50  # DeepL supports up to 50 texts per request

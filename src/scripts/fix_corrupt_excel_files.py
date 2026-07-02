@@ -6,6 +6,7 @@ import shutil
 import zipfile
 from pathlib import Path
 import logging
+from settings import importer_settings
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -95,13 +96,14 @@ def process_reports(raw_dir, clean_dir):
 
 
 def main():
-    base_dir = Path("data/import_files")
+    raw_dir = importer_settings.raw_dir
+    data_dir = importer_settings.data_dir
 
     logger.info("Processing laws...")
-    process_laws(base_dir / "raw/laws", base_dir / "clean/laws")
+    process_laws(raw_dir / "laws", data_dir / "laws")
 
     logger.info("Processing reports...")
-    process_reports(base_dir / "raw/reports", base_dir / "clean/reports")
+    process_reports(raw_dir / "reports", data_dir / "reports")
 
     logger.info("Done.")
 
