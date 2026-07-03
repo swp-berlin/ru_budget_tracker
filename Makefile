@@ -121,8 +121,13 @@ bootstrap-data: rebuild-db import-all
 download-data:
 	cd src && uv run python -m importer && cd -
 
+# This is a dirty workaround for a permission issue on the server
+# It ensures group rw access which is required because differt users of the same group write to budget.db
+fix-db-chmod:
+	cd src && chmod 664 data/budget.*
+
 # Download data from Nextcloud and bootstrap the database with the full dataset.
-download-and-bootstrap-data: download-data bootstrap-data
+download-and-bootstrap-data: download-data bootstrap-data fix-db-chmod
 
 # Validate a small set of frozen reference values against the final SQLite database.
 test-frozen-db:

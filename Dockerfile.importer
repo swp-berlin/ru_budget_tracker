@@ -23,4 +23,4 @@ RUN apt-get update && \
 # Switch to non-root user
 USER appuser
 
-CMD make download-and-bootstrap-data
+CMD ["sh", "-c", "umask 002 && make download-and-bootstrap-data"]
