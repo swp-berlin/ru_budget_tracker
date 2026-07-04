@@ -166,6 +166,25 @@ def clean_code_value(value) -> Optional[str]:
     return cleaned
 
 
+def _appends_to_prev_expense_row(prev: MergedRow, name: str) -> bool:
+    """Code-less text continues the PREVIOUS expense row's name.
+
+    Heuristic: the previous row is an expense (has a VR code) whose name looks
+    unfinished — it does not end with ')' (expense names end with the expense
+    type in parentheses, e.g. "... (Дотации)").
+    """
+    return bool(prev.expense_type_code) and not prev.name.endswith(")")
+
+
+def _appends_to_prev_header_row(prev: MergedRow, name: str) -> bool:
+    """Code-less text continues the PREVIOUS header (non-expense) row's name.
+
+    Heuristic: the continuation ends with a closing quote — the tail of a
+    quoted program title split across sheet rows (e.g. ... федеральных проектов»).
+    """
+    return not prev.expense_type_code and name.endswith('"')
+
+
 def merge_rows(
     df: pd.DataFrame,
     header_row_idx: int,
@@ -175,6 +194,10 @@ def merge_rows(
 ) -> List[MergedRow]:
     """
     Merge multi-row entries where text spans multiple rows.
+
+    Rows WITHOUT any codes are pure text: they either continue the previous
+    row's name (see the two _appends_to_prev_* heuristics) or accumulate
+    forward onto the NEXT row that carries codes.
 
     Returns list of MergedRow objects with consolidated text and codes.
     """
@@ -227,10 +250,9 @@ def merge_rows(
             # Decide: append to previous or accumulate forward
             if merged_rows:
                 prev = merged_rows[-1]
-                if prev.expense_type_code and not prev.name.endswith(")"):
-                    prev.name += " " + name
-                    continue
-                if not prev.expense_type_code and name.endswith('"'):
+                if _appends_to_prev_expense_row(prev, name) or _appends_to_prev_header_row(
+                    prev, name
+                ):
                     prev.name += " " + name
                     continue
             accumulated_name = name if not accumulated_name else accumulated_name + " " + name

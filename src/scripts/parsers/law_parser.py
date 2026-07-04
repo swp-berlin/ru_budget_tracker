@@ -24,13 +24,19 @@ from .issues import IssueCollector
 
 logger = logging.getLogger(__name__)
 
+# Law xlsx values are in THOUSANDS of ₽; the database stores ₽.
+LAW_FILE_MULTIPLIER = 1000.0
+
 
 # =============================================================================
 # NAME NORMALIZATION
 # =============================================================================
 
-# Chapter name replacements for consistency across years
+# Chapter name replacements for consistency across years.
 # Format: {old_name: new_name}
+# Single known case: law_2020 titles chapter 13 with parentheses where every
+# other year uses "и"; without the remap the same chapter splits into two
+# dimensions and chapter sums diverge across years.
 CHAPTER_NAME_REPLACEMENTS = {
     "Обслуживание государственного (муниципального) долга": "Обслуживание государственного и муниципального долга",
 }
@@ -157,7 +163,13 @@ def parse_law_dimensions(merged_rows: List[MergedRow]) -> List[Dimension]:
 
 
 def _find_parent_program(program_code: str, find_dim) -> Optional[str]:
-    """Find parent program by walking up the hierarchy (character-based)."""
+    """Find parent program by walking up the hierarchy (character-based).
+
+    NOTE: deliberately NOT unified with report_parser._find_parent_program:
+    this variant accepts 1-character prefixes as parents, the report variant
+    requires prefixes of length >= 2. Both behaviors are pinned by unit tests;
+    unifying them would change dimensions_sha256 goldens for all law files.
+    """
     code = program_code.strip()
 
     if len(code) <= 1:
@@ -249,7 +261,9 @@ def parse_law_file(
     col_mapping = get_column_mapping(df.iloc[header_idx])
 
     # 4. Merge multi-line rows (LAW values are in thousands → multiply by 1000)
-    merged_rows = merge_rows(df, header_idx, col_mapping, multiplier=1000.0, issues=issues)
+    merged_rows = merge_rows(
+        df, header_idx, col_mapping, multiplier=LAW_FILE_MULTIPLIER, issues=issues
+    )
 
     # 5. Parse dimensions
     dimensions = parse_law_dimensions(merged_rows)
