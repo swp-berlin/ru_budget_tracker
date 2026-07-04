@@ -36,15 +36,17 @@ make import-ppp
 make import-translations
 ```
 
-**Tests** (see `tests/README.md` for tiers and fixtures):
+**Tests** (see `tests/README.md` for tiers, fixtures, and the data-blessing workflow):
 ```bash
-make test-fast    # unit + DB tiers, seconds — run on every change
-make test         # + golden/e2e tiers (~10 min) — run before/after refactoring the importer
+make test-fast       # unit + DB tiers, seconds — run on every change
+make test            # + golden/e2e tiers (~10 min) — run before/after touching the importer
+make quality-report  # data-quality report → src/data/quality/report.md (tracked)
 ```
 
-The suite pins current import behavior (characterization tests). Golden/frozen
-fixtures are only regenerated deliberately (`make test-regen-goldens`,
-`make test-regen-frozen`), in a commit whose message explains why the numbers changed.
+Fixtures (goldens, frozen totals) protect **blessed** data; new files show up as skips
+and in the quality report until blessed deliberately (`make test-regen-goldens`,
+`make test-regen-frozen`) in a commit whose message explains why the numbers changed.
+Deep data documentation for AI sessions: `.claude/data-guide.md`.
 
 **Lint / format / typecheck:**
 ```bash

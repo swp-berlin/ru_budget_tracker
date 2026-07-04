@@ -39,6 +39,20 @@ make test
 git diff tests/fixtures/frozen_budget_totals.json src/data/quality/
 ```
 
+## Interpreting outcomes
+
+| Signal | Meaning | What to do |
+|---|---|---|
+| Import exits 1 with `ParseError` (layout / marker row / unparseable value) | The new file violates a structural assumption | Inspect the named file/row; either the file is broken or the format changed — adapt deliberately |
+| Import exits 1: "N ERROR-severity data issue(s) … data was written" | e.g. unresolved dimension parents, printed total off by ≥ 0.1% | Read `src/data/quality/issues/<file>.json`; data is in the DB but do not bless until understood |
+| `make test`: skips like "no golden for X — unblessed" | New data awaiting blessing | Expected; bless when the quality report looks good |
+| `make test`: a BLESSED golden/fixture fails | Regression — parser, dependency, or data changed under you | Investigate before touching fixtures; `generate_goldens.py --dump-rows <stem>` diffs row level |
+| Quality report WARNINGs (`law_detail_exceeds_total`, printed-total 1₽–0.1%, `unblessed_items`) | Source inconsistencies or pending blessings; import is fine | Review when convenient; documented in `.claude/findings-2026-07.md` |
+| Quality report exit 1 (ERROR findings) | Structural DB problem (undimensioned LAW/REPORT expenses, dangling links) | Should never happen after a clean import — investigate immediately |
+
+Background reading for a new contributor (or AI session): `.claude/data-guide.md` — the
+data model, units, file quirks, and validation anchors in one place.
+
 ## Tiers
 
 | Marker | What | Needs | Speed |
