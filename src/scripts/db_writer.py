@@ -352,8 +352,7 @@ def get_chapter_dimensions(
         if issues is not None:
             issues.add(
                 "chapter_dimension_missing",
-                f"CHAPTER dimensions not in database: {sorted(missing)} "
-                f"(import LAW files first)",
+                f"CHAPTER dimensions not in database: {sorted(missing)} (import LAW files first)",
             )
 
     if len(all_chapters) != len(chapters):

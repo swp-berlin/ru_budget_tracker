@@ -145,8 +145,10 @@ def translate_names_batch(names: List[str], translator: deepl.Translator) -> Dic
             logger.debug(f"Translated batch of {len(translations)} names")
             return translations
         except deepl.TooManyRequestsException:
-            delay = RETRY_BASE_DELAY * (2 ** attempt)
-            logger.warning(f"Rate limited, retrying in {delay:.0f}s (attempt {attempt + 1}/{RETRY_ATTEMPTS})")
+            delay = RETRY_BASE_DELAY * (2**attempt)
+            logger.warning(
+                f"Rate limited, retrying in {delay:.0f}s (attempt {attempt + 1}/{RETRY_ATTEMPTS})"
+            )
             time.sleep(delay)
         except Exception as e:
             logger.error(f"DeepL API error: {e}")
@@ -207,12 +209,34 @@ def translate_missing_names(
 
 def main():
     parser = argparse.ArgumentParser(description="Translate dimension names to English")
-    parser.add_argument("--dry-run", action="store_true", help="Show what would be translated without making changes")
-    parser.add_argument("--force", action="store_true", help="Re-translate all names, ignoring existing translations")
-    parser.add_argument("--batch-size", type=int, default=BATCH_SIZE, help=f"Number of names per API call (default: {BATCH_SIZE})")
-    parser.add_argument("--workers", type=int, default=MAX_WORKERS, help=f"Number of parallel API calls (default: {MAX_WORKERS})")
-    parser.add_argument("--skip-db-update", action="store_true", help="Only update CSV, don't update database")
-    parser.add_argument("--limit", type=int, default=None, help="Limit to first N dimension names (for testing)")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be translated without making changes",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Re-translate all names, ignoring existing translations",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=BATCH_SIZE,
+        help=f"Number of names per API call (default: {BATCH_SIZE})",
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=MAX_WORKERS,
+        help=f"Number of parallel API calls (default: {MAX_WORKERS})",
+    )
+    parser.add_argument(
+        "--skip-db-update", action="store_true", help="Only update CSV, don't update database"
+    )
+    parser.add_argument(
+        "--limit", type=int, default=None, help="Limit to first N dimension names (for testing)"
+    )
     args = parser.parse_args()
 
     api_key = os.environ.get("DEEPL_API_KEY") or importer_settings.deepl_api_key
@@ -241,7 +265,9 @@ def main():
         logger.info(f"Existing translations in CSV: {len(existing_translations)}")
         logger.info(f"Names needing translation: {len(missing_names)}")
         logger.info(f"Batch size: {args.batch_size}, Workers: {args.workers}")
-        logger.info(f"Estimated batches: {(len(missing_names) + args.batch_size - 1) // args.batch_size}")
+        logger.info(
+            f"Estimated batches: {(len(missing_names) + args.batch_size - 1) // args.batch_size}"
+        )
         if missing_names:
             logger.info("\nSample of names to translate (first 10):")
             for name in list(missing_names)[:10]:
