@@ -110,6 +110,67 @@ def read_report_excel(file_path: Path) -> pd.DataFrame:
         raise ValueError(f"Failed to read sheet '{REPORT_SHEET_NAME}' from {file_path}: {e}")
 
 
+# Expected header text (lowercased substrings) at the positional columns of
+# REPORT_COLUMNS, verified against all 33 report files 2018-2026. Guards the
+# purely positional reads below: if a column moves, the layout check fires.
+EXPECTED_HEADER_SUBSTRINGS: Dict[int, Tuple[str, ...]] = {
+    REPORT_COLUMNS["name"]: ("наименование",),
+    REPORT_COLUMNS["ministry"]: ("распорядит", "глав"),
+    REPORT_COLUMNS["chapter_full"]: ("пр",),
+    REPORT_COLUMNS["program"]: ("цср",),
+    REPORT_COLUMNS["expense_type"]: ("вр",),
+    REPORT_COLUMNS["value_executed"]: ("исполнен",),
+}
+
+
+def check_report_layout(df: pd.DataFrame, issues: IssueCollector | None = None) -> None:
+    """Verify the expected headers sit at the expected positional columns.
+
+    Record-only: mismatches are reported as layout_mismatch ERRORs but parsing
+    continues (Phase B will turn this into a hard failure).
+    """
+    for col_idx, expected in EXPECTED_HEADER_SUBSTRINGS.items():
+        if col_idx >= df.shape[1]:
+            header_text = ""
+        else:
+            header_text = " ".join(
+                str(value) for value in df.iloc[:10, col_idx] if pd.notna(value)
+            ).lower()
+        if not any(substring in header_text for substring in expected):
+            logger.warning(f"Header mismatch at column {col_idx}: expected one of {expected}")
+            if issues is not None:
+                issues.add(
+                    "layout_mismatch",
+                    f"Column {col_idx} header does not contain any of {expected}; "
+                    f"positional reads may be misaligned",
+                    severity="ERROR",
+                    column=f"col_{col_idx}",
+                    raw_value=header_text[:120],
+                )
+
+
+def parse_ru_number(value: object) -> Optional[float]:
+    """Parse numbers as printed in the files, e.g. '10 252 219 858 668,72'."""
+    if pd.isna(value):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    normalized = str(value).replace("\xa0", " ").replace(" ", "").replace(",", ".")
+    try:
+        return float(normalized)
+    except ValueError:
+        return None
+
+
+def find_printed_total(df: pd.DataFrame) -> Optional[float]:
+    """The grand total printed in the file's own 'Расходы ... - всего' row (executed col)."""
+    for idx in range(min(30, len(df))):
+        name = str(df.iloc[idx, REPORT_COLUMNS["name"]]).lower()
+        if "всего" in name and "расходы" in name:
+            return parse_ru_number(df.iloc[idx, REPORT_COLUMNS["value_executed"]])
+    return None
+
+
 def find_data_start_row(df: pd.DataFrame, issues: IssueCollector | None = None) -> int:
     """
     Find the first data row (after headers).
@@ -550,26 +611,68 @@ def parse_report_file(
 
     # 2. Read Excel file (ONCE)
     df = read_report_excel(file_path)
+    check_report_layout(df, issues=issues)
 
     # 3. Find where data starts
     start_row = find_data_start_row(df, issues=issues)
     logger.info(f"Data starts at row {start_row}")
 
-    # 4. Parse expense rows
+    # 4. Parse expense rows; account for every sheet row in exactly one bucket
     parsed_rows: List[Dict] = []
+    row_buckets = {
+        "expense_leaf": 0,  # detailed VR + value → becomes an Expense
+        "dimension_header": 0,  # names a ministry/chapter/program, no expense
+        "aggregate_vr_skipped": 0,  # x00 roll-up rows, dropped by design
+        "no_ministry_skipped": 0,  # totals/header rows without a ministry code
+    }
     for idx in range(start_row, len(df)):
         row = df.iloc[idx]
         row_data = extract_row_data(row, issues=issues)
         if row_data:
             parsed_rows.append(row_data)
+            if row_data["expense_type_code"] and row_data["value"] is not None:
+                row_buckets["expense_leaf"] += 1
+            else:
+                row_buckets["dimension_header"] += 1
+        elif not is_valid_row(row):
+            row_buckets["aggregate_vr_skipped"] += 1
+        else:
+            row_buckets["no_ministry_skipped"] += 1
 
     logger.info(f"Parsed {len(parsed_rows)} expense rows")
+    if issues is not None:
+        issues.add(
+            "row_accounting",
+            "Sheet rows by outcome: "
+            + ", ".join(f"{bucket}={count}" for bucket, count in sorted(row_buckets.items())),
+            severity="INFO",
+        )
 
     # 5. Create dimensions
     dimensions, dim_lookup = create_dimensions_from_report_rows(parsed_rows)
 
     # 6. Create expenses
     expenses = create_expenses_from_report_rows(parsed_rows, dim_lookup)
+
+    # 7. Reconcile against the grand total printed in the file itself
+    # (record-only; validated to the cent across all 33 files on 2026-07-03).
+    if issues is not None:
+        printed_total = find_printed_total(df)
+        if printed_total is None:
+            issues.add(
+                "printed_total_row_missing",
+                "Grand-total row ('Расходы ... - всего') not found in the first 30 rows",
+            )
+        else:
+            parsed_total = sum(e.value for e in expenses)
+            delta = parsed_total - printed_total
+            if abs(delta) >= 1.0:
+                issues.add(
+                    "printed_total_mismatch",
+                    f"Sum of parsed expenses ({parsed_total:,.2f} ₽) deviates from the "
+                    f"file's printed grand total ({printed_total:,.2f} ₽) by {delta:+,.2f} ₽",
+                    severity="ERROR",
+                )
 
     logger.info(
         f"Parsed: {budget.original_identifier}, "
