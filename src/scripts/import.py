@@ -53,10 +53,12 @@ from scripts.parsers import (
     parse_totals_file,
     save_ppp_csv,
 )
-from settings_importer import importer_settings
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
+# Years covered by default file discovery when no --years filter is given.
+IMPORT_YEARS = range(2018, 2027)
 
 
 # =============================================================================
@@ -254,9 +256,9 @@ def import_ppp_data(save_csv: bool = True) -> None:
 
 
 def get_law_files(data_dir: Path, years: List[int] | None = None) -> List[Path]:
-    """Get law files for specified years (or all years 2018-2025)."""
+    """Get law files for specified years (default: IMPORT_YEARS)."""
     if years is None:
-        years = list(range(2018, 2027))
+        years = list(IMPORT_YEARS)
 
     laws_dir = data_dir / "laws"
     return [laws_dir / f"law_{year}.xlsx" for year in years]
@@ -264,13 +266,13 @@ def get_law_files(data_dir: Path, years: List[int] | None = None) -> List[Path]:
 
 def get_report_files(data_dir: Path, years: List[int] | None = None) -> List[Path]:
     """
-    Get report files for specified years (or all years 2018-2025).
+    Get report files for specified years (default: IMPORT_YEARS).
 
     Reports are named: report_YYYY_MM.xlsx
     Returns all report files found for the specified years.
     """
     if years is None:
-        years = list(range(2018, 2027))
+        years = list(IMPORT_YEARS)
 
     reports_dir = data_dir / "reports"
 
@@ -318,6 +320,10 @@ def find_gdp_files(raw_dir: Path) -> Tuple[Path, Path]:
 
 
 def main():
+    # Imported here, not at module level: ImporterSettings requires env vars
+    # (DEEPL_API_KEY, NEXTCLOUD_DOWNLOAD_LINK) that only the CLI needs.
+    from settings_importer import importer_settings
+
     parser = argparse.ArgumentParser(description="Import budget data")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
