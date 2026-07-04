@@ -53,7 +53,7 @@ from scripts.parsers import (
     parse_totals_file,
     save_ppp_csv,
 )
-from scripts.parsers.issues import IssueCollector
+from scripts.parsers.issues import IssueCollector, ParseError
 from settings import settings
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -104,6 +104,13 @@ def import_budget_file(file_path: Path, file_type: Literal["law", "report"]) -> 
     issues.write_json(_issue_file_path(file_path))
     if len(issues):
         logger.info(f"Recorded {len(issues)} data-quality issue(s): {issues.counts_by_code()}")
+    if issues.errors():
+        # Data IS committed; the raise marks the run as failed so ERROR-severity
+        # findings (e.g. unresolved dimension parents) cannot pass unnoticed.
+        raise ParseError(
+            f"{len(issues.errors())} ERROR-severity data issue(s) recorded for "
+            f"{file_path.name} (data was written; see quality/issues/{file_path.stem}.json)"
+        )
 
     logger.info(f"✓ Imported {file_path.name} (ID: {budget_db_id})")
     return budget_db_id
@@ -203,6 +210,12 @@ def import_totals_file(file_path: Path) -> int:
     issues.write_json(_issue_file_path(file_path))
     if len(issues):
         logger.info(f"Recorded {len(issues)} data-quality issue(s): {issues.counts_by_code()}")
+    if issues.errors():
+        # Data IS committed; the raise marks the run as failed (see budget import).
+        raise ParseError(
+            f"{len(issues.errors())} ERROR-severity data issue(s) recorded for "
+            f"{file_path.name} (data was written; see quality/issues/{file_path.stem}.json)"
+        )
 
     # Summary
     years = sorted(set(b.published_at.year for b in budgets))

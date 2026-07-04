@@ -268,11 +268,13 @@ def save_dimensions(
                     f"Parent '{dim.parent_id}' not found for {dim.original_identifier} ({dim.type})"
                 )
                 if issues is not None:
-                    # Preserved behavior: the dimension is dropped for this budget.
+                    # The dimension is dropped for this budget; ERROR severity
+                    # makes the import run exit 1 (data is still written).
                     issues.add(
                         "unresolved_dimension_parent",
                         f"Parent '{dim.parent_id}' not found for "
                         f"{dim.original_identifier} ({dim.type}); dimension not saved",
+                        severity="ERROR",
                     )
             break
 
