@@ -25,8 +25,8 @@
       "tolerance": 0.01
     },
     {
-      "name": "report_2018_06_program_0110456730_500_sum",
-      "sql": "SELECT SUM(e.value) FROM expenses e JOIN budgets b ON b.id = e.budget_id JOIN association_table a ON a.expense_id = e.id JOIN dimensions d ON d.id = a.dimension_id WHERE b.original_identifier = 'REPORT-2018-06' AND d.type = 'PROGRAM' AND d.original_identifier = '0110456730-500'",
+      "name": "report_2018_06_program_0110456730_540_sum",
+      "sql": "SELECT SUM(e.value) FROM expenses e JOIN budgets b ON b.id = e.budget_id JOIN association_table a ON a.expense_id = e.id JOIN dimensions d ON d.id = a.dimension_id WHERE b.original_identifier = 'REPORT-2018-06' AND d.type = 'PROGRAM' AND d.original_identifier = '0110456730-540'",
       "expected": 2200000000.0,
       "tolerance": 0.01
     },

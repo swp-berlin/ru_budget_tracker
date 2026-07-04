@@ -6,7 +6,8 @@ Handles: report_YYYY_MM.xlsx and report_YYYY_MM.xls files
 Report files use sheet "2.1" (Ведомственная структура расходов федерального бюджета).
 Structure differs from LAW files:
 - Column layout: Name | Код стро-ки | Глав-ный распо-рядитель | Р, Пр | ЦСР | ВР | Values...
-- Filter to rows where ВР (expense type) is divisible by 100
+- Filter to rows where ВР (expense type) is NOT divisible by 100: the x00 codes
+  (100, 200, ... 800) are aggregates of the detailed rows and would double-count
 - Chapter code (Р, Пр) contains both chapter (first 2 digits) and subchapter (full code)
 - Value column is immediately after ВР (expense type)
 """
@@ -142,9 +143,10 @@ def is_valid_row(row: pd.Series) -> bool:
 
     Returns True if:
     - expense_type is empty (dimension name rows like ministry, chapter)
-    - expense_type is divisible by 100 (aggregated expense rows)
+    - expense_type is detailed (NOT divisible by 100)
 
-    Returns False if expense_type exists but is not divisible by 100.
+    Returns False for aggregate expense types (100, 200, ... 800) — they are
+    roll-ups of the detailed rows and would double-count.
     """
     expense_type = row.iloc[REPORT_COLUMNS["expense_type"]]
 
@@ -154,8 +156,8 @@ def is_valid_row(row: pd.Series) -> bool:
 
     try:
         et_val = int(float(expense_type))
-        # Only accept expense types divisible by 100
-        return et_val > 0 and et_val % 100 == 0
+        # Only accept detailed expense types (not divisible by 100)
+        return et_val > 0 and et_val % 100 != 0
     except (ValueError, TypeError, OverflowError):
         logger.info(
             "Treating non-numeric expense_type as empty: %s",
@@ -166,7 +168,7 @@ def is_valid_row(row: pd.Series) -> bool:
 
 def is_expense_row(row: pd.Series) -> bool:
     """
-    Check if row is an expense row (has expense type divisible by 100 AND a value).
+    Check if row is an expense row (has detailed expense type AND a value).
 
     Used to determine if a row should create an Expense object.
     """
@@ -177,7 +179,7 @@ def is_expense_row(row: pd.Series) -> bool:
 
     try:
         et_val = int(float(expense_type))
-        return et_val > 0 and et_val % 100 == 0
+        return et_val > 0 and et_val % 100 != 0
     except (ValueError, TypeError, OverflowError):
         logger.info(
             "Skipping expense row with non-numeric expense_type: %s",
@@ -269,9 +271,9 @@ def extract_row_data(row: pd.Series) -> Optional[Dict]:
         - value (executed amount, None for dimension-only rows)
         - name
 
-    Returns None for rows that should be skipped (non-100-divisible expense types).
+    Returns None for rows that should be skipped (aggregate x00 expense types).
     """
-    # Skip rows with expense types not divisible by 100
+    # Skip rows with aggregate expense types (divisible by 100)
     if not is_valid_row(row):
         return None
 
