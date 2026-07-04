@@ -97,11 +97,11 @@ import-ppp:
 	cd src && uv run python -m scripts.import ppp && cd -
 
 # Run the translation pipeline to translate unseen dimension names.
-# Translates in batches of 25 by default.
-# Requires OPENAI_API_KEY to be set in the environment.
-# OPENAI_API_KEY is not loaded from .env when run locally but might work when set explicitly in the environment or in a container.
+# Translates missing dimension names via DeepL (cached in clean/translations/).
+# Requires DEEPL_API_KEY in the environment. For scoped Pro keys also set
+# DEEPL_SERVER_URL=https://api.deepl.com (the client misroutes them otherwise).
 import-translations:
-	cd src && uv run python -m scripts.translations --batch-size 25 && cd -
+	cd src && uv run python -m scripts.translations --batch-size 50 && cd -
 
 # Normalize dimension names for display (strip program prefixes, shorten "Russian Federation").
 # Idempotent; run after translations so translated names are present.

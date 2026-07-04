@@ -280,7 +280,10 @@ def main():
             upsert_translations_to_db(existing_translations)
         return
 
-    translator = deepl.Translator(api_key)
+    # The deepl client routes keys to the free/pro endpoint by the ':fx' key
+    # suffix; scoped Pro keys are misrouted. DEEPL_SERVER_URL overrides
+    # (e.g. https://api.deepl.com); unset keeps the client's own detection.
+    translator = deepl.Translator(api_key, server_url=os.environ.get("DEEPL_SERVER_URL"))
 
     all_translations = translate_missing_names(
         db_names, existing_translations, translator, args.batch_size, args.workers
