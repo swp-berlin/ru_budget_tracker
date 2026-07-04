@@ -14,6 +14,8 @@ import logging
 
 from models import Budget, Dimension
 
+from .issues import IssueCollector
+
 logger = logging.getLogger(__name__)
 
 
@@ -165,7 +167,11 @@ def clean_code_value(value) -> Optional[str]:
 
 
 def merge_rows(
-    df: pd.DataFrame, header_row_idx: int, col_mapping: Dict[str, int], multiplier: float = 1.0
+    df: pd.DataFrame,
+    header_row_idx: int,
+    col_mapping: Dict[str, int],
+    multiplier: float = 1.0,
+    issues: IssueCollector | None = None,
 ) -> List[MergedRow]:
     """
     Merge multi-row entries where text spans multiple rows.
@@ -242,7 +248,15 @@ def merge_rows(
                 try:
                     value = float(value_raw) * multiplier
                 except (ValueError, TypeError):
-                    pass
+                    # Preserved behavior: value stays None (row becomes a non-expense).
+                    if issues is not None:
+                        issues.add(
+                            "value_unparseable",
+                            f"Value cell is not numeric; row kept without value: {name[:80]}",
+                            row_idx=idx,
+                            column="value",
+                            raw_value=value_raw,
+                        )
 
         merged_rows.append(
             MergedRow(
@@ -257,6 +271,14 @@ def merge_rows(
             )
         )
 
+    if accumulated_name and issues is not None:
+        # Preserved behavior: trailing code-less text never attached to any entry.
+        issues.add(
+            "merge_orphan_text",
+            f"Text at end of sheet was not attached to any row: {accumulated_name[:120]}",
+            raw_value=accumulated_name,
+        )
+
     logger.info(f"Merged into {len(merged_rows)} rows")
     return merged_rows
 
@@ -266,7 +288,9 @@ def merge_rows(
 # =============================================================================
 
 
-def deduplicate_dimensions(dimensions_list: List[Dimension]) -> List[Dimension]:
+def deduplicate_dimensions(
+    dimensions_list: List[Dimension], issues: IssueCollector | None = None
+) -> List[Dimension]:
     """
     Remove duplicates and warn about data quality issues.
 
@@ -288,6 +312,14 @@ def deduplicate_dimensions(dimensions_list: List[Dimension]) -> List[Dimension]:
             )
             for name in sorted(unique_names):
                 logger.warning(f"  - {name[:150]}")
+            if issues is not None:
+                # Preserved behavior: both rows are kept (source genuinely uses two names).
+                issues.add(
+                    "dimension_name_conflict",
+                    f"{dim_type} '{identifier}' (parent={parent_id}) appears with "
+                    f"{len(unique_names)} different names",
+                    raw_value=" | ".join(sorted(unique_names))[:300],
+                )
 
     # Deduplicate
     seen: set = set()

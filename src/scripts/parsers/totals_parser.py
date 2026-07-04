@@ -40,6 +40,8 @@ import logging
 
 from models import Budget, Expense
 
+from .issues import IssueCollector
+
 logger = logging.getLogger(__name__)
 
 TOTALS_SHEET_NAME = "месяц"
@@ -165,7 +167,9 @@ def get_row_index_by_indicator(df: pd.DataFrame, indicator: str) -> Optional[int
     return None
 
 
-def get_functional_section_rows(df: pd.DataFrame) -> Dict[str, int]:
+def get_functional_section_rows(
+    df: pd.DataFrame, issues: IssueCollector | None = None
+) -> Dict[str, int]:
     """Find row indices for all functional sections (2.1. - 2.14.)."""
     rows: Dict[str, int] = {}
     for indicator in FUNCTIONAL_TO_CHAPTER.keys():
@@ -174,23 +178,42 @@ def get_functional_section_rows(df: pd.DataFrame) -> Dict[str, int]:
             rows[indicator] = idx
         else:
             logger.warning(f"Could not find row for functional section {indicator}")
+            if issues is not None:
+                # Preserved behavior: that chapter is silently absent for all months.
+                issues.add(
+                    "functional_section_missing",
+                    f"Row for functional section {indicator} "
+                    f"(chapter {FUNCTIONAL_TO_CHAPTER[indicator]}) not found",
+                )
     return rows
 
 
-def parse_cell_value_billions(df: pd.DataFrame, row_idx: int, col_idx: int) -> Optional[float]:
+def parse_cell_value_billions(
+    df: pd.DataFrame, row_idx: int, col_idx: int, issues: IssueCollector | None = None
+) -> Optional[float]:
     """Safely parse a cell value as float, converting from billions to rubles."""
     val = df.iloc[row_idx, col_idx]
     if pd.notna(val):
         try:
             return float(str(val)) * BILLION
         except (ValueError, TypeError):
-            pass
+            # Preserved behavior: value stays None (month/chapter silently absent).
+            if issues is not None:
+                issues.add(
+                    "value_unparseable",
+                    "Totals cell is not numeric; value skipped",
+                    row_idx=row_idx,
+                    column=f"col_{col_idx}",
+                    raw_value=val,
+                )
     return None
 
 
 def parse_report_file(
     file_path: Path,
     start_year: int = 2018,
+    *,
+    issues: IssueCollector | None = None,
 ) -> Tuple[List[Budget], List[str], List[Tuple[str, Expense, Optional[str]]]]:
     """
     Parse a totals report xlsx file (budget execution data).
@@ -208,12 +231,24 @@ def parse_report_file(
 
     revenue_row_idx = get_row_index_by_indicator(df, "1")
     expense_row_idx = get_row_index_by_indicator(df, "2")
-    functional_section_rows = get_functional_section_rows(df)
+    functional_section_rows = get_functional_section_rows(df, issues=issues)
 
     if revenue_row_idx is None:
         logger.error("Could not find revenue row (indicator '1')")
+        if issues is not None:
+            issues.add(
+                "totals_anchor_row_missing",
+                "Revenue anchor row (indicator '1') not found; no revenue budgets created",
+                severity="ERROR",
+            )
     if expense_row_idx is None:
         logger.error("Could not find total expense row (indicator '2')")
+        if issues is not None:
+            issues.add(
+                "totals_anchor_row_missing",
+                "Expense anchor row (indicator '2') not found; no grand totals created",
+                severity="ERROR",
+            )
 
     logger.info(f"Found {len(functional_section_rows)} functional section rows")
 
@@ -225,14 +260,14 @@ def parse_report_file(
         month = ParsedReportMonth(date=col_date, year=col_date.year, month=col_date.month)
 
         if revenue_row_idx is not None:
-            month.total_revenue = parse_cell_value_billions(df, revenue_row_idx, col_idx)
+            month.total_revenue = parse_cell_value_billions(df, revenue_row_idx, col_idx, issues)
 
         if expense_row_idx is not None:
-            month.total_expenses = parse_cell_value_billions(df, expense_row_idx, col_idx)
+            month.total_expenses = parse_cell_value_billions(df, expense_row_idx, col_idx, issues)
 
         for indicator, row_idx in functional_section_rows.items():
             chapter_code = FUNCTIONAL_TO_CHAPTER[indicator]
-            value = parse_cell_value_billions(df, row_idx, col_idx)
+            value = parse_cell_value_billions(df, row_idx, col_idx, issues)
             if value is not None:
                 month.chapter_expenses.append(
                     ChapterExpense(
@@ -329,6 +364,8 @@ def parse_budget_value(value) -> float:
 def parse_law_file(
     file_path: Path,
     start_year: int = 2018,
+    *,
+    issues: IssueCollector | None = None,
 ) -> Tuple[List[Budget], List[str], List[Tuple[str, Expense, Optional[str]]]]:
     """
     Parse a totals law csv file (annual budget law data).
@@ -344,10 +381,19 @@ def parse_law_file(
 
     years_data: Dict[int, ParsedLawYear] = {}
 
-    for _, row in df.iterrows():
+    for idx, row in df.iterrows():
         try:
             year = int(row["year"])
         except (ValueError, TypeError):
+            # Preserved behavior: row silently skipped.
+            if issues is not None:
+                issues.add(
+                    "value_unparseable",
+                    "Year cell is not an integer; row skipped",
+                    row_idx=int(idx) if isinstance(idx, int) else None,
+                    column="year",
+                    raw_value=row["year"],
+                )
             continue  # Skip invalid rows
 
         if year < start_year:
@@ -425,6 +471,8 @@ def parse_law_file(
 def parse_totals_file(
     file_path: Path,
     start_year: int = 2018,
+    *,
+    issues: IssueCollector | None = None,
 ) -> Tuple[List[Budget], List[str], List[Tuple[str, Expense, Optional[str]]]]:
     """
     Parse a totals file (auto-detects format from extension).
@@ -436,8 +484,8 @@ def parse_totals_file(
     suffix = file_path.suffix.lower()
 
     if suffix == ".xlsx":
-        return parse_report_file(file_path, start_year)
+        return parse_report_file(file_path, start_year, issues=issues)
     elif suffix == ".csv":
-        return parse_law_file(file_path, start_year)
+        return parse_law_file(file_path, start_year, issues=issues)
     else:
         raise ValueError(f"Unsupported file format: {suffix}. Expected .xlsx or .csv")

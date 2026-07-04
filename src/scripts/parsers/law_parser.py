@@ -20,6 +20,7 @@ from .helpers import (
     extract_expense_type_name,
     MergedRow,
 )
+from .issues import IssueCollector
 
 logger = logging.getLogger(__name__)
 
@@ -224,7 +225,9 @@ def parse_law_expenses(merged_rows: List[MergedRow], dimensions: List[Dimension]
     return expenses
 
 
-def parse_law_file(file_path: Path) -> Tuple[Budget, List[Dimension], List[Expense]]:
+def parse_law_file(
+    file_path: Path, *, issues: IssueCollector | None = None
+) -> Tuple[Budget, List[Dimension], List[Expense]]:
     """
     Parse a LAW file completely.
 
@@ -246,11 +249,11 @@ def parse_law_file(file_path: Path) -> Tuple[Budget, List[Dimension], List[Expen
     col_mapping = get_column_mapping(df.iloc[header_idx])
 
     # 4. Merge multi-line rows (LAW values are in thousands → multiply by 1000)
-    merged_rows = merge_rows(df, header_idx, col_mapping, multiplier=1000.0)
+    merged_rows = merge_rows(df, header_idx, col_mapping, multiplier=1000.0, issues=issues)
 
     # 5. Parse dimensions
     dimensions = parse_law_dimensions(merged_rows)
-    dimensions = deduplicate_dimensions(dimensions)
+    dimensions = deduplicate_dimensions(dimensions, issues=issues)
 
     # 6. Parse expenses
     expenses = parse_law_expenses(merged_rows, dimensions)

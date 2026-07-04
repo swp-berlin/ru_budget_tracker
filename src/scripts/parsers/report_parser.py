@@ -25,6 +25,7 @@ from .helpers import (
     clean_code_value,
     extract_expense_type_name,
 )
+from .issues import IssueCollector
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +110,7 @@ def read_report_excel(file_path: Path) -> pd.DataFrame:
         raise ValueError(f"Failed to read sheet '{REPORT_SHEET_NAME}' from {file_path}: {e}")
 
 
-def find_data_start_row(df: pd.DataFrame) -> int:
+def find_data_start_row(df: pd.DataFrame, issues: IssueCollector | None = None) -> int:
     """
     Find the first data row (after headers).
 
@@ -129,6 +130,13 @@ def find_data_start_row(df: pd.DataFrame) -> int:
 
     # Fallback: skip first 6 rows (typical header size)
     logger.warning("Could not find column number row, using default start row 6")
+    if issues is not None:
+        # Preserved behavior: guessing the start row can misalign the whole parse.
+        issues.add(
+            "layout_fallback_data_start",
+            "Column-number marker row (1, 2, 3, ...) not found; assuming data starts at row 6",
+            severity="ERROR",
+        )
     return 6
 
 
@@ -258,7 +266,7 @@ def parse_program_code(program_full: str) -> Optional[str]:
     return "".join(segments)
 
 
-def extract_row_data(row: pd.Series) -> Optional[Dict]:
+def extract_row_data(row: pd.Series, issues: IssueCollector | None = None) -> Optional[Dict]:
     """
     Extract data from a row (either dimension row or expense row).
 
@@ -302,7 +310,19 @@ def extract_row_data(row: pd.Series) -> Optional[Dict]:
         try:
             value = float(value_raw)
         except (ValueError, TypeError):
-            pass
+            # Preserved behavior: value stays None (row creates no expense).
+            if issues is not None:
+                try:
+                    row_idx = int(row.name)  # DataFrame index label of this row
+                except (TypeError, ValueError):
+                    row_idx = None
+                issues.add(
+                    "value_unparseable",
+                    "Executed-value cell is not numeric; row kept without value",
+                    row_idx=row_idx,
+                    column="value_executed",
+                    raw_value=value_raw,
+                )
 
     # Get name
     name = row.iloc[REPORT_COLUMNS["name"]]
@@ -508,6 +528,8 @@ def create_expenses_from_report_rows(
 
 def parse_report_file(
     file_path: Path,
+    *,
+    issues: IssueCollector | None = None,
 ) -> Tuple[Budget, List[Dimension], List[Expense]]:
     """
     Parse a REPORT file completely.
@@ -516,6 +538,7 @@ def parse_report_file(
 
     Args:
         file_path: Path to report Excel file (.xlsx or .xls)
+        issues: optional collector for structured data-quality findings
 
     Returns:
         (budget, dimensions, expenses)
@@ -529,14 +552,14 @@ def parse_report_file(
     df = read_report_excel(file_path)
 
     # 3. Find where data starts
-    start_row = find_data_start_row(df)
+    start_row = find_data_start_row(df, issues=issues)
     logger.info(f"Data starts at row {start_row}")
 
     # 4. Parse expense rows
     parsed_rows: List[Dict] = []
     for idx in range(start_row, len(df)):
         row = df.iloc[idx]
-        row_data = extract_row_data(row)
+        row_data = extract_row_data(row, issues=issues)
         if row_data:
             parsed_rows.append(row_data)
 
