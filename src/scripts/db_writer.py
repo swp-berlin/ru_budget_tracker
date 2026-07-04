@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, noload
 
 from models import Budget, ConversionRate, Dimension, Expense
+from scripts.parsers.issues import IssueCollector
 
 logger = logging.getLogger(__name__)
 
@@ -157,7 +158,10 @@ def _find_parent_db_id_in_existing(
 
 
 def save_dimensions(
-    session: Session, dimensions: List[Dimension], budget_db_id: int
+    session: Session,
+    dimensions: List[Dimension],
+    budget_db_id: int,
+    issues: IssueCollector | None = None,
 ) -> Dict[tuple, Dimension]:
     """
     Save dimensions using upsert logic:
@@ -263,6 +267,13 @@ def save_dimensions(
                 logger.warning(
                     f"Parent '{dim.parent_id}' not found for {dim.original_identifier} ({dim.type})"
                 )
+                if issues is not None:
+                    # Preserved behavior: the dimension is dropped for this budget.
+                    issues.add(
+                        "unresolved_dimension_parent",
+                        f"Parent '{dim.parent_id}' not found for "
+                        f"{dim.original_identifier} ({dim.type}); dimension not saved",
+                    )
             break
 
         session.flush()
@@ -295,7 +306,9 @@ def save_expenses(
     logger.info(f"Saved {len(expenses)} expenses")
 
 
-def get_chapter_dimensions(session: Session, chapter_codes: List[str]) -> List[Dimension]:
+def get_chapter_dimensions(
+    session: Session, chapter_codes: List[str], issues: IssueCollector | None = None
+) -> List[Dimension]:
     """
     Get existing CHAPTER dimensions from the database.
 
@@ -336,6 +349,12 @@ def get_chapter_dimensions(session: Session, chapter_codes: List[str]) -> List[D
 
     if missing:
         logger.warning(f"Missing chapter dimensions: {sorted(missing)}")
+        if issues is not None:
+            issues.add(
+                "chapter_dimension_missing",
+                f"CHAPTER dimensions not in database: {sorted(missing)} "
+                f"(import LAW files first)",
+            )
 
     if len(all_chapters) != len(chapters):
         logger.info(

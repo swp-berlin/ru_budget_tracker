@@ -53,12 +53,19 @@ from scripts.parsers import (
     parse_totals_file,
     save_ppp_csv,
 )
+from scripts.parsers.issues import IssueCollector
+from settings import settings
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 # Years covered by default file discovery when no --years filter is given.
 IMPORT_YEARS = range(2018, 2027)
+
+
+def _issue_file_path(source_file: Path) -> Path:
+    """Where the per-file parse-issue JSON is written (next to the database)."""
+    return settings.database.directory / "quality" / "issues" / f"{source_file.stem}.json"
 
 
 # =============================================================================
@@ -82,18 +89,24 @@ def import_budget_file(file_path: Path, file_type: Literal["law", "report"]) -> 
     logger.info(f"Importing {file_type.upper()}: {file_path.name}")
     logger.info(f"{'=' * 60}")
 
+    issues = IssueCollector(file_path.name)
+
     # Step 1: Parse (file read ONCE here)
     if file_type == "law":
-        budget, dimensions, expenses = parse_law_file(file_path)
+        budget, dimensions, expenses = parse_law_file(file_path, issues=issues)
     else:
-        budget, dimensions, expenses = parse_report_file(file_path)
+        budget, dimensions, expenses = parse_report_file(file_path, issues=issues)
 
     # Steps 2-4: Save to database
     with get_sync_session() as session:
         budget_db_id = save_budget(session, budget)
-        dim_map = save_dimensions(session, dimensions, budget_db_id)
+        dim_map = save_dimensions(session, dimensions, budget_db_id, issues=issues)
         save_expenses(session, expenses, budget_db_id, dim_map)
         session.commit()
+
+    issues.write_json(_issue_file_path(file_path))
+    if len(issues):
+        logger.info(f"Recorded {len(issues)} data-quality issue(s): {issues.counts_by_code()}")
 
     logger.info(f"✓ Imported {file_path.name} (ID: {budget_db_id})")
     return budget_db_id
@@ -127,15 +140,18 @@ def import_totals_file(file_path: Path) -> int:
     logger.info(f"Importing TOTALS: {file_path.name}")
     logger.info(f"{'=' * 60}")
 
-    budgets, chapter_codes, expenses_with_chapter = parse_totals_file(file_path)
+    issues = IssueCollector(file_path.name)
+    budgets, chapter_codes, expenses_with_chapter = parse_totals_file(file_path, issues=issues)
 
     if not budgets:
         logger.warning(f"No data found in {file_path.name}")
+        issues.add("no_data_parsed", "No budgets parsed from totals file", severity="ERROR")
+        issues.write_json(_issue_file_path(file_path))
         return 0
 
     with get_sync_session() as session:
         # Get existing chapter dimensions from the database
-        chapter_dimensions = get_chapter_dimensions(session, chapter_codes)
+        chapter_dimensions = get_chapter_dimensions(session, chapter_codes, issues=issues)
 
         if not chapter_dimensions:
             logger.warning(
@@ -170,6 +186,11 @@ def import_totals_file(file_path: Path) -> int:
                         db_dims.append(chapter_dim)
                     else:
                         logger.warning(f"Chapter {chapter_code} not found in database")
+                        issues.add(
+                            "chapter_dimension_missing",
+                            f"Chapter {chapter_code} not in database; expense for "
+                            f"{budget.original_identifier} saved without dimension",
+                        )
 
                 new_expense = Expense(
                     budget_id=budget_db_id,
@@ -181,6 +202,10 @@ def import_totals_file(file_path: Path) -> int:
             count += 1
 
         session.commit()
+
+    issues.write_json(_issue_file_path(file_path))
+    if len(issues):
+        logger.info(f"Recorded {len(issues)} data-quality issue(s): {issues.counts_by_code()}")
 
     # Summary
     years = sorted(set(b.published_at.year for b in budgets))

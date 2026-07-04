@@ -37,3 +37,4 @@ wheels/
 sanity_check*.json
 cache/
 tests/goldens/.rowdumps/
+src/data/quality/issues/
