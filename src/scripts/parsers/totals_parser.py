@@ -25,9 +25,12 @@ budget chapters (01 - 14):
     ...
     2.14. -> Chapter 14 (Межбюджетные трансферты)
 
-Values in report xlsx are in BILLIONS of rubles.
-Values in law csv are already in RUBLES.
-Values stored in database are always in RUBLES.
+UNIT CONVENTIONS (see also scripts/quality_report.py):
+    Report xlsx values are in BILLIONS of ₽ → converted here (×1e9); DB stores ₽.
+    Law csv values are in THOUSANDS of ₽ and stored RAW (NOT converted!) —
+    the app compensates with budget_config.law_total_value_multiplier (×1000,
+    src/utils/definitions.py) in the LawClassifiedSpendingPerChapter view and
+    its utils call sites. Changing this requires a view migration + re-import.
 """
 
 import re
@@ -418,7 +421,8 @@ def parse_law_file(
 
     logger.info(f"Parsed {len(years_data)} years from {start_year}")
 
-    # Compute total from chapters if RZ=0 was missing
+    # Fallback: recent years' CSVs omit the RZ=0 grand-total row; derive the
+    # total from the chapter sum so the TOTAL-LAW budget is still complete.
     for year, year_data in years_data.items():
         if year_data.total_expenses is None and year_data.chapter_expenses:
             computed_total = sum(ce.value for ce in year_data.chapter_expenses)

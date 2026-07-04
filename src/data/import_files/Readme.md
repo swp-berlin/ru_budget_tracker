@@ -75,7 +75,9 @@ Two separate files are used for totals:
 * Format: Semicolon-separated CSV with columns `year;RZ;Budget`
   * `RZ=0`: Total expenses (may be missing for recent years, computed from chapter sum)
   * `RZ=1-14`: Chapter-level expenses
-* Values: Already in rubles
+* Values: In **thousands of rubles**, stored raw (NOT converted on import) — the app
+  multiplies by 1000 (`budget_config.law_total_value_multiplier`) when comparing against
+  LAW detail data
 * Creates budgets: `TOTAL-LAW-EXPENSE-YYYY`
 
 **Note:** The importer auto-detects the file type based on extension (`.xlsx` vs `.csv`).
