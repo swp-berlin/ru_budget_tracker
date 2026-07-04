@@ -115,7 +115,13 @@ import-all-core: import-fix import-budget import-totals-all import-gdp import-pp
 import-all: import-all-core import-translations import-rename
 
 # Reset the local database, rerun migrations, then import the full dataset.
-bootstrap-data: rebuild-db import-all
+bootstrap-data: rebuild-db import-all quality-report
+
+# Generate the data-quality report (src/data/quality/report.{md,json}).
+# Exit 1 only on ERROR-severity findings; WARNINGs (known source
+# inconsistencies) are listed but do not fail.
+quality-report:
+	cd src && uv run python -m scripts.quality_report && cd -
 
 # Download data from Nextcloud
 download-data:

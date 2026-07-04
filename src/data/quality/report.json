@@ -1,0 +1,290 @@
+{
+  "checks": [
+    {
+      "name": "census",
+      "status": "info",
+      "severity": "INFO",
+      "description": "Row counts by table and budget type (documentation; tests/test_db_invariants.py enforces)",
+      "finding_count": 1,
+      "findings": [
+        {
+          "budgets_by_type": {
+            "LAW": 9,
+            "REPORT": 33,
+            "TOTAL": 209
+          },
+          "expenses": 217507,
+          "dimensions": 32351,
+          "conversion_rates": 119
+        }
+      ]
+    },
+    {
+      "name": "undimensioned_expenses",
+      "status": "ok",
+      "severity": "ERROR",
+      "description": "LAW/REPORT expenses must carry dimensions; only TOTAL-* budgets have undimensioned (grand total) and single-dimension (chapter) expenses by design",
+      "finding_count": 0,
+      "findings": []
+    },
+    {
+      "name": "dimension_integrity",
+      "status": "ok",
+      "severity": "ERROR",
+      "description": "No dangling parent links, no duplicate dimensions per dedup key (type, identifier, parent, name), no dangling association rows",
+      "finding_count": 0,
+      "findings": []
+    },
+    {
+      "name": "law_detail_exceeds_total",
+      "status": "warning",
+      "severity": "WARNING",
+      "description": "LAW ved-structure chapter sums must not exceed the official chapter totals from the PDF appendix (TOTAL-LAW-EXPENSE, thousands ×1000). Positive gaps are classified spending; an EXCESS means the two official sources disagree (or a totals-CSV transcription slip) and shows as negative classified spending in the app",
+      "finding_count": 14,
+      "findings": [
+        {
+          "year": "2018",
+          "chapter": "05",
+          "law_detail_rub": 143831707200.0,
+          "official_total_rub": 125800000000.0,
+          "excess_rub": 18031707200.0
+        },
+        {
+          "year": "2018",
+          "chapter": "06",
+          "law_detail_rub": 90155686500.0,
+          "official_total_rub": 88800000000.0,
+          "excess_rub": 1355686500.0
+        },
+        {
+          "year": "2018",
+          "chapter": "07",
+          "law_detail_rub": 663629812600.0,
+          "official_total_rub": 663200000000.0,
+          "excess_rub": 429812600.0
+        },
+        {
+          "year": "2018",
+          "chapter": "08",
+          "law_detail_rub": 97737297300.0,
+          "official_total_rub": 93700000000.0,
+          "excess_rub": 4037297300.0
+        },
+        {
+          "year": "2018",
+          "chapter": "11",
+          "law_detail_rub": 60169774600.0,
+          "official_total_rub": 59200000000.0,
+          "excess_rub": 969774600.0
+        },
+        {
+          "year": "2018",
+          "chapter": "12",
+          "law_detail_rub": 82993069500.0,
+          "official_total_rub": 82700000000.0,
+          "excess_rub": 293069500.0
+        },
+        {
+          "year": "2018",
+          "chapter": "14",
+          "law_detail_rub": 859986785400.0,
+          "official_total_rub": 835300000000.0,
+          "excess_rub": 24686785400.0
+        },
+        {
+          "year": "2021",
+          "chapter": "05",
+          "law_detail_rub": 322454166100.0,
+          "official_total_rub": 322200000000.0,
+          "excess_rub": 254166100.0
+        },
+        {
+          "year": "2021",
+          "chapter": "08",
+          "law_detail_rub": 137558900000.0,
+          "official_total_rub": 135100000000.0,
+          "excess_rub": 2458900000.0
+        },
+        {
+          "year": "2021",
+          "chapter": "11",
+          "law_detail_rub": 69216545300.0,
+          "official_total_rub": 65300000000.0,
+          "excess_rub": 3916545300.0
+        },
+        {
+          "year": "2021",
+          "chapter": "14",
+          "law_detail_rub": 1074191872200.0,
+          "official_total_rub": 969200000000.0,
+          "excess_rub": 104991872200.0
+        },
+        {
+          "year": "2026",
+          "chapter": "05",
+          "law_detail_rub": 2025968919100.0,
+          "official_total_rub": 1996122000000.0,
+          "excess_rub": 29846919100.0
+        },
+        {
+          "year": "2026",
+          "chapter": "10",
+          "law_detail_rub": 7244476311800.0,
+          "official_total_rub": 7103486600000.0,
+          "excess_rub": 140989711800.0
+        },
+        {
+          "year": "2026",
+          "chapter": "12",
+          "law_detail_rub": 148211395200.0,
+          "official_total_rub": 146294300000.0,
+          "excess_rub": 1917095200.0
+        }
+      ]
+    },
+    {
+      "name": "law_year_detail_exceeds_total",
+      "status": "ok",
+      "severity": "WARNING",
+      "description": "LAW ved-structure year totals must not exceed the official grand total (TOTAL-LAW-EXPENSE undimensioned expense, thousands ×1000)",
+      "finding_count": 0,
+      "findings": []
+    },
+    {
+      "name": "report_detail_exceeds_total",
+      "status": "ok",
+      "severity": "WARNING",
+      "description": "REPORT chapter sums must not exceed the official monthly chapter totals (TOTAL-REPORT-EXPENSE; chapter breakdown exists until 2021). Tolerance: one unit of source precision (1 bn ₽)",
+      "finding_count": 0,
+      "findings": []
+    }
+  ],
+  "parse_issues_by_file": {
+    "report_2018_03.xls": {
+      "row_accounting": 1
+    },
+    "report_2018_06.xlsx": {
+      "row_accounting": 1
+    },
+    "report_2018_09.xlsx": {
+      "row_accounting": 1
+    },
+    "report_2018_12.xlsx": {
+      "row_accounting": 1
+    },
+    "report_2019_03.xlsx": {
+      "row_accounting": 1
+    },
+    "report_2019_06.xlsx": {
+      "row_accounting": 1
+    },
+    "report_2019_09.xlsx": {
+      "row_accounting": 1
+    },
+    "report_2019_12.xlsx": {
+      "row_accounting": 1
+    },
+    "report_2020_03.xlsx": {
+      "row_accounting": 1
+    },
+    "report_2020_06.xlsx": {
+      "row_accounting": 1
+    },
+    "report_2020_09.xlsx": {
+      "row_accounting": 1
+    },
+    "report_2020_12.xlsx": {
+      "row_accounting": 1
+    },
+    "report_2021_03.xlsx": {
+      "row_accounting": 1
+    },
+    "report_2021_06.xlsx": {
+      "row_accounting": 1
+    },
+    "report_2021_09.xlsx": {
+      "row_accounting": 1
+    },
+    "report_2021_12.xlsx": {
+      "row_accounting": 1
+    },
+    "report_2022_03.xlsx": {
+      "row_accounting": 1
+    },
+    "report_2022_06.xlsx": {
+      "row_accounting": 1
+    },
+    "report_2022_09.xlsx": {
+      "row_accounting": 1
+    },
+    "report_2022_12.xlsx": {
+      "row_accounting": 1
+    },
+    "report_2023_03.xls": {
+      "row_accounting": 1
+    },
+    "report_2023_06.xlsx": {
+      "row_accounting": 1
+    },
+    "report_2023_09.xlsx": {
+      "row_accounting": 1
+    },
+    "report_2023_12.xlsx": {
+      "row_accounting": 1
+    },
+    "report_2024_03.xlsx": {
+      "row_accounting": 1
+    },
+    "report_2024_06.xlsx": {
+      "row_accounting": 1
+    },
+    "report_2024_09.xlsx": {
+      "row_accounting": 1
+    },
+    "report_2024_12.xlsx": {
+      "row_accounting": 1,
+      "value_unparseable": 1
+    },
+    "report_2025_03.xlsx": {
+      "row_accounting": 1
+    },
+    "report_2025_06.xlsx": {
+      "row_accounting": 1
+    },
+    "report_2025_09.xlsx": {
+      "row_accounting": 1
+    },
+    "report_2025_12.xlsx": {
+      "row_accounting": 1,
+      "value_unparseable": 1
+    },
+    "report_2026_03.xlsx": {
+      "row_accounting": 1
+    },
+    "total_report_2026.xlsx": {
+      "value_unparseable": 1
+    }
+  },
+  "unit_conventions": [
+    {
+      "source": "LAW files (law_YYYY.xlsx)",
+      "source_unit": "thousands of ₽",
+      "handling": "×1000 at parse → DB stores ₽"
+    },
+    {
+      "source": "REPORT files (report_YYYY_MM.xlsx)",
+      "source_unit": "₽ with kopecks",
+      "handling": "stored as-is"
+    },
+    {
+      "source": "TOTAL-REPORT (total_report_YYYY.xlsx)",
+      "source_unit": "billions of ₽",
+      "handling": "×1e9 at parse → DB stores ₽"
+    },
+    {
+      "source": "TOTAL-LAW (total_law_YYYY.csv)",
+      "source_unit": "thousands of ₽",
+      "handling": "stored RAW — app view multiplies ×1000 (budget_config.law_total_value_multiplier)"
+    }
+  ]
+}
