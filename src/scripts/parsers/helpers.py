@@ -14,7 +14,7 @@ import logging
 
 from models import Budget, Dimension
 
-from .issues import IssueCollector
+from .issues import IssueCollector, ParseError
 
 logger = logging.getLogger(__name__)
 
@@ -270,15 +270,10 @@ def merge_rows(
                 try:
                     value = float(value_raw) * multiplier
                 except (ValueError, TypeError):
-                    # Preserved behavior: value stays None (row becomes a non-expense).
-                    if issues is not None:
-                        issues.add(
-                            "value_unparseable",
-                            f"Value cell is not numeric; row kept without value: {name[:80]}",
-                            row_idx=idx,
-                            column="value",
-                            raw_value=value_raw,
-                        )
+                    raise ParseError(
+                        f"Row {idx}: value cell is not numeric ({value_raw!r}) "
+                        f"for entry {full_name[:80]!r}"
+                    ) from None
 
         merged_rows.append(
             MergedRow(

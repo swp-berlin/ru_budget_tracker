@@ -43,7 +43,7 @@ import logging
 
 from models import Budget, Expense
 
-from .issues import IssueCollector
+from .issues import IssueCollector, ParseError
 
 logger = logging.getLogger(__name__)
 
@@ -194,22 +194,23 @@ def get_functional_section_rows(
 def parse_cell_value_billions(
     df: pd.DataFrame, row_idx: int, col_idx: int, issues: IssueCollector | None = None
 ) -> Optional[float]:
-    """Safely parse a cell value as float, converting from billions to rubles."""
+    """Parse a cell value as float, converting from billions to rubles.
+
+    Empty and whitespace-only cells are legitimately absent (None); any other
+    non-numeric content means the sheet layout shifted — fail loudly.
+    """
     val = df.iloc[row_idx, col_idx]
-    if pd.notna(val):
-        try:
-            return float(str(val)) * BILLION
-        except (ValueError, TypeError):
-            # Preserved behavior: value stays None (month/chapter silently absent).
-            if issues is not None:
-                issues.add(
-                    "value_unparseable",
-                    "Totals cell is not numeric; value skipped",
-                    row_idx=row_idx,
-                    column=f"col_{col_idx}",
-                    raw_value=val,
-                )
-    return None
+    if pd.isna(val):
+        return None
+    text = str(val).strip()
+    if not text:
+        return None
+    try:
+        return float(text) * BILLION
+    except (ValueError, TypeError):
+        raise ParseError(
+            f"Totals cell at row {row_idx}, column {col_idx} is not numeric: {val!r}"
+        ) from None
 
 
 def parse_report_file(
@@ -388,16 +389,9 @@ def parse_law_file(
         try:
             year = int(row["year"])
         except (ValueError, TypeError):
-            # Preserved behavior: row silently skipped.
-            if issues is not None:
-                issues.add(
-                    "value_unparseable",
-                    "Year cell is not an integer; row skipped",
-                    row_idx=int(idx) if isinstance(idx, int) else None,
-                    column="year",
-                    raw_value=row["year"],
-                )
-            continue  # Skip invalid rows
+            raise ParseError(
+                f"CSV row {idx}: year cell is not an integer: {row['year']!r}"
+            ) from None
 
         if year < start_year:
             continue

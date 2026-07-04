@@ -12,6 +12,7 @@ import pandas as pd
 import pytest
 
 from models import Dimension
+from scripts.parsers.issues import ParseError
 from scripts.parsers.helpers import (
     MergedRow,
     clean_code_value,
@@ -300,18 +301,18 @@ def test_merge_rows_appends_to_prev_when_name_ends_with_quote() -> None:
     assert rows[0].name == 'Ministry named tail"'
 
 
-def test_merge_rows_non_numeric_value_becomes_none_current_behavior() -> None:
-    # characterization: a value cell that can't be cast to float is silently swallowed
-    # (value stays None) rather than raising — helpers.py:242-245
+def test_merge_rows_non_numeric_value_raises() -> None:
+    # Fail-loud (Phase B, 2026-07-04): a value cell that can't be cast to float
+    # used to be silently swallowed to None; it now raises ParseError. No such
+    # cell exists in any real law file (verified via issue backfill).
     df = pd.DataFrame(
         [
             HEADER,
             ["Row", "020", "01", "0102", "0110000000", "244", "not-a-number"],
         ]
     )
-    rows = merge_rows(df, 0, FULL_COLS)
-    assert len(rows) == 1
-    assert rows[0].value is None
+    with pytest.raises(ParseError, match="not numeric"):
+        merge_rows(df, 0, FULL_COLS)
 
 
 # =============================================================================

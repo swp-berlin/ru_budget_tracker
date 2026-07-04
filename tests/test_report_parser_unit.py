@@ -220,16 +220,32 @@ def test_extract_row_data_placeholder_chapter_becomes_none() -> None:
     assert result["subchapter_code"] is None
 
 
-def test_extract_row_data_non_numeric_value_becomes_none_current_behavior() -> None:
-    # characterization: an unparsable executed-value cell is silently swallowed to None
-    # (the row is still kept) — report_parser.py:301-305
+def test_extract_row_data_non_numeric_value_on_expense_row_raises() -> None:
+    # Fail-loud (Phase B, 2026-07-04): an unparsable executed value on an EXPENSE
+    # row (detailed VR present) would lose money silently — it now raises.
+    with pytest.raises(rp.ParseError, match="not numeric"):
+        rp.extract_row_data(
+            _row(
+                ministry="020",
+                chapter_full="0110",
+                program="0110000000",
+                expense_type="244",
+                value_executed="nope",
+            )
+        )
+
+
+def test_extract_row_data_non_numeric_value_on_header_row_stays_none() -> None:
+    # Header rows (no VR) may carry informational text in the value column —
+    # e.g. the Минфин ministry rows in report_2024_12/report_2025_12 hold a
+    # ru-formatted grand total that is never used. Kept as value=None.
     result = rp.extract_row_data(
         _row(
-            ministry="020",
-            chapter_full="0110",
-            program="0110000000",
-            expense_type="244",
-            value_executed="nope",
+            ministry="092",
+            chapter_full=None,
+            program=None,
+            expense_type=None,
+            value_executed="10 630 313 184 156,85",
         )
     )
     assert result is not None

@@ -45,9 +45,18 @@ def test_parse_cell_value_billions_multiplies() -> None:
     assert tp.parse_cell_value_billions(df, 0, 2) == 12_500_000_000.0
 
 
-def test_parse_cell_value_billions_non_numeric_becomes_none_current_behavior() -> None:
-    # characterization: an unparsable cell is silently swallowed to None — totals_parser.py:184-188
+def test_parse_cell_value_billions_non_numeric_raises() -> None:
+    # Fail-loud (Phase B, 2026-07-04): a non-numeric totals cell means the sheet
+    # layout shifted — it now raises instead of silently dropping the value.
     df = pd.DataFrame([[None, None, "bad"]])
+    with pytest.raises(tp.ParseError, match="not numeric"):
+        tp.parse_cell_value_billions(df, 0, 2)
+
+
+def test_parse_cell_value_billions_whitespace_only_is_empty() -> None:
+    # Whitespace-only cells occur in real files (total_report_2026.xlsx row 22)
+    # and mean "no value", same as an empty cell.
+    df = pd.DataFrame([[None, None, " "]])
     assert tp.parse_cell_value_billions(df, 0, 2) is None
 
 

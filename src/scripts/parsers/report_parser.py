@@ -25,7 +25,7 @@ from .helpers import (
     clean_code_value,
     extract_expense_type_name,
 )
-from .issues import IssueCollector
+from .issues import IssueCollector, ParseError
 
 logger = logging.getLogger(__name__)
 
@@ -371,15 +371,24 @@ def extract_row_data(row: pd.Series, issues: IssueCollector | None = None) -> Op
         try:
             value = float(value_raw)
         except (ValueError, TypeError):
-            # Preserved behavior: value stays None (row creates no expense).
+            try:
+                row_idx = int(row.name)  # DataFrame index label of this row
+            except (TypeError, ValueError):
+                row_idx = None
+            if expense_type_code:
+                # The value would become an Expense — losing it silently is not OK.
+                raise ParseError(
+                    f"Row {row_idx}: executed-value cell is not numeric "
+                    f"({value_raw!r}) on an expense row (VR {expense_type_code})"
+                ) from None
+            # Header rows (e.g. the Минфин ministry row in report_2024_12 /
+            # report_2025_12) carry an informational ru-formatted total in the
+            # value column; it is never used, so it is only recorded.
             if issues is not None:
-                try:
-                    row_idx = int(row.name)  # DataFrame index label of this row
-                except (TypeError, ValueError):
-                    row_idx = None
                 issues.add(
                     "value_unparseable",
-                    "Executed-value cell is not numeric; row kept without value",
+                    "Non-numeric value cell on a header (non-expense) row; ignored",
+                    severity="INFO",
                     row_idx=row_idx,
                     column="value_executed",
                     raw_value=value_raw,
