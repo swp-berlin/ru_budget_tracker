@@ -144,11 +144,7 @@ def _build_dimension_name_column(translated: bool = False):
     Returns:
         SQLAlchemy column expression for concatenated dimension name.
     """
-    # Untranslated dimensions (translation is incremental) fall back to the
-    # Russian name instead of producing NULL labels.
-    name_field = (
-        func.coalesce(Dimension.name_translated, Dimension.name) if translated else Dimension.name
-    )
+    name_field = Dimension.name_translated if translated else Dimension.name
     return case(
         (Dimension.type == "PROGRAM", name_field),
         else_=func.CONCAT(Dimension.original_identifier, " ", name_field),
