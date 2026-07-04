@@ -146,11 +146,21 @@ def test_find_data_start_row_after_number_row() -> None:
     assert rp.find_data_start_row(df) == 2
 
 
-def test_find_data_start_row_fallback_to_6_current_behavior() -> None:
-    # characterization: when the "1 2 3 ..." column-number row is not found, the parser
-    # silently falls back to a hardcoded start row of 6 — report_parser.py:130-132
+def test_find_data_start_row_missing_marker_raises() -> None:
+    # Fail-loud (Phase B, 2026-07-04): the old silent fallback to row 6 could
+    # misalign the whole parse; a missing marker row now raises. Every real
+    # file 2018-2026 contains the marker.
     df = pd.DataFrame([["a", "b", "c"]] * 10)
-    assert rp.find_data_start_row(df) == 6
+    with pytest.raises(rp.ParseError, match="marker row"):
+        rp.find_data_start_row(df)
+
+
+def test_check_report_layout_mismatch_raises() -> None:
+    # Fail-loud (Phase B, 2026-07-04): a moved column would poison every
+    # positional read, so a header mismatch raises.
+    df = pd.DataFrame([["Unrelated"] * 9] * 10)
+    with pytest.raises(rp.ParseError, match="misaligned"):
+        rp.check_report_layout(df)
 
 
 # =============================================================================

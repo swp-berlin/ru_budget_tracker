@@ -126,8 +126,8 @@ EXPECTED_HEADER_SUBSTRINGS: Dict[int, Tuple[str, ...]] = {
 def check_report_layout(df: pd.DataFrame, issues: IssueCollector | None = None) -> None:
     """Verify the expected headers sit at the expected positional columns.
 
-    Record-only: mismatches are reported as layout_mismatch ERRORs but parsing
-    continues (Phase B will turn this into a hard failure).
+    Fail-loud (Phase B): a moved column would silently poison every positional
+    read (e.g. col 8 no longer being the executed value), so a mismatch raises.
     """
     for col_idx, expected in EXPECTED_HEADER_SUBSTRINGS.items():
         if col_idx >= df.shape[1]:
@@ -137,16 +137,10 @@ def check_report_layout(df: pd.DataFrame, issues: IssueCollector | None = None) 
                 str(value) for value in df.iloc[:10, col_idx] if pd.notna(value)
             ).lower()
         if not any(substring in header_text for substring in expected):
-            logger.warning(f"Header mismatch at column {col_idx}: expected one of {expected}")
-            if issues is not None:
-                issues.add(
-                    "layout_mismatch",
-                    f"Column {col_idx} header does not contain any of {expected}; "
-                    f"positional reads may be misaligned",
-                    severity="ERROR",
-                    column=f"col_{col_idx}",
-                    raw_value=header_text[:120],
-                )
+            raise ParseError(
+                f"Column {col_idx} header does not contain any of {expected} "
+                f"(got: {header_text[:120]!r}); positional reads would be misaligned"
+            )
 
 
 def parse_ru_number(value: object) -> Optional[float]:
@@ -189,16 +183,12 @@ def find_data_start_row(df: pd.DataFrame, issues: IssueCollector | None = None) 
             except (ValueError, TypeError):
                 pass
 
-    # Fallback: skip first 6 rows (typical header size)
-    logger.warning("Could not find column number row, using default start row 6")
-    if issues is not None:
-        # Preserved behavior: guessing the start row can misalign the whole parse.
-        issues.add(
-            "layout_fallback_data_start",
-            "Column-number marker row (1, 2, 3, ...) not found; assuming data starts at row 6",
-            severity="ERROR",
-        )
-    return 6
+    # Fail-loud (Phase B): guessing the start row can misalign the whole parse.
+    # Every real file 2018-2026 contains the marker row.
+    raise ParseError(
+        "Column-number marker row (1, 2, 3, ...) not found in the first 20 rows; "
+        "cannot locate where data starts"
+    )
 
 
 # =============================================================================
