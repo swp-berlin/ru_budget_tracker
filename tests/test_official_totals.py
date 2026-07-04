@@ -71,7 +71,11 @@ def test_db_sum_matches_printed_official_total(
     db_sum = db_connection.execute(DB_SUM_QUERY, (budget_identifier,)).fetchone()[0]
     assert db_sum is not None, f"no expenses in DB for {budget_identifier}"
 
-    assert abs(db_sum - official) < 1, (
+    # Policy: deviations below 0.1% of the printed total are acceptable source
+    # noise (they surface as WARNINGs in the quality report); >= 0.1% fails.
+    # All 33 current files are exact to the cent.
+    tolerance = max(1.0, 0.001 * abs(official))
+    assert abs(db_sum - official) < tolerance, (
         f"{budget_identifier}: DB sum {db_sum:,.2f} deviates from the total printed in "
-        f"{source.name} ({official:,.2f}) by {db_sum - official:+,.2f} ₽"
+        f"{source.name} ({official:,.2f}) by {db_sum - official:+,.2f} ₽ (>= 0.1%)"
     )

@@ -270,6 +270,45 @@ def check_law_year_detail_exceeds_total(con: sqlite3.Connection) -> Check:
     return check
 
 
+def check_unblessed_items(con: sqlite3.Connection) -> Check:
+    """Imported data not yet frozen in the characterization fixtures.
+
+    The test suite tolerates these (skips / subset assertions); after reviewing
+    this report, bless them deliberately:
+        uv run --group dev python tests/generate_goldens.py --only <file-stem>
+        make test-regen-frozen
+    """
+    check = Check(
+        "unblessed_items",
+        "WARNING",
+        "Budgets/files imported but not yet covered by goldens or the frozen totals "
+        "fixture — validated against sources at import time, awaiting deliberate blessing",
+    )
+    repo_root = Path(__file__).resolve().parents[2]
+
+    fixture_path = repo_root / "tests" / "fixtures" / "frozen_budget_totals.json"
+    if fixture_path.exists():
+        with fixture_path.open(encoding="utf-8") as f:
+            frozen = set(json.load(f))
+        db_budgets = {row[0] for row in con.execute("SELECT original_identifier FROM budgets")}
+        for identifier in sorted(db_budgets - frozen):
+            check.findings.append({"kind": "budget_not_frozen", "item": identifier})
+
+    goldens_dir = repo_root / "tests" / "goldens"
+    data_dir = repo_root / "src" / "data" / "import_files"
+    if goldens_dir.exists():
+        golden_stems = {p.stem for p in goldens_dir.glob("*.json")}
+        data_files = (
+            sorted((data_dir / "clean" / "laws").glob("law_*.xlsx"))
+            + sorted((data_dir / "clean" / "reports").glob("report_*.xls*"))
+            + sorted((data_dir / "raw" / "totals").glob("total_*.*"))
+        )
+        for source in data_files:
+            if source.stem not in golden_stems:
+                check.findings.append({"kind": "file_without_golden", "item": source.name})
+    return check
+
+
 def check_report_detail_exceeds_total(con: sqlite3.Connection) -> Check:
     check = Check(
         "report_detail_exceeds_total",
@@ -453,6 +492,7 @@ def run_quality_report(db_path: Path, issues_dir: Path, output_dir: Path) -> int
             check_law_detail_exceeds_total(con),
             check_law_year_detail_exceeds_total(con),
             check_report_detail_exceeds_total(con),
+            check_unblessed_items(con),
         ]
     finally:
         con.close()

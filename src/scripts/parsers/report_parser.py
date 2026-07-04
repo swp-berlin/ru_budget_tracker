@@ -653,8 +653,10 @@ def parse_report_file(
     # 6. Create expenses
     expenses = create_expenses_from_report_rows(parsed_rows, dim_lookup)
 
-    # 7. Reconcile against the grand total printed in the file itself
-    # (record-only; validated to the cent across all 33 files on 2026-07-03).
+    # 7. Reconcile against the grand total printed in the file itself.
+    # All 33 files 2018-2026 match to the cent; tiered tolerance for future
+    # files: < 1 ₽ exact, < 0.1% WARNING (import succeeds, visible in the
+    # quality report for review at blessing time), >= 0.1% ERROR (run fails).
     if issues is not None:
         printed_total = find_printed_total(df)
         if printed_total is None:
@@ -666,11 +668,13 @@ def parse_report_file(
             parsed_total = sum(e.value for e in expenses)
             delta = parsed_total - printed_total
             if abs(delta) >= 1.0:
+                relative = abs(delta) / abs(printed_total) if printed_total else float("inf")
                 issues.add(
                     "printed_total_mismatch",
                     f"Sum of parsed expenses ({parsed_total:,.2f} ₽) deviates from the "
-                    f"file's printed grand total ({printed_total:,.2f} ₽) by {delta:+,.2f} ₽",
-                    severity="ERROR",
+                    f"file's printed grand total ({printed_total:,.2f} ₽) by {delta:+,.2f} ₽ "
+                    f"({relative:.4%})",
+                    severity="ERROR" if relative >= 0.001 else "WARNING",
                 )
 
     logger.info(

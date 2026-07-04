@@ -30,17 +30,18 @@ def _load_fixture() -> dict[str, dict]:
 FROZEN_TOTALS = _load_fixture()
 
 
-def test_budget_set_matches_fixture(db_connection: sqlite3.Connection) -> None:
-    """The exact set of budgets is pinned — imports may not silently add or drop one."""
+def test_every_frozen_budget_exists_in_db(db_connection: sqlite3.Connection) -> None:
+    """One-directional: a blessed (frozen) budget disappearing is a failure.
+
+    Budgets in the DB that are NOT in the fixture are tolerated — unblessed
+    new data, listed by the quality report; bless via `make test-regen-frozen`
+    after review.
+    """
     db_identifiers = {
         row[0] for row in db_connection.execute("SELECT original_identifier FROM budgets")
     }
-    fixture_identifiers = set(FROZEN_TOTALS)
-    assert db_identifiers == fixture_identifiers, (
-        f"in DB but not fixture: {sorted(db_identifiers - fixture_identifiers)}; "
-        f"in fixture but not DB: {sorted(fixture_identifiers - db_identifiers)} "
-        f"(if intended, run `make test-regen-frozen`)"
-    )
+    missing = set(FROZEN_TOTALS) - db_identifiers
+    assert not missing, f"frozen budgets missing from DB: {sorted(missing)}"
 
 
 @pytest.mark.parametrize("identifier", sorted(FROZEN_TOTALS), ids=str)

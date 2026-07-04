@@ -1,10 +1,43 @@
 # Test suite
 
-Characterization tests for the data-import pipeline: they pin **current** behavior
-(validated against official sources on 2026-07-03, see `.claude/learnings.md`) so
-that any refactor which changes behavior fails loudly and deliberately. A failure
-means either a regression, or an intentional change — in which case regenerate the
-affected fixtures **in a commit whose message explains why the numbers changed**.
+Characterization tests for the data-import pipeline: they pin **blessed** behavior
+(validated against official sources, see `.claude/learnings.md`) so that any change
+to it fails loudly and deliberately. A failure on a blessed item means either a
+regression, or an intentional change — in which case regenerate the affected
+fixtures **in a commit whose message explains why the numbers changed**.
+
+## Blessed vs unblessed data
+
+Two kinds of checks, treated differently:
+
+- **Source-anchored checks** apply to ALL data immediately, no blessing needed:
+  the import itself fails on layout drift, unparseable values, and printed-total
+  deviations ≥ 0.1% (deviations between 1 ₽ and 0.1% import fine but appear as
+  WARNINGs in the quality report); `test_official_totals.py` validates every
+  report file on disk against its own printed total.
+- **Characterization fixtures** (goldens, frozen budget totals) protect blessed
+  data only. New files/budgets without fixtures show up as pytest **skips** and
+  in the quality report's `unblessed_items` — never as failures. A blessed item
+  disappearing or changing IS a failure.
+
+## Adding new data (standard workflow)
+
+```bash
+# 1. new file(s) into src/data/import_files/raw/..., then full rebuild:
+make download-and-bootstrap-data     # or bootstrap-data — always a full rebuild
+# (import fails loudly on real errors in new files; quality report runs at the end)
+
+# 2. tests: blessed data must be green; new items appear as skips
+make test
+
+# 3. when you have time: read src/data/quality/report.md, then bless
+uv run --group dev python tests/generate_goldens.py --only report_2027_06
+make test-regen-frozen
+
+# 4. rerun, review diffs, commit data + fixtures + report together
+make test
+git diff tests/fixtures/frozen_budget_totals.json src/data/quality/
+```
 
 ## Tiers
 

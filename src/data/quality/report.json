@@ -157,6 +157,14 @@
       "description": "REPORT chapter sums must not exceed the official monthly chapter totals (TOTAL-REPORT-EXPENSE; chapter breakdown exists until 2021). Tolerance: one unit of source precision (1 bn ₽)",
       "finding_count": 0,
       "findings": []
+    },
+    {
+      "name": "unblessed_items",
+      "status": "ok",
+      "severity": "WARNING",
+      "description": "Budgets/files imported but not yet covered by goldens or the frozen totals fixture — validated against sources at import time, awaiting deliberate blessing",
+      "finding_count": 0,
+      "findings": []
     }
   ],
   "parse_issues_by_file": {
