@@ -59,9 +59,6 @@ from settings import settings
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-# Years covered by default file discovery when no --years filter is given.
-IMPORT_YEARS = range(2018, 2027)
-
 
 def _issue_file_path(source_file: Path) -> Path:
     """Where the per-file parse-issue JSON is written (next to the database)."""
@@ -281,29 +278,34 @@ def import_ppp_data(save_csv: bool = True) -> None:
 
 
 def get_law_files(data_dir: Path, years: List[int] | None = None) -> List[Path]:
-    """Get law files for specified years (default: IMPORT_YEARS)."""
-    if years is None:
-        years = list(IMPORT_YEARS)
+    """Get law files: all law_*.xlsx on disk, or explicit paths for the given years.
 
+    With no year filter, every file on disk is discovered — nothing is
+    silently skipped by a year window. (The golden test suite forces a
+    deliberately generated golden for any new file.)
+    """
     laws_dir = data_dir / "laws"
+    if years is None:
+        return sorted(laws_dir.glob("law_*.xlsx"))
+
     return [laws_dir / f"law_{year}.xlsx" for year in years]
 
 
 def get_report_files(data_dir: Path, years: List[int] | None = None) -> List[Path]:
     """
-    Get report files for specified years (default: IMPORT_YEARS).
+    Get report files: all report_YYYY_MM.xls* on disk, optionally filtered by year.
 
-    Reports are named: report_YYYY_MM.xlsx
-    Returns all report files found for the specified years.
+    With no year filter, every file on disk is discovered — nothing is
+    silently skipped by a year window.
     """
-    if years is None:
-        years = list(IMPORT_YEARS)
-
     reports_dir = data_dir / "reports"
 
     if not reports_dir.exists():
         logger.warning(f"Reports directory not found: {reports_dir}")
         return []
+
+    if years is None:
+        return sorted(reports_dir.glob("report_*_*.xls*"))
 
     files = []
     for year in years:
