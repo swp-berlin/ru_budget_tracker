@@ -11,6 +11,8 @@ CLASSIFIED_DIMENSION_ID_OFFSET = 1_000_000  # Offset to avoid ID conflicts with 
 
 
 def _wrap_label(label: str | None, limit: int = 50) -> str | None:
+    if not isinstance(label, str):  # None or pandas NaN (float)
+        return None
     if not label or len(label) <= limit:
         return label
     return "<br>".join(wrap(label, width=limit))
