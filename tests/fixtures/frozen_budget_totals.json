@@ -1,0 +1,1006 @@
+{
+  "LAW-2018": {
+    "expense_count": 2546,
+    "total_value": "13705361282000.00"
+  },
+  "LAW-2019": {
+    "expense_count": 2907,
+    "total_value": "15025016112900.00"
+  },
+  "LAW-2020": {
+    "expense_count": 3083,
+    "total_value": "16233094367800.00"
+  },
+  "LAW-2021": {
+    "expense_count": 3160,
+    "total_value": "18261669702300.00"
+  },
+  "LAW-2022": {
+    "expense_count": 3192,
+    "total_value": "19953456925500.00"
+  },
+  "LAW-2023": {
+    "expense_count": 3153,
+    "total_value": "22688990651900.00"
+  },
+  "LAW-2024": {
+    "expense_count": 3266,
+    "total_value": "26818407165600.00"
+  },
+  "LAW-2025": {
+    "expense_count": 3156,
+    "total_value": "29348621151400.00"
+  },
+  "LAW-2026": {
+    "expense_count": 3271,
+    "total_value": "32513964962400.00"
+  },
+  "REPORT-2018-03": {
+    "expense_count": 3659,
+    "total_value": "2948847803682.11"
+  },
+  "REPORT-2018-06": {
+    "expense_count": 4488,
+    "total_value": "6323620636464.11"
+  },
+  "REPORT-2018-09": {
+    "expense_count": 4892,
+    "total_value": "9532048580878.75"
+  },
+  "REPORT-2018-12": {
+    "expense_count": 5496,
+    "total_value": "13918523890947.45"
+  },
+  "REPORT-2019-03": {
+    "expense_count": 3611,
+    "total_value": "3170181410668.22"
+  },
+  "REPORT-2019-06": {
+    "expense_count": 4608,
+    "total_value": "6598612640454.44"
+  },
+  "REPORT-2019-09": {
+    "expense_count": 5137,
+    "total_value": "10040267924470.76"
+  },
+  "REPORT-2019-12": {
+    "expense_count": 5943,
+    "total_value": "15196287655505.35"
+  },
+  "REPORT-2020-03": {
+    "expense_count": 4136,
+    "total_value": "3779576293474.23"
+  },
+  "REPORT-2020-06": {
+    "expense_count": 4984,
+    "total_value": "8434787864608.85"
+  },
+  "REPORT-2020-09": {
+    "expense_count": 5645,
+    "total_value": "12803892960342.14"
+  },
+  "REPORT-2020-12": {
+    "expense_count": 6538,
+    "total_value": "19241472605784.49"
+  },
+  "REPORT-2021-03": {
+    "expense_count": 4295,
+    "total_value": "4081340872242.23"
+  },
+  "REPORT-2021-06": {
+    "expense_count": 5459,
+    "total_value": "8962499898920.43"
+  },
+  "REPORT-2021-09": {
+    "expense_count": 6147,
+    "total_value": "14094088265651.55"
+  },
+  "REPORT-2021-12": {
+    "expense_count": 7138,
+    "total_value": "21010882197217.78"
+  },
+  "REPORT-2022-03": {
+    "expense_count": 4708,
+    "total_value": "4859321315554.29"
+  },
+  "REPORT-2022-06": {
+    "expense_count": 5918,
+    "total_value": "10252219858668.72"
+  },
+  "REPORT-2022-09": {
+    "expense_count": 6557,
+    "total_value": "15657281256404.89"
+  },
+  "REPORT-2022-12": {
+    "expense_count": 7651,
+    "total_value": "25165791903053.32"
+  },
+  "REPORT-2023-03": {
+    "expense_count": 5041,
+    "total_value": "5458445967538.05"
+  },
+  "REPORT-2023-06": {
+    "expense_count": 6111,
+    "total_value": "11170835854014.36"
+  },
+  "REPORT-2023-09": {
+    "expense_count": 6667,
+    "total_value": "16560267419931.04"
+  },
+  "REPORT-2023-12": {
+    "expense_count": 7699,
+    "total_value": "25026439680479.51"
+  },
+  "REPORT-2024-03": {
+    "expense_count": 5157,
+    "total_value": "6515036063138.66"
+  },
+  "REPORT-2024-06": {
+    "expense_count": 6247,
+    "total_value": "13187081804836.49"
+  },
+  "REPORT-2024-09": {
+    "expense_count": 6795,
+    "total_value": "19604858254416.59"
+  },
+  "REPORT-2024-12": {
+    "expense_count": 7633,
+    "total_value": "30161466731873.24"
+  },
+  "REPORT-2025-03": {
+    "expense_count": 5051,
+    "total_value": "7589793768591.58"
+  },
+  "REPORT-2025-06": {
+    "expense_count": 6230,
+    "total_value": "15157740567482.93"
+  },
+  "REPORT-2025-09": {
+    "expense_count": 6716,
+    "total_value": "22266947720752.05"
+  },
+  "REPORT-2025-12": {
+    "expense_count": 7430,
+    "total_value": "31553366177524.78"
+  },
+  "REPORT-2026-03": {
+    "expense_count": 4979,
+    "total_value": "7928199331557.26"
+  },
+  "TOTAL-LAW-EXPENSE-2018": {
+    "expense_count": 15,
+    "total_value": "33058398800.00"
+  },
+  "TOTAL-LAW-EXPENSE-2019": {
+    "expense_count": 15,
+    "total_value": "36074346116.00"
+  },
+  "TOTAL-LAW-EXPENSE-2020": {
+    "expense_count": 15,
+    "total_value": "39006719920.00"
+  },
+  "TOTAL-LAW-EXPENSE-2021": {
+    "expense_count": 15,
+    "total_value": "43067068141.00"
+  },
+  "TOTAL-LAW-EXPENSE-2022": {
+    "expense_count": 15,
+    "total_value": "47388627486.00"
+  },
+  "TOTAL-LAW-EXPENSE-2023": {
+    "expense_count": 15,
+    "total_value": "58094464300.00"
+  },
+  "TOTAL-LAW-EXPENSE-2024": {
+    "expense_count": 15,
+    "total_value": "73321375369.00"
+  },
+  "TOTAL-LAW-EXPENSE-2025": {
+    "expense_count": 15,
+    "total_value": "82939200000.00"
+  },
+  "TOTAL-LAW-EXPENSE-2026": {
+    "expense_count": 15,
+    "total_value": "88139408200.00"
+  },
+  "TOTAL-REPORT-EXPENSE-2018-01": {
+    "expense_count": 15,
+    "total_value": "2226728898973.28"
+  },
+  "TOTAL-REPORT-EXPENSE-2018-02": {
+    "expense_count": 15,
+    "total_value": "4615122581940.06"
+  },
+  "TOTAL-REPORT-EXPENSE-2018-03": {
+    "expense_count": 15,
+    "total_value": "7461600000000.00"
+  },
+  "TOTAL-REPORT-EXPENSE-2018-04": {
+    "expense_count": 15,
+    "total_value": "10693300000000.00"
+  },
+  "TOTAL-REPORT-EXPENSE-2018-05": {
+    "expense_count": 15,
+    "total_value": "12907478742510.92"
+  },
+  "TOTAL-REPORT-EXPENSE-2018-06": {
+    "expense_count": 15,
+    "total_value": "15502675684415.72"
+  },
+  "TOTAL-REPORT-EXPENSE-2018-07": {
+    "expense_count": 15,
+    "total_value": "18229164419293.76"
+  },
+  "TOTAL-REPORT-EXPENSE-2018-08": {
+    "expense_count": 15,
+    "total_value": "20522114194538.52"
+  },
+  "TOTAL-REPORT-EXPENSE-2018-09": {
+    "expense_count": 15,
+    "total_value": "22740412962542.61"
+  },
+  "TOTAL-REPORT-EXPENSE-2018-10": {
+    "expense_count": 15,
+    "total_value": "25440256273137.40"
+  },
+  "TOTAL-REPORT-EXPENSE-2018-11": {
+    "expense_count": 15,
+    "total_value": "28024451404274.67"
+  },
+  "TOTAL-REPORT-EXPENSE-2018-12": {
+    "expense_count": 15,
+    "total_value": "33426005420799.08"
+  },
+  "TOTAL-REPORT-EXPENSE-2019-01": {
+    "expense_count": 15,
+    "total_value": "2239270009421.78"
+  },
+  "TOTAL-REPORT-EXPENSE-2019-02": {
+    "expense_count": 15,
+    "total_value": "4930529910126.52"
+  },
+  "TOTAL-REPORT-EXPENSE-2019-03": {
+    "expense_count": 15,
+    "total_value": "7848140616093.84"
+  },
+  "TOTAL-REPORT-EXPENSE-2019-04": {
+    "expense_count": 15,
+    "total_value": "11090676004099.42"
+  },
+  "TOTAL-REPORT-EXPENSE-2019-05": {
+    "expense_count": 15,
+    "total_value": "13168302777862.88"
+  },
+  "TOTAL-REPORT-EXPENSE-2019-06": {
+    "expense_count": 15,
+    "total_value": "15708237363035.80"
+  },
+  "TOTAL-REPORT-EXPENSE-2019-07": {
+    "expense_count": 15,
+    "total_value": "18640369406910.22"
+  },
+  "TOTAL-REPORT-EXPENSE-2019-08": {
+    "expense_count": 15,
+    "total_value": "21164852052174.81"
+  },
+  "TOTAL-REPORT-EXPENSE-2019-09": {
+    "expense_count": 15,
+    "total_value": "23896500074163.65"
+  },
+  "TOTAL-REPORT-EXPENSE-2019-10": {
+    "expense_count": 15,
+    "total_value": "27030533777526.86"
+  },
+  "TOTAL-REPORT-EXPENSE-2019-11": {
+    "expense_count": 15,
+    "total_value": "29852676146603.89"
+  },
+  "TOTAL-REPORT-EXPENSE-2019-12": {
+    "expense_count": 15,
+    "total_value": "36429039540334.78"
+  },
+  "TOTAL-REPORT-EXPENSE-2020-01": {
+    "expense_count": 15,
+    "total_value": "3248744417861.82"
+  },
+  "TOTAL-REPORT-EXPENSE-2020-02": {
+    "expense_count": 15,
+    "total_value": "5964344180612.34"
+  },
+  "TOTAL-REPORT-EXPENSE-2020-03": {
+    "expense_count": 15,
+    "total_value": "9235911074390.96"
+  },
+  "TOTAL-REPORT-EXPENSE-2020-04": {
+    "expense_count": 15,
+    "total_value": "13510677928104.66"
+  },
+  "TOTAL-REPORT-EXPENSE-2020-05": {
+    "expense_count": 15,
+    "total_value": "16329485447835.96"
+  },
+  "TOTAL-REPORT-EXPENSE-2020-06": {
+    "expense_count": 15,
+    "total_value": "19830030463622.82"
+  },
+  "TOTAL-REPORT-EXPENSE-2020-07": {
+    "expense_count": 15,
+    "total_value": "23589776297441.02"
+  },
+  "TOTAL-REPORT-EXPENSE-2020-08": {
+    "expense_count": 15,
+    "total_value": "26513569446266.05"
+  },
+  "TOTAL-REPORT-EXPENSE-2020-09": {
+    "expense_count": 15,
+    "total_value": "29747053115412.01"
+  },
+  "TOTAL-REPORT-EXPENSE-2020-10": {
+    "expense_count": 15,
+    "total_value": "33684246527293.09"
+  },
+  "TOTAL-REPORT-EXPENSE-2020-11": {
+    "expense_count": 15,
+    "total_value": "37863032454956.02"
+  },
+  "TOTAL-REPORT-EXPENSE-2020-12": {
+    "expense_count": 15,
+    "total_value": "45643108928200.04"
+  },
+  "TOTAL-REPORT-EXPENSE-2021-01": {
+    "expense_count": 15,
+    "total_value": "3119926840054.38"
+  },
+  "TOTAL-REPORT-EXPENSE-2021-02": {
+    "expense_count": 15,
+    "total_value": "6583798793745.58"
+  },
+  "TOTAL-REPORT-EXPENSE-2021-03": {
+    "expense_count": 15,
+    "total_value": "10026548273120.38"
+  },
+  "TOTAL-REPORT-EXPENSE-2021-04": {
+    "expense_count": 15,
+    "total_value": "14313871483290.24"
+  },
+  "TOTAL-REPORT-EXPENSE-2021-05": {
+    "expense_count": 15,
+    "total_value": "17756333036427.22"
+  },
+  "TOTAL-REPORT-EXPENSE-2021-06": {
+    "expense_count": 15,
+    "total_value": "20982216689321.84"
+  },
+  "TOTAL-REPORT-EXPENSE-2021-07": {
+    "expense_count": 15,
+    "total_value": "25231704944803.02"
+  },
+  "TOTAL-REPORT-EXPENSE-2021-08": {
+    "expense_count": 15,
+    "total_value": "29241486852635.84"
+  },
+  "TOTAL-REPORT-EXPENSE-2021-09": {
+    "expense_count": 15,
+    "total_value": "32597776851324.69"
+  },
+  "TOTAL-REPORT-EXPENSE-2021-10": {
+    "expense_count": 15,
+    "total_value": "36269319763264.82"
+  },
+  "TOTAL-REPORT-EXPENSE-2021-11": {
+    "expense_count": 15,
+    "total_value": "39881863961830.45"
+  },
+  "TOTAL-REPORT-EXPENSE-2021-12": {
+    "expense_count": 15,
+    "total_value": "49524200862101.00"
+  },
+  "TOTAL-REPORT-EXPENSE-2022-01": {
+    "expense_count": 1,
+    "total_value": "1832665350220.49"
+  },
+  "TOTAL-REPORT-EXPENSE-2022-02": {
+    "expense_count": 1,
+    "total_value": "3668183959140.27"
+  },
+  "TOTAL-REPORT-EXPENSE-2022-03": {
+    "expense_count": 1,
+    "total_value": "5859635178255.85"
+  },
+  "TOTAL-REPORT-EXPENSE-2022-04": {
+    "expense_count": 1,
+    "total_value": "8869402706705.33"
+  },
+  "TOTAL-REPORT-EXPENSE-2022-05": {
+    "expense_count": 1,
+    "total_value": "10453652401007.08"
+  },
+  "TOTAL-REPORT-EXPENSE-2022-06": {
+    "expense_count": 1,
+    "total_value": "12534796422744.20"
+  },
+  "TOTAL-REPORT-EXPENSE-2022-07": {
+    "expense_count": 1,
+    "total_value": "15216916609144.50"
+  },
+  "TOTAL-REPORT-EXPENSE-2022-08": {
+    "expense_count": 1,
+    "total_value": "17314701449271.70"
+  },
+  "TOTAL-REPORT-EXPENSE-2022-09": {
+    "expense_count": 1,
+    "total_value": "19536585338654.40"
+  },
+  "TOTAL-REPORT-EXPENSE-2022-10": {
+    "expense_count": 1,
+    "total_value": "21784784333110.30"
+  },
+  "TOTAL-REPORT-EXPENSE-2022-11": {
+    "expense_count": 1,
+    "total_value": "24037064126782.80"
+  },
+  "TOTAL-REPORT-EXPENSE-2022-12": {
+    "expense_count": 1,
+    "total_value": "31118915372280.50"
+  },
+  "TOTAL-REPORT-EXPENSE-2023-01": {
+    "expense_count": 1,
+    "total_value": "3006330687062.25"
+  },
+  "TOTAL-REPORT-EXPENSE-2023-02": {
+    "expense_count": 1,
+    "total_value": "5543147104523.30"
+  },
+  "TOTAL-REPORT-EXPENSE-2023-03": {
+    "expense_count": 1,
+    "total_value": "7764697841919.57"
+  },
+  "TOTAL-REPORT-EXPENSE-2023-04": {
+    "expense_count": 1,
+    "total_value": "10834517293635.30"
+  },
+  "TOTAL-REPORT-EXPENSE-2023-05": {
+    "expense_count": 1,
+    "total_value": "12848262874111.90"
+  },
+  "TOTAL-REPORT-EXPENSE-2023-06": {
+    "expense_count": 1,
+    "total_value": "14731748426699.60"
+  },
+  "TOTAL-REPORT-EXPENSE-2023-07": {
+    "expense_count": 1,
+    "total_value": "17113376737696.50"
+  },
+  "TOTAL-REPORT-EXPENSE-2023-08": {
+    "expense_count": 1,
+    "total_value": "19119721823567.80"
+  },
+  "TOTAL-REPORT-EXPENSE-2023-09": {
+    "expense_count": 1,
+    "total_value": "21184597903786.20"
+  },
+  "TOTAL-REPORT-EXPENSE-2023-10": {
+    "expense_count": 1,
+    "total_value": "24157230342665.30"
+  },
+  "TOTAL-REPORT-EXPENSE-2023-11": {
+    "expense_count": 1,
+    "total_value": "26711724040767.60"
+  },
+  "TOTAL-REPORT-EXPENSE-2023-12": {
+    "expense_count": 1,
+    "total_value": "32353847182286.40"
+  },
+  "TOTAL-REPORT-EXPENSE-2024-01": {
+    "expense_count": 1,
+    "total_value": "2521290748457.70"
+  },
+  "TOTAL-REPORT-EXPENSE-2024-02": {
+    "expense_count": 1,
+    "total_value": "6158051686783.13"
+  },
+  "TOTAL-REPORT-EXPENSE-2024-03": {
+    "expense_count": 1,
+    "total_value": "9016978358410.33"
+  },
+  "TOTAL-REPORT-EXPENSE-2024-04": {
+    "expense_count": 1,
+    "total_value": "12829536816734.50"
+  },
+  "TOTAL-REPORT-EXPENSE-2024-05": {
+    "expense_count": 1,
+    "total_value": "15022491840756.80"
+  },
+  "TOTAL-REPORT-EXPENSE-2024-06": {
+    "expense_count": 1,
+    "total_value": "17699885756669.20"
+  },
+  "TOTAL-REPORT-EXPENSE-2024-07": {
+    "expense_count": 1,
+    "total_value": "20851372773484.60"
+  },
+  "TOTAL-REPORT-EXPENSE-2024-08": {
+    "expense_count": 1,
+    "total_value": "23063875823355.20"
+  },
+  "TOTAL-REPORT-EXPENSE-2024-09": {
+    "expense_count": 1,
+    "total_value": "25706275178781.50"
+  },
+  "TOTAL-REPORT-EXPENSE-2024-10": {
+    "expense_count": 1,
+    "total_value": "29554614270375.30"
+  },
+  "TOTAL-REPORT-EXPENSE-2024-11": {
+    "expense_count": 1,
+    "total_value": "33039022515049.60"
+  },
+  "TOTAL-REPORT-EXPENSE-2024-12": {
+    "expense_count": 1,
+    "total_value": "40180501752712.50"
+  },
+  "TOTAL-REPORT-EXPENSE-2025-01": {
+    "expense_count": 1,
+    "total_value": "4138633551084.04"
+  },
+  "TOTAL-REPORT-EXPENSE-2025-02": {
+    "expense_count": 1,
+    "total_value": "7763573908471.31"
+  },
+  "TOTAL-REPORT-EXPENSE-2025-03": {
+    "expense_count": 1,
+    "total_value": "11015032122673.90"
+  },
+  "TOTAL-REPORT-EXPENSE-2025-04": {
+    "expense_count": 1,
+    "total_value": "15210253237719.70"
+  },
+  "TOTAL-REPORT-EXPENSE-2025-05": {
+    "expense_count": 1,
+    "total_value": "17769495075491.90"
+  },
+  "TOTAL-REPORT-EXPENSE-2025-06": {
+    "expense_count": 1,
+    "total_value": "20980872067377.90"
+  },
+  "TOTAL-REPORT-EXPENSE-2025-07": {
+    "expense_count": 1,
+    "total_value": "24949170394998.80"
+  },
+  "TOTAL-REPORT-EXPENSE-2025-08": {
+    "expense_count": 1,
+    "total_value": "27659818607722.10"
+  },
+  "TOTAL-REPORT-EXPENSE-2025-09": {
+    "expense_count": 1,
+    "total_value": "30424132062211.40"
+  },
+  "TOTAL-REPORT-EXPENSE-2025-10": {
+    "expense_count": 1,
+    "total_value": "33881799545304.10"
+  },
+  "TOTAL-REPORT-EXPENSE-2025-11": {
+    "expense_count": 1,
+    "total_value": "36955764061612.70"
+  },
+  "TOTAL-REPORT-EXPENSE-2025-12": {
+    "expense_count": 1,
+    "total_value": "42910312400241.80"
+  },
+  "TOTAL-REPORT-EXPENSE-2026-01": {
+    "expense_count": 1,
+    "total_value": "3993270936622.84"
+  },
+  "TOTAL-REPORT-EXPENSE-2026-02": {
+    "expense_count": 1,
+    "total_value": "8094030574245.86"
+  },
+  "TOTAL-REPORT-EXPENSE-2026-03": {
+    "expense_count": 1,
+    "total_value": "12824559512240.00"
+  },
+  "TOTAL-REPORT-EXPENSE-2026-04": {
+    "expense_count": 1,
+    "total_value": "17598043158059.14"
+  },
+  "TOTAL-REPORT-REVENUE-2018-01": {
+    "expense_count": 1,
+    "total_value": "1304478850226.00"
+  },
+  "TOTAL-REPORT-REVENUE-2018-02": {
+    "expense_count": 1,
+    "total_value": "2534747229703.65"
+  },
+  "TOTAL-REPORT-REVENUE-2018-03": {
+    "expense_count": 1,
+    "total_value": "4076325808563.53"
+  },
+  "TOTAL-REPORT-REVENUE-2018-04": {
+    "expense_count": 1,
+    "total_value": "5528995028682.94"
+  },
+  "TOTAL-REPORT-REVENUE-2018-05": {
+    "expense_count": 1,
+    "total_value": "6914865085467.85"
+  },
+  "TOTAL-REPORT-REVENUE-2018-06": {
+    "expense_count": 1,
+    "total_value": "8626742100000.00"
+  },
+  "TOTAL-REPORT-REVENUE-2018-07": {
+    "expense_count": 1,
+    "total_value": "10496158153429.60"
+  },
+  "TOTAL-REPORT-REVENUE-2018-08": {
+    "expense_count": 1,
+    "total_value": "12222398774994.90"
+  },
+  "TOTAL-REPORT-REVENUE-2018-09": {
+    "expense_count": 1,
+    "total_value": "13986148207987.10"
+  },
+  "TOTAL-REPORT-REVENUE-2018-10": {
+    "expense_count": 1,
+    "total_value": "15802349294692.00"
+  },
+  "TOTAL-REPORT-REVENUE-2018-11": {
+    "expense_count": 1,
+    "total_value": "17454914402767.80"
+  },
+  "TOTAL-REPORT-REVENUE-2018-12": {
+    "expense_count": 1,
+    "total_value": "19454369031963.70"
+  },
+  "TOTAL-REPORT-REVENUE-2019-01": {
+    "expense_count": 1,
+    "total_value": "1486338090189.25"
+  },
+  "TOTAL-REPORT-REVENUE-2019-02": {
+    "expense_count": 1,
+    "total_value": "2843971232772.25"
+  },
+  "TOTAL-REPORT-REVENUE-2019-03": {
+    "expense_count": 1,
+    "total_value": "4590018229937.53"
+  },
+  "TOTAL-REPORT-REVENUE-2019-04": {
+    "expense_count": 1,
+    "total_value": "6361144594581.61"
+  },
+  "TOTAL-REPORT-REVENUE-2019-05": {
+    "expense_count": 1,
+    "total_value": "7867426007512.59"
+  },
+  "TOTAL-REPORT-REVENUE-2019-06": {
+    "expense_count": 1,
+    "total_value": "9549863608947.94"
+  },
+  "TOTAL-REPORT-REVENUE-2019-07": {
+    "expense_count": 1,
+    "total_value": "11471322070009.20"
+  },
+  "TOTAL-REPORT-REVENUE-2019-08": {
+    "expense_count": 1,
+    "total_value": "13256739355353.70"
+  },
+  "TOTAL-REPORT-REVENUE-2019-09": {
+    "expense_count": 1,
+    "total_value": "15034722298738.95"
+  },
+  "TOTAL-REPORT-REVENUE-2019-10": {
+    "expense_count": 1,
+    "total_value": "16671168008215.50"
+  },
+  "TOTAL-REPORT-REVENUE-2019-11": {
+    "expense_count": 1,
+    "total_value": "18025630359277.90"
+  },
+  "TOTAL-REPORT-REVENUE-2019-12": {
+    "expense_count": 1,
+    "total_value": "20188796808536.00"
+  },
+  "TOTAL-REPORT-REVENUE-2020-01": {
+    "expense_count": 1,
+    "total_value": "1556549420819.98"
+  },
+  "TOTAL-REPORT-REVENUE-2020-02": {
+    "expense_count": 1,
+    "total_value": "2818890171841.49"
+  },
+  "TOTAL-REPORT-REVENUE-2020-03": {
+    "expense_count": 1,
+    "total_value": "4731336389509.65"
+  },
+  "TOTAL-REPORT-REVENUE-2020-04": {
+    "expense_count": 1,
+    "total_value": "7001993171929.20"
+  },
+  "TOTAL-REPORT-REVENUE-2020-05": {
+    "expense_count": 1,
+    "total_value": "7891040446390.20"
+  },
+  "TOTAL-REPORT-REVENUE-2020-06": {
+    "expense_count": 1,
+    "total_value": "9091870586775.40"
+  },
+  "TOTAL-REPORT-REVENUE-2020-07": {
+    "expense_count": 1,
+    "total_value": "10399705826960.50"
+  },
+  "TOTAL-REPORT-REVENUE-2020-08": {
+    "expense_count": 1,
+    "total_value": "11688330081519.20"
+  },
+  "TOTAL-REPORT-REVENUE-2020-09": {
+    "expense_count": 1,
+    "total_value": "13216682190024.20"
+  },
+  "TOTAL-REPORT-REVENUE-2020-10": {
+    "expense_count": 1,
+    "total_value": "15145395578322.70"
+  },
+  "TOTAL-REPORT-REVENUE-2020-11": {
+    "expense_count": 1,
+    "total_value": "16528605283082.60"
+  },
+  "TOTAL-REPORT-REVENUE-2020-12": {
+    "expense_count": 1,
+    "total_value": "18719089935213.80"
+  },
+  "TOTAL-REPORT-REVENUE-2021-01": {
+    "expense_count": 1,
+    "total_value": "1503985185988.17"
+  },
+  "TOTAL-REPORT-REVENUE-2021-02": {
+    "expense_count": 1,
+    "total_value": "2755563753252.46"
+  },
+  "TOTAL-REPORT-REVENUE-2021-03": {
+    "expense_count": 1,
+    "total_value": "5299923505050.28"
+  },
+  "TOTAL-REPORT-REVENUE-2021-04": {
+    "expense_count": 1,
+    "total_value": "7486826165216.90"
+  },
+  "TOTAL-REPORT-REVENUE-2021-05": {
+    "expense_count": 1,
+    "total_value": "9320269589095.53"
+  },
+  "TOTAL-REPORT-REVENUE-2021-06": {
+    "expense_count": 1,
+    "total_value": "11265770320813.10"
+  },
+  "TOTAL-REPORT-REVENUE-2021-07": {
+    "expense_count": 1,
+    "total_value": "13651128467449.50"
+  },
+  "TOTAL-REPORT-REVENUE-2021-08": {
+    "expense_count": 1,
+    "total_value": "15697751537748.80"
+  },
+  "TOTAL-REPORT-REVENUE-2021-09": {
+    "expense_count": 1,
+    "total_value": "17923871562208.90"
+  },
+  "TOTAL-REPORT-REVENUE-2021-10": {
+    "expense_count": 1,
+    "total_value": "20431745677797.20"
+  },
+  "TOTAL-REPORT-REVENUE-2021-11": {
+    "expense_count": 1,
+    "total_value": "22440033436357.80"
+  },
+  "TOTAL-REPORT-REVENUE-2021-12": {
+    "expense_count": 1,
+    "total_value": "25286377583494.60"
+  },
+  "TOTAL-REPORT-REVENUE-2022-01": {
+    "expense_count": 1,
+    "total_value": "2088812804173.42"
+  },
+  "TOTAL-REPORT-REVENUE-2022-02": {
+    "expense_count": 1,
+    "total_value": "4205523328940.14"
+  },
+  "TOTAL-REPORT-REVENUE-2022-03": {
+    "expense_count": 1,
+    "total_value": "7163122459152.96"
+  },
+  "TOTAL-REPORT-REVENUE-2022-04": {
+    "expense_count": 1,
+    "total_value": "10033791271026.60"
+  },
+  "TOTAL-REPORT-REVENUE-2022-05": {
+    "expense_count": 1,
+    "total_value": "12042740772470.57"
+  },
+  "TOTAL-REPORT-REVENUE-2022-06": {
+    "expense_count": 1,
+    "total_value": "14017117191664.40"
+  },
+  "TOTAL-REPORT-REVENUE-2022-07": {
+    "expense_count": 1,
+    "total_value": "15774369939998.20"
+  },
+  "TOTAL-REPORT-REVENUE-2022-08": {
+    "expense_count": 1,
+    "total_value": "17606554354659.60"
+  },
+  "TOTAL-REPORT-REVENUE-2022-09": {
+    "expense_count": 1,
+    "total_value": "19739237095679.13"
+  },
+  "TOTAL-REPORT-REVENUE-2022-10": {
+    "expense_count": 1,
+    "total_value": "22139466823087.10"
+  },
+  "TOTAL-REPORT-REVENUE-2022-11": {
+    "expense_count": 1,
+    "total_value": "24779831822931.30"
+  },
+  "TOTAL-REPORT-REVENUE-2022-12": {
+    "expense_count": 1,
+    "total_value": "27824392914591.44"
+  },
+  "TOTAL-REPORT-REVENUE-2023-01": {
+    "expense_count": 1,
+    "total_value": "1357005667142.38"
+  },
+  "TOTAL-REPORT-REVENUE-2023-02": {
+    "expense_count": 1,
+    "total_value": "3164240401760.81"
+  },
+  "TOTAL-REPORT-REVENUE-2023-03": {
+    "expense_count": 1,
+    "total_value": "5678939682499.36"
+  },
+  "TOTAL-REPORT-REVENUE-2023-04": {
+    "expense_count": 1,
+    "total_value": "7785107003502.07"
+  },
+  "TOTAL-REPORT-REVENUE-2023-05": {
+    "expense_count": 1,
+    "total_value": "9818729651709.07"
+  },
+  "TOTAL-REPORT-REVENUE-2023-06": {
+    "expense_count": 1,
+    "total_value": "12381587858994.52"
+  },
+  "TOTAL-REPORT-REVENUE-2023-07": {
+    "expense_count": 1,
+    "total_value": "14525465340016.01"
+  },
+  "TOTAL-REPORT-REVENUE-2023-08": {
+    "expense_count": 1,
+    "total_value": "16991536431793.30"
+  },
+  "TOTAL-REPORT-REVENUE-2023-09": {
+    "expense_count": 1,
+    "total_value": "19734470815922.20"
+  },
+  "TOTAL-REPORT-REVENUE-2023-10": {
+    "expense_count": 1,
+    "total_value": "23107352102907.07"
+  },
+  "TOTAL-REPORT-REVENUE-2023-11": {
+    "expense_count": 1,
+    "total_value": "25964028326210.38"
+  },
+  "TOTAL-REPORT-REVENUE-2023-12": {
+    "expense_count": 1,
+    "total_value": "29124049914491.74"
+  },
+  "TOTAL-REPORT-REVENUE-2024-01": {
+    "expense_count": 1,
+    "total_value": "2397321319259.28"
+  },
+  "TOTAL-REPORT-REVENUE-2024-02": {
+    "expense_count": 1,
+    "total_value": "5027809205307.73"
+  },
+  "TOTAL-REPORT-REVENUE-2024-03": {
+    "expense_count": 1,
+    "total_value": "8721640807966.88"
+  },
+  "TOTAL-REPORT-REVENUE-2024-04": {
+    "expense_count": 1,
+    "total_value": "11689308331131.28"
+  },
+  "TOTAL-REPORT-REVENUE-2024-05": {
+    "expense_count": 1,
+    "total_value": "14292098576833.73"
+  },
+  "TOTAL-REPORT-REVENUE-2024-06": {
+    "expense_count": 1,
+    "total_value": "17097458347024.77"
+  },
+  "TOTAL-REPORT-REVENUE-2024-07": {
+    "expense_count": 1,
+    "total_value": "19753058169220.10"
+  },
+  "TOTAL-REPORT-REVENUE-2024-08": {
+    "expense_count": 1,
+    "total_value": "23036230099408.20"
+  },
+  "TOTAL-REPORT-REVENUE-2024-09": {
+    "expense_count": 1,
+    "total_value": "26284733140794.64"
+  },
+  "TOTAL-REPORT-REVENUE-2024-10": {
+    "expense_count": 1,
+    "total_value": "29678794044636.02"
+  },
+  "TOTAL-REPORT-REVENUE-2024-11": {
+    "expense_count": 1,
+    "total_value": "32677398038995.41"
+  },
+  "TOTAL-REPORT-REVENUE-2024-12": {
+    "expense_count": 1,
+    "total_value": "36708608954221.70"
+  },
+  "TOTAL-REPORT-REVENUE-2025-01": {
+    "expense_count": 1,
+    "total_value": "2672363898121.25"
+  },
+  "TOTAL-REPORT-REVENUE-2025-02": {
+    "expense_count": 1,
+    "total_value": "5347224476601.10"
+  },
+  "TOTAL-REPORT-REVENUE-2025-03": {
+    "expense_count": 1,
+    "total_value": "9055055924786.56"
+  },
+  "TOTAL-REPORT-REVENUE-2025-04": {
+    "expense_count": 1,
+    "total_value": "12279472960319.95"
+  },
+  "TOTAL-REPORT-REVENUE-2025-05": {
+    "expense_count": 1,
+    "total_value": "14740339626527.70"
+  },
+  "TOTAL-REPORT-REVENUE-2025-06": {
+    "expense_count": 1,
+    "total_value": "17594318789231.25"
+  },
+  "TOTAL-REPORT-REVENUE-2025-07": {
+    "expense_count": 1,
+    "total_value": "20327577315795.80"
+  },
+  "TOTAL-REPORT-REVENUE-2025-08": {
+    "expense_count": 1,
+    "total_value": "23739490195416.52"
+  },
+  "TOTAL-REPORT-REVENUE-2025-09": {
+    "expense_count": 1,
+    "total_value": "26953515840467.60"
+  },
+  "TOTAL-REPORT-REVENUE-2025-10": {
+    "expense_count": 1,
+    "total_value": "29939519189829.20"
+  },
+  "TOTAL-REPORT-REVENUE-2025-11": {
+    "expense_count": 1,
+    "total_value": "32945670997853.90"
+  },
+  "TOTAL-REPORT-REVENUE-2025-12": {
+    "expense_count": 1,
+    "total_value": "37283772222778.70"
+  },
+  "TOTAL-REPORT-REVENUE-2026-01": {
+    "expense_count": 1,
+    "total_value": "2364337237793.94"
+  },
+  "TOTAL-REPORT-REVENUE-2026-02": {
+    "expense_count": 1,
+    "total_value": "4769616364985.77"
+  },
+  "TOTAL-REPORT-REVENUE-2026-03": {
+    "expense_count": 1,
+    "total_value": "8314982892532.54"
+  },
+  "TOTAL-REPORT-REVENUE-2026-04": {
+    "expense_count": 1,
+    "total_value": "11720813651061.33"
+  }
+}

@@ -36,6 +36,16 @@ make import-ppp
 make import-translations
 ```
 
+**Tests** (see `tests/README.md` for tiers and fixtures):
+```bash
+make test-fast    # unit + DB tiers, seconds — run on every change
+make test         # + golden/e2e tiers (~10 min) — run before/after refactoring the importer
+```
+
+The suite pins current import behavior (characterization tests). Golden/frozen
+fixtures are only regenerated deliberately (`make test-regen-goldens`,
+`make test-regen-frozen`), in a commit whose message explains why the numbers changed.
+
 **Lint / format / typecheck:**
 ```bash
 uvx ruff check src/

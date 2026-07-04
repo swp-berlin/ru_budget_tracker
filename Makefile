@@ -131,4 +131,28 @@ download-and-bootstrap-data: download-data bootstrap-data fix-db-chmod
 
 # Validate a small set of frozen reference values against the final SQLite database.
 test-frozen-db:
-	uv run --group dev pytest tests/test_frozen_db -q
+	uv run --group dev pytest tests/test_frozen_db.py -q
+
+# Fast tiers only: pure-function unit tests + checks against the checked-in budget.db.
+test-fast:
+	uv run --group dev pytest -m "not golden and not e2e and not external" -q
+
+# Everything runnable from a plain checkout (includes slow golden + e2e tiers, ~10 min).
+test:
+	uv run --group dev pytest -m "not external" -q
+
+# Regenerate golden characterization files from the current parser output.
+# Only do this deliberately; commit message must explain why the numbers changed.
+test-regen-goldens:
+	uv run --group dev python tests/generate_goldens.py
+
+# Regenerate the frozen per-budget totals fixture from the current budget.db.
+test-regen-frozen:
+	uv run --group dev python tests/generate_frozen_budget_totals.py
+
+# Diff per-budget expense counts/totals between the current budget.db and a prior one.
+# Usage: make test-compare-db prior=/tmp/prior.db
+# (extract a prior version with: git show <rev>:src/data/budget.db > /tmp/prior.db)
+test-compare-db:
+	@test -n "$(prior)" || (echo "Usage: make test-compare-db prior=<path-to-prior-db>" && exit 1)
+	uv run --group dev python tests/compare_dbs.py src/data/budget.db $(prior)

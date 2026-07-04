@@ -1,14 +1,11 @@
 import json
 import math
 import sqlite3
-from collections.abc import Iterator
-from pathlib import Path
 
 import pytest
 
+from tests.conftest import REPO_ROOT
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-DB_PATH = REPO_ROOT / "src" / "data" / "budget.db"
 FIXTURE_PATH = REPO_ROOT / "src" / "scripts" / "fixtures" / "frozen_db_values.json"
 
 
@@ -29,18 +26,7 @@ def _case_id(check: dict) -> str:
     return str(check["name"])
 
 
-@pytest.fixture(scope="session")
-def db_connection() -> Iterator[sqlite3.Connection]:
-    if not DB_PATH.exists():
-        pytest.fail(f"Database file not found: {DB_PATH}")
-
-    connection = sqlite3.connect(DB_PATH)
-    try:
-        yield connection
-    finally:
-        connection.close()
-
-
+@pytest.mark.db
 @pytest.mark.parametrize("check", _load_checks(), ids=_case_id)
 def test_frozen_db_values(db_connection: sqlite3.Connection, check: dict) -> None:
     row = db_connection.execute(check["sql"]).fetchone()

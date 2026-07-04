@@ -38,6 +38,16 @@ dev = [
 [tool.uv]
 package = false
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+markers = [
+    "db: runs against the checked-in src/data/budget.db artifact",
+    "golden: slow; parses the real Excel/CSV files under src/data/import_files",
+    "e2e: slow; runs a real import into a temporary database",
+    "external: needs untracked third-party files (.claude/validation/*.csv)",
+]
+
 # Ruff settings
 [tool.ruff]
 # Configuration for Ruff
@@ -48,7 +58,7 @@ line-length = 100
 lint.select = ["T20"]
 
 [tool.ty.environment]
-root = ["./src"]
+root = ["./src", "."]
 
 [tool.mypy]
 python_version = "3.13"
