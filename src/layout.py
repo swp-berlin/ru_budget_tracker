@@ -10,6 +10,9 @@ from utils.definitions import (
     viewby_config,
 )
 
+# Dropdown items for the "View by" menu (e.g. Chapter, Section, Article).
+# Pattern-matching ids ({"type": ..., "value": ...}) let a single callback
+# handle clicks on any item instead of wiring one callback per option.
 viewby_items = [
     dbc.DropdownMenuItem(
         html.Span(label, title=label),
@@ -18,6 +21,7 @@ viewby_items = [
     for label, value in viewby_config.options
 ]
 
+# Dropdown items for the "Spending type" menu (e.g. Law vs. Report figures).
 spending_type_items = [
     dbc.DropdownMenuItem(
         html.Span(label, title=label),
@@ -26,6 +30,7 @@ spending_type_items = [
     for label, value in spending_type_config.options
 ]
 
+# Dropdown items for the "Unit" menu (e.g. Absolute, % of GDP, per capita).
 unit_items = [
     dbc.DropdownMenuItem(
         html.Span(label, title=label),
@@ -34,6 +39,7 @@ unit_items = [
     for label, value in unit_config.options
 ]
 
+# Dropdown items for the "Period" menu (timeseries page only).
 period_items = [
     dbc.DropdownMenuItem(
         html.Span(label, title=label),
@@ -44,12 +50,15 @@ period_items = [
 
 toolbar = html.Div(
     [
-        # Store currently selected filter values (these replace dcc.Dropdown.value)
+        # Store currently selected filter values (these replace dcc.Dropdown.value).
+        # dcc.Store components hold state in the browser (not rendered) so it
+        # can be shared between callbacks and survive page navigation.
         dcc.Store(id="store-budget-options"),
         dcc.Store(id="store-budget-id"),
         dcc.Store(id="store-budget-type"),
         # Store the treemap selection for cross-page filtering.
         dcc.Store(id="store-selected-id"),
+        # Default filter values shown on first load.
         dcc.Store(id="store-viewby", data="CHAPTER"),
         dcc.Store(id="store-period", data="ALL"),
         dcc.Store(id="store-spending-type", data="ALL"),
@@ -63,16 +72,23 @@ toolbar = html.Div(
         # Timeseries page: tick metadata and window width for responsive tick labels
         dcc.Store(id="store-timeseries-ticks"),
         dcc.Store(id="store-window-width", data=1280),
+        # Fires periodically while disabled=False to re-check window width
+        # after a resize, so timeseries tick labels can be recomputed.
         dcc.Interval(id="timeseries-resize-interval", interval=300, disabled=True),
-        # Location component to access URL parameters
+        # Location component to access URL parameters (drives page routing
+        # and lets callbacks read/write query-string filters for sharing).
         dcc.Location(id="url", refresh=False),
         # Dummy div target for clientside callbacks (requires an Output but is invisible).
         html.Div(id="dummy-output", style={"display": "none"}),
         html.Div(id="dummy-restore-zoom", style={"display": "none"}),
+        # Top-level toolbar row: a "Filters" mega-menu on the left, action
+        # buttons on the right.
         dbc.Stack(
             [
                 html.Div(
                     [
+                        # Nested dropdown: clicking "Filters" reveals a submenu
+                        # of the individual filter menus below.
                         dbc.DropdownMenu(
                             label="Filters",
                             id="menu-filters",
@@ -182,6 +198,8 @@ toolbar = html.Div(
                                     id="btn-download-image",
                                     title="Download Plot as PNG",
                                 ),
+                                # One Download component per page: the callback for
+                                # whichever page is active triggers its own target.
                                 dcc.Download(id="download-treemap-image"),
                                 dcc.Download(id="download-timeseries-image"),
                                 # Download data button
@@ -228,6 +246,7 @@ toolbar = html.Div(
             },
             class_name="toolbar",
         ),
+        # Divider between the toolbar and the page content below it.
         dbc.Row(html.Hr(style={"margin": "0"})),
     ]
 )
@@ -242,15 +261,22 @@ def serve_layout():
         id="app-layout",
         children=[
             toolbar,
+            # Populated by a callback with the current page's title
+            # (e.g. selected budget/period) when on the timeseries page.
             html.Div(
                 id="timeseries-title",
                 style={"marginTop": "0.5rem", "marginBottom": "0.5rem"},
             ),
+            # page_container renders whichever page matches the current URL.
             html.Div(page_container, id="pages-wrapper"),
         ],
     )
 
 
+# Dash validates that every callback's Input/Output/State ids exist somewhere
+# in the app layout. Since serve_layout() only renders one page's components
+# at a time, this static layout lists components from ALL pages so callbacks
+# targeting other pages don't fail validation. It is never rendered to users.
 validation_layout = html.Div(
     children=[
         toolbar,
