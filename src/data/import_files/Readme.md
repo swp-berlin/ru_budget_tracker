@@ -170,6 +170,8 @@ Source: [https://minfin.gov.ru/ru/document?id_4=80042-kratkaya_ezhemesyachnaya_i
 
 **Law totals** (`total_law_YYYY.csv`): Annual budget law allocations by chapter. Used for comparing planned vs actual spending. These originate from russian bgd PDF reports.
 
+**Caveat:** transcribe chapter totals from the **enacted law** («бюджет для граждан» *law* edition), not the draft. The 2026 totals currently come from `bdg draft 26-28.pdf` (no law edition was available yet); the enacted law added e.g. +141bn ₽ to Social Policy, so ved-structure detail exceeds these draft totals for chapters 05/10/12 — the app then (correctly) hides the negative classified-spending nodes, and `make quality-report` flags them under `law_detail_exceeds_total`. Update the CSV when the enacted-law figures are available.
+
 ### `raw/conversion_tables/`
 
 Conversion tables used for conversions.
