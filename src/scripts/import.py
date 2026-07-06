@@ -34,6 +34,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from database.sessions import get_sync_session
 from models import Dimension, Expense
+from settings import settings
 
 # DB write layer lives in scripts/db_writer.py; names imported here so
 # scripts.import keeps its public attributes (tests and callers import them).
@@ -360,9 +361,7 @@ def find_gdp_files(raw_dir: Path) -> Tuple[Path, Path]:
 
 
 def main():
-    # Imported here, not at module level: ImporterSettings requires env vars
-    # (DEEPL_API_KEY, NEXTCLOUD_DOWNLOAD_LINK) that only the CLI needs.
-    from settings_importer import importer_settings
+    # (IMPORTER__DEEPL_API_KEY, IMPORTER__NEXTCLOUD_DOWNLOAD_LINK) that only the CLI needs.
 
     parser = argparse.ArgumentParser(description="Import budget data")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -382,7 +381,7 @@ def main():
     p_budget.add_argument(
         "--data-dir",
         type=Path,
-        default=importer_settings.data_dir,  # Path(__file__).parent.parent / "data" / "import_files" / "clean",
+        default=settings.importer.data_dir,  # Path(__file__).parent.parent / "data" / "import_files" / "clean",
         help="Directory with import files",
     )
 
@@ -394,7 +393,7 @@ def main():
     p_totals.add_argument(
         "--data-dir",
         type=Path,
-        default=importer_settings.data_dir,
+        default=settings.importer.data_dir,
         help="Directory with import files (used to locate related dirs if needed)",
     )
 
@@ -405,7 +404,7 @@ def main():
     p_gdp.add_argument(
         "--data-dir",
         type=Path,
-        default=importer_settings.data_dir,  # Path(__file__).parent.parent / "data" / "import_files" / "clean",
+        default=settings.importer.data_dir,  # Path(__file__).parent.parent / "data" / "import_files" / "clean",
         help="Directory with import files (used to locate raw/ for auto-discovery)",
     )
     p_gdp.add_argument("--rosstat", type=Path, help="Path to Rosstat quarterly GDP file")
@@ -496,7 +495,7 @@ def main():
                     "Provide both --rosstat and --minekonom, or neither (for auto-discovery)."
                 )
             else:
-                raw_dir = importer_settings.raw_dir  # args.data_dir.parent / "raw"
+                raw_dir = settings.importer.raw_dir  # args.data_dir.parent / "raw"
                 rosstat_path, minekonom_path = find_gdp_files(raw_dir)
 
             import_gdp_data(rosstat_path, minekonom_path)

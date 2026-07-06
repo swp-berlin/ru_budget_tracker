@@ -7,6 +7,7 @@ assets/
 ├── css/
 │   ├── about.css          # Styles for the About page
 │   ├── menu.css           # Toolbar and dropdown layout
+│   ├── plot.css           # Full-height layout for chart pages (.plot-page)
 │   └── typography.css     # Font loading and text styles
 ├── fonts/
 │   └── Source_Sans_3/     # Variable font (OFL licence)
@@ -39,6 +40,10 @@ Layout rules for the main toolbar. Covers:
   - `≤ 600 px` — dropdowns stack full-width vertically; action buttons form a centred horizontal row; timeseries button label hidden.
   - `≤ 480 px` — dropdowns capped at 180 px.
 - **Loading spinner** — `.treemap-spinner` CSS animation (`treemap-spin` keyframe, 0.8 s rotation).
+
+### `plot.css`
+
+Full-height flex layout for chart pages, scoped via `#app-layout:has(.plot-page)` to any page whose root element has the `.plot-page` class (treemap, timeseries).
 
 ### `typography.css`
 

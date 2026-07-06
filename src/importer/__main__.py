@@ -1,16 +1,22 @@
 import httpx2
 from zipfile import ZipFile
 import logging
-from settings_importer import importer_settings
+import os
+from settings import settings
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
+openai_api_key = settings.importer.deepl_api_key
+download_link = (
+    os.environ.get("NEXTCLOUD_DOWNLOAD_LINK") or settings.importer.nextcloud_download_link
+)
+archive_output_path = settings.importer.archive_output_file
+extract_output_dir = settings.importer.base_dir
 
-openai_api_key = importer_settings.deepl_api_key
-download_link = importer_settings.nextcloud_download_link
-archive_output_path = importer_settings.archive_output_file
-extract_output_dir = importer_settings.base_dir
+if not download_link:
+    log.error("NEXTCLOUD_DOWNLOAD_LINK not set (env var or IMPORTER__NEXTCLOUD_DOWNLOAD_LINK)")
+    raise SystemExit(1)
 
 
 def download_file():
