@@ -5,7 +5,7 @@ Run from the repo root:
     uv run --group dev python tests/generate_goldens.py [--only STEM] [--dump-rows STEM]
 
 Only regenerate deliberately: goldens pin current parser behavior, and the commit
-that changes them must explain why the numbers changed (see tests/README.md).
+that changes them must explain why the numbers changed (see docs/tests.md).
 
 --dump-rows STEM writes the full canonical row list for one file to
 tests/goldens/.rowdumps/<stem>.txt (gitignored) WITHOUT touching the golden —
