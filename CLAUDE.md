@@ -36,7 +36,7 @@ make import-ppp
 make import-translations
 ```
 
-**Tests** (see `tests/README.md` for tiers, fixtures, and the data-blessing workflow):
+**Tests** (see `docs/tests.md` for tiers, fixtures, and the data-blessing workflow):
 ```bash
 make test-fast       # unit + DB tiers, seconds — run on every change
 make test            # + golden/e2e tiers (~10 min) — run before/after touching the importer

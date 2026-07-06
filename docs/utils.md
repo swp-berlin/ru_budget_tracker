@@ -29,11 +29,3 @@ Also exposes `fetch_budgets_for_dropdown()` (used by the sidebar) and `_execute_
 
 ### `transform_timeseries.py`
 `TimeseriesTransformer` class — converts raw budget rows into a Pandas DataFrame for the bar chart. De-cumulates quarterly REPORT values (Q2 = cumulative Q2 − Q1) and splits each period into open + classified bars.
-
-### `helper.py`
-Miscellaneous utility functions used across views:
-
-- `get_unit_label` — maps a `UnitTypeLiteral` to its human-readable dropdown label.
-- `create_treemap_colors` — returns per-node hex colors based on dimension type, viewby mode, military status, and spending type.
-- `shape_for_spending_type` — filters a DataFrame to military-only rows when `spending_type == "MILITARY"`.
-- `shape_for_viewby` — drops irrelevant hierarchy columns based on the selected `viewby` dimension (MINISTRY / CHAPTER / PROGRAM).

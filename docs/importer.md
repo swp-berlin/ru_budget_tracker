@@ -29,7 +29,7 @@ Responsible to import Data from Nextcloud and build the sqlite budget.db requrie
 # .env.importer example
 OPENAI_API_KEY=...
 NEXTCLOUD_DOWNLOAD_LINK=...
-ARCHIVE_OUTPUT_PATH=/tmp/ru_budget_raw.zip 
+ARCHIVE_OUTPUT_PATH=/tmp/ru_budget_raw.zip
 EXTRACT_OUTPUT_PATH=/app/src/data/import_files
 ```
 2. run container
@@ -39,7 +39,7 @@ EXTRACT_OUTPUT_PATH=/app/src/data/import_files
 # gid = appusers group id (1001)
 # check it out via `id` in terminal inside the container
 # the mapping keep-id is required to give the unprivileged user `appuser`
-# write access the the bind-mounted volume 
+# write access the the bind-mounted volume
 
 podman run -it \
     --userns=keep-id:uid=1001,gid=1001 \

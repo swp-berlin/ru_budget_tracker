@@ -10,7 +10,7 @@ assets/
 │   └── typography.css     # Font loading and text styles
 ├── fonts/
 │   └── Source_Sans_3/     # Variable font (OFL licence)
-├── icons/                 # Material Icons SVGs (see icons/README.md)
+├── icons/                 # Material Icons SVGs (see docs/assets-icons.md)
 ├── javascript/
 │   ├── clientside_export.js   # Share link + PNG download
 │   ├── clientside_treemap.js  # Treemap deep-link focus + text inset
@@ -71,7 +71,7 @@ Only the upright variable font is loaded by `typography.css`.
 
 ## Icons
 
-Material Icons SVGs sourced from Google Fonts. See [`icons/README.md`](icons/README.md) for the full list.
+Material Icons SVGs sourced from Google Fonts. See [`assets-icons.md`](assets-icons.md) for the full list.
 
 ---
 
