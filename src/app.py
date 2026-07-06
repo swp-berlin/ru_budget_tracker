@@ -46,7 +46,7 @@ def _prewarm_treemap_cache() -> None:
             fetch_treemap_hierarchy,
             populate_treemap_hierarchy,
         )
-        from pages.treemap import fetch_treemap_data, transform_treemap_data
+        from callbacks.callback_treemap import fetch_treemap_data, transform_treemap_data
 
         budgets = fetch_budgets_for_dropdown()
         if not budgets:
@@ -72,7 +72,7 @@ def _prewarm_timeseries_cache() -> None:
         from utils.fetch_treemap import fetch_budgets_for_dropdown
         from utils.fetch_timeseries import TimeseriesDataFetcher
         from utils.definitions import unit_config, UnitTypeLiteral
-        from pages.timeseries import fetch_timeseries_data
+        from callbacks.callback_timeseries import fetch_timeseries_data
 
         logger.info("Timeseries prewarm: filling raw SQL caches")
         for spending_type in ["ALL", "MILITARY"]:

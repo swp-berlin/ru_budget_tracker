@@ -1,6 +1,6 @@
 """Shared fixtures and paths for the test suite.
 
-Tiers (see tests/README.md):
+Tiers (see docs/tests.md):
 - unit (no marker): pure parser functions, synthetic inputs, no data files or DB.
 - db: assertions against the checked-in src/data/budget.db.
 - golden: parses the real Excel/CSV files under src/data/import_files.
