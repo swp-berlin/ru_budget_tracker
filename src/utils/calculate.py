@@ -1,3 +1,24 @@
+"""Converts raw expense values (RUB) into the unit selected in the UI.
+
+A `Calculator` is built per (unit, budget, date, budget_type) and turns a raw
+expense value — or a whole `pd.Series` of them — into one of:
+
+- `ABSOLUTE`: billions of RUB, no lookup needed.
+- `DOLLARS`: billions of PPP dollars, via a yearly RUB→PPP conversion rate.
+- `PERCENT_GDP_FULL_YEAR` / `PERCENT_GDP_YEAR_TO_DATE`: percentage of GDP,
+  either the full calendar year or the quarters elapsed so far.
+- `PERCENT_FULL_YEAR_SPENDING` / `PERCENT_YEAR_TO_DATE_SPENDING`: percentage
+  of total government spending for the year, or up to the current period.
+- `PERCENT_YEAR_TO_DATE_REVENUE`: percentage of year-to-date government revenue.
+
+The percentage units need a denominator (GDP, total spending, or total
+revenue) fetched from `ConversionRate` or the `TOTAL` budget rows in the
+database. Denominators are looked up per year (and, for year-to-date units,
+per quarter) and cached at the class level so repeated calculations across a
+chart's data points hit the database once. See `docs/calculations.md` for the
+full breakdown of each unit's formula and edge cases.
+"""
+
 from datetime import date
 from functools import lru_cache
 from typing import ClassVar, Sequence
@@ -142,7 +163,15 @@ class Calculator:
         self,
         period_start_date: date,
     ) -> float:
-        """Fetch spending value for a given date. Cached at class level."""
+        """Fetch the total-spending denominator for a given date. Cached at class level.
+
+        Looks up the `TOTAL`/`EXPENSE` budget for the period's year (yearly scope
+        for LAW, latest-quarter-to-date monthly scope for REPORT) and returns its
+        cumulative value, scaled by `budget_config`'s LAW/REPORT multipliers. For
+        `PERCENT_YEAR_TO_DATE_SPENDING` on REPORT budgets, the previous quarter's
+        cumulative value is subtracted so the result reflects only the elapsed
+        year-to-date period rather than the full cumulative total.
+        """
         # Cache key includes unit, budget_type, and year
         cache_key = (self.unit, self.budget_type, period_start_date)
         if cache_key in Calculator._spending_cache:
@@ -233,7 +262,14 @@ class Calculator:
         self,
         period_start_date: date,
     ) -> float:
-        """Fetch revenue value for a given date. Cached at class level."""
+        """Fetch the total-revenue denominator for a given date. Cached at class level.
+
+        Looks up the `TOTAL`/`REVENUE` budget quarters for the period's year. LAW
+        budgets use the latest quarter available; REPORT budgets match by month
+        and subtract the previous quarter's value so the result is a year-to-date
+        (not cumulative) figure. Returns 0.0 if no revenue budgets exist for the
+        year, so callers can treat "no data" the same as "no revenue".
+        """
         # Cache key includes budget_id and year
         cache_key = (self.budget_type, period_start_date)
         if cache_key in Calculator._revenue_cache:
@@ -321,7 +357,7 @@ class Calculator:
         return value
 
     def calculate(self, value: float) -> float:
-        """Calculate based on spending scope."""
+        """Convert a single raw expense value into `self.unit`, dispatching by unit type."""
         date = self.date
         if self.unit == "ABSOLUTE":
             return self._absolute(value)
@@ -339,7 +375,12 @@ class Calculator:
         raise ValueError(f"Unknown spending scope: {self.unit}")
 
     def calculate_series(self, series: pd.Series) -> pd.Series:
-        """Apply calculation to an entire Series using vectorized operations."""
+        """Vectorized equivalent of `calculate()` for a whole column of raw expense values.
+
+        All rows in `series` are assumed to belong to the same `self.date`/
+        `self.budget_type`, so the denominator (conversion rate, GDP, spending,
+        or revenue) is fetched once and applied to the entire Series.
+        """
         date = self.date
         if self.unit == "ABSOLUTE":
             return series / 1_000_000_000

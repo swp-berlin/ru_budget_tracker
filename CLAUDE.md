@@ -92,6 +92,7 @@ Check the relevant doc below before grepping the codebase cold — each covers o
 | Changing colors, fonts, toolbar layout | `docs/customization.md` |
 | Callbacks architecture | `docs/callbacks.md` |
 | Database schema / SQLAlchemy models | `docs/models.md`, `docs/database.md` |
+| Unit conversion calculations (GDP/spending/revenue %, PPP) | `docs/calculations.md` |
 | Data import pipeline, source file formats | `docs/data.md`, `docs/data-import-files.md`, `docs/scripts.md` |
 | Migrations | `docs/alembic.md` |
 | Static assets (CSS/icons) | `docs/assets.md`, `docs/assets-icons.md` |

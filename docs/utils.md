@@ -14,7 +14,7 @@ Central source of truth for types, constants, and configuration.
 - **`Colors`** — hex color constants and chapter/program color mappings for charts.
 
 ### `calculate.py`
-`Calculator` class — converts raw expense values into the unit selected by the user (absolute RUB, PPP dollars, % of GDP, % of spending, % of revenue). Fetches conversion rates, GDP, spending, and revenue denominators from the database with class-level caching.
+`Calculator` class — converts raw expense values into the unit selected by the user (absolute RUB, PPP dollars, % of GDP, % of spending, % of revenue). Fetches conversion rates, GDP, spending, and revenue denominators from the database with class-level caching. See [`calculations.md`](calculations.md) for the per-unit formulas.
 
 ### `fetch_treemap.py`
 `TreemapDataFetcher` class — queries the database for a single budget's expenses and dimension hierarchy, classified spending (from pre-computed DB views), and the recursive program hierarchy. Returns the raw rows that `transform_treemap.py` will shape into a DataFrame.
