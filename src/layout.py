@@ -66,6 +66,9 @@ toolbar = html.Div(
         dcc.Store(id="store-language", data="RU"),
         # Store treemap node metadata for cross-page selection context.
         dcc.Store(id="store-treemap-node-map"),
+        # Remembers the (viewby, spending_type) that produced store-treemap-node-map, so a
+        # real hierarchy change can be detected even if it happened while on another page.
+        dcc.Store(id="store-treemap-hierarchy-key"),
         # Store for download status (used by clientside callback, not displayed)
         dcc.Store(id="store-download-status"),
         dcc.Store(id="store-previous-path"),

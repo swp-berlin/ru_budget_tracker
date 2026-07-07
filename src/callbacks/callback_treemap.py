@@ -6,7 +6,7 @@ from typing import Any, Optional, Sequence
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from dash import Input, Output, State, callback, callback_context, dcc, get_relative_path, no_update
+from dash import Input, Output, State, callback, dcc, get_relative_path, no_update
 from dash.exceptions import PreventUpdate
 from sqlalchemy import RowMapping
 
@@ -236,6 +236,7 @@ def generate_figure(
     Output("treemap-graph", "style"),
     Output("store-treemap-node-map", "data"),
     Output("store-selected-id", "data", allow_duplicate=True),
+    Output("store-treemap-hierarchy-key", "data"),
     Output("warning-toast", "is_open", allow_duplicate=True),
     Output("warning-toast", "children", allow_duplicate=True),
     Input("url", "pathname"),
@@ -244,6 +245,7 @@ def generate_figure(
     Input("store-spending-type", "data"),
     Input("store-unit", "data"),
     Input("store-language", "data"),
+    State("store-treemap-hierarchy-key", "data"),
     prevent_initial_call=True,
 )
 def update_figure_from_filters(
@@ -253,7 +255,8 @@ def update_figure_from_filters(
     spending_type: SpendingTypeLiteral = "ALL",
     unit: UnitTypeLiteral = "ABSOLUTE",
     language: str = "RU",
-) -> tuple[Any, Any, Any, Any, bool, str]:
+    previous_hierarchy_key: list | None = None,
+) -> tuple[Any, Any, Any, Any, Any, bool, str]:
     # Guard: only run when the treemap page is active.
     if pathname != get_relative_path("/"):
         raise PreventUpdate
@@ -261,10 +264,11 @@ def update_figure_from_filters(
     if budget_id is None:
         raise PreventUpdate
 
-    # Clear the selected node when spending type or viewby changes — these restructure the
-    # hierarchy entirely, so old short IDs no longer correspond to the same nodes.
-    triggered_id = callback_context.triggered_id
-    clear_selection = triggered_id in ("store-spending-type", "store-viewby")
+    # Clear the selected node when the hierarchy actually changed since the node map was
+    # last built — comparing values (not which Input fired) also catches the case where
+    # viewby/spending_type changed while on another page (this callback doesn't run there).
+    hierarchy_key = [viewby, spending_type]
+    clear_selection = previous_hierarchy_key is not None and previous_hierarchy_key != hierarchy_key
 
     # Fetch and render using the selected values from stores
     # Use translated names when language is EN (English)
@@ -276,7 +280,7 @@ def update_figure_from_filters(
             unit=unit,
         )
     except ValueError as e:
-        return no_update, no_update, no_update, no_update, True, str(e)
+        return no_update, no_update, no_update, no_update, no_update, True, str(e)
 
     df_shaped = shape_dataframe(df, spending_type, viewby)
     fig, path_to_short_id = generate_figure(
@@ -288,6 +292,7 @@ def update_figure_from_filters(
         {"visibility": "visible"},
         compact_map,
         None if clear_selection else no_update,
+        hierarchy_key,
         False,
         "",
     )
