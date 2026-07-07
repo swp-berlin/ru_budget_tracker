@@ -163,7 +163,6 @@ class Calculator:
                 for b in relevant_total_budgets
                 if b.published_at.month in budget_config.quarterly_months
             ]
-        spending_cumulative = 0.0
         previous_spending_value = 0.0
         max_date = max([b.published_at for b in relevant_total_budgets], default=1)
         spending_cumulative = next(
