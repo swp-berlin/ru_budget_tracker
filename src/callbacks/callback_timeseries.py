@@ -271,6 +271,49 @@ def _resolve_classified_dimension(
     return False, selected_dimension
 
 
+def _resolve_filter_context(
+    selected_node_id: str | None,
+    compact_node_map: dict | None,
+    node_map: dict,
+    language: LanguageTypeLiteral,
+    url_search: str | None = None,
+) -> tuple[dict | None, bool, tuple[int, ...], str | None]:
+    """Resolve a treemap selection (short id or deep-link) into fetch_timeseries_data args.
+
+    Returns (selected_dimension, classified_only, ancestor_dim_ids, resolved_path).
+    """
+    resolved_path = _resolve_selected_path(selected_node_id, compact_node_map, node_map, language)
+    # Ancestor dim_ids from the clicked node's path context (for context-aware timeseries filtering).
+    ancestor_dim_ids: tuple[int, ...] = ()
+    if selected_node_id and compact_node_map:
+        entry = compact_node_map.get(str(selected_node_id))
+        if entry and isinstance(entry, dict):
+            ancestor_dim_ids = tuple(int(x) for x in entry.get("ctx", []))
+    # Deep-link fallback: compact_node_map is absent on fresh page loads, so short IDs
+    # can't be decoded. Use ?focus=<dimension_id> from the URL instead.
+    focus_dim_id: int | None = None
+    if resolved_path is None and url_search:
+        params = parse_qs(url_search.lstrip("?"))
+        focus_raw = params.get("focus", [None])[0]
+        if focus_raw:
+            focus_raw = unquote_plus(focus_raw).strip()
+            # ?focus= is "leaf" (single dim_id) or "ctx1,ctx2,...,leaf" (ancestor chain).
+            # Always use the leaf (last element) for timeseries lookup.
+            leaf_str = focus_raw.split(",")[-1]
+            if leaf_str.isdigit():
+                focus_dim_id = int(leaf_str)
+                resolved_path = _find_path_by_dimension_id(focus_dim_id, node_map, language)
+    selected_dimension = node_map.get(resolved_path) if resolved_path else None
+    # If the focus dim isn't in the current budget's node_map (e.g. it only exists in
+    # a different budget year), use the dimension_id directly so the data is still filtered.
+    if selected_dimension is None and focus_dim_id is not None:
+        selected_dimension = {"dimension_id": focus_dim_id, "dimension_original_identifier": ""}
+    classified_only, selected_dimension = _resolve_classified_dimension(
+        selected_dimension, resolved_path, node_map
+    )
+    return selected_dimension, classified_only, ancestor_dim_ids, resolved_path
+
+
 def _format_timeseries_title(
     resolved_path: str | None,
     spending_type: SpendingTypeLiteral,
@@ -334,36 +377,8 @@ def update_figure_from_filters(
     except ValueError:
         node_map = {}
 
-    resolved_path = _resolve_selected_path(
-        selected_node_id, compact_node_map, node_map, language or "RU"
-    )
-    # Ancestor dim_ids from the clicked node's path context (for context-aware timeseries filtering).
-    ancestor_dim_ids: tuple[int, ...] = ()
-    if selected_node_id and compact_node_map:
-        entry = compact_node_map.get(str(selected_node_id))
-        if entry and isinstance(entry, dict):
-            ancestor_dim_ids = tuple(int(x) for x in entry.get("ctx", []))
-    # Deep-link fallback: compact_node_map is absent on fresh page loads, so short IDs
-    # can't be decoded. Use ?focus=<dimension_id> from the URL instead.
-    focus_dim_id: int | None = None
-    if resolved_path is None and url_search:
-        params = parse_qs(url_search.lstrip("?"))
-        focus_raw = params.get("focus", [None])[0]
-        if focus_raw:
-            focus_raw = unquote_plus(focus_raw).strip()
-            # ?focus= is "leaf" (single dim_id) or "ctx1,ctx2,...,leaf" (ancestor chain).
-            # Always use the leaf (last element) for timeseries lookup.
-            leaf_str = focus_raw.split(",")[-1]
-            if leaf_str.isdigit():
-                focus_dim_id = int(leaf_str)
-                resolved_path = _find_path_by_dimension_id(focus_dim_id, node_map, language or "RU")
-    selected_dimension = node_map.get(resolved_path) if resolved_path else None
-    # If the focus dim isn't in the current budget's node_map (e.g. it only exists in
-    # a different budget year), use the dimension_id directly so the data is still filtered.
-    if selected_dimension is None and focus_dim_id is not None:
-        selected_dimension = {"dimension_id": focus_dim_id, "dimension_original_identifier": ""}
-    classified_only, selected_dimension = _resolve_classified_dimension(
-        selected_dimension, resolved_path, node_map
+    selected_dimension, classified_only, ancestor_dim_ids, resolved_path = _resolve_filter_context(
+        selected_node_id, compact_node_map, node_map, language or "RU", url_search
     )
     df, _, budget_type = fetch_timeseries_data(
         budget_id=budget_id,
@@ -403,6 +418,9 @@ def update_figure_from_filters(
     State("store-spending-type", "data"),
     State("store-unit", "data"),
     State("store-selected-id", "data"),
+    State("store-treemap-node-map", "data"),
+    State("store-language", "data"),
+    State("url", "search"),
     prevent_initial_call=True,
     optional=True,
 )
@@ -415,6 +433,9 @@ def download_timeseries_data(
     spending_type: SpendingTypeLiteral = "ALL",
     unit: UnitTypeLiteral = "ABSOLUTE",
     selected_node_id: str | None = None,
+    compact_node_map: dict | None = None,
+    language: LanguageTypeLiteral = "RU",
+    url_search: str | None = None,
 ) -> dict[str, Any]:
     """
     Callback to download the current timeseries data as a csv file.
@@ -429,9 +450,8 @@ def download_timeseries_data(
         node_map = build_server_node_map(budget_id, spending_type, unit)
     except ValueError:
         node_map = {}
-    selected_dimension = node_map.get(selected_node_id) if selected_node_id else None
-    classified_only, selected_dimension = _resolve_classified_dimension(
-        selected_dimension, selected_node_id, node_map
+    selected_dimension, classified_only, ancestor_dim_ids, _ = _resolve_filter_context(
+        selected_node_id, compact_node_map, node_map, language or "RU", url_search
     )
     df, _, budget_type = fetch_timeseries_data(
         budget_id=budget_id,
@@ -440,6 +460,7 @@ def download_timeseries_data(
         period=period,
         selected_dimension=selected_dimension,
         classified_only=classified_only,
+        ancestor_dim_ids=ancestor_dim_ids,
     )
 
     value_col = get_unit_label(unit)
