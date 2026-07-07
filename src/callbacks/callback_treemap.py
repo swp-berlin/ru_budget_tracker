@@ -402,6 +402,8 @@ def _build_download_df(
 
 @callback(
     Output("download-treemap-data", "data"),
+    Output("warning-toast", "is_open", allow_duplicate=True),
+    Output("warning-toast", "children", allow_duplicate=True),
     Input("btn-download-csv", "n_clicks"),
     State("url", "pathname"),
     State("store-budget-id", "data"),
@@ -422,14 +424,17 @@ def download_treemap_data(
     spending_type: SpendingTypeLiteral,
     unit: UnitTypeLiteral,
     language: str = "RU",
-) -> dict[str, Any]:
+) -> tuple[Any, Any, Any]:
     if pathname != get_relative_path("/"):
         raise PreventUpdate
-    df = transform_treemap_data(
-        budget_id=budget_id,
-        spending_type=spending_type,
-        unit=unit,
-    )
+    try:
+        df = transform_treemap_data(
+            budget_id=budget_id,
+            spending_type=spending_type,
+            unit=unit,
+        )
+    except ValueError as e:
+        return no_update, True, str(e)
     translated = language == "EN"
     download_df = _build_download_df(
         df, spending_type=spending_type, viewby=viewby, translated=translated, unit=unit
@@ -445,4 +450,4 @@ def download_treemap_data(
     download_df.to_csv(
         buf, sep=";", index=False, encoding="utf-8-sig"
     )  # utf-8-sig adds BOM for Excel
-    return dcc.send_bytes(buf.getvalue(), filename)
+    return dcc.send_bytes(buf.getvalue(), filename), no_update, no_update
