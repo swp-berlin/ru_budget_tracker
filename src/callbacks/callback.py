@@ -119,7 +119,7 @@ def update_about_button(pathname: str | None, previous_path: str | None, budget_
 def switch_graphs(
     url: str,
     url_pathname: str | None,
-    _budget_id: int | None,
+    budget_id: int | None,
     selected_id: str | None,
     compact_node_map: dict | None,
     viewby: str | None,
@@ -127,8 +127,9 @@ def switch_graphs(
 ):
     """Swap destination, icon, and label based on current page.
 
-    URL is always current (write-through), so filter params are read directly
-    from it. Only focus needs computing from the node map.
+    Most filter params are read directly from the current URL. budget_id and
+    focus are exceptions: they're recomputed from stores, since the URL isn't
+    guaranteed to already reflect the latest store-budget-id/store-selected-id.
     """
     url_parsed = urlparse(url)
     query_param_dict = parse_qs(url_parsed.query)
@@ -166,6 +167,8 @@ def switch_graphs(
         dest_params = {k: v for k, v in query_param_dict.items() if k != "period"}
         if viewby:
             dest_params.setdefault("viewby", [str(viewby)])
+        if budget_id is not None:
+            dest_params["budget_id"] = [str(budget_id)]
         query_string = urlencode(dest_params, doseq=True)
         return (
             f"{treemap_path}?{query_string}",
@@ -180,6 +183,8 @@ def switch_graphs(
     dest_params = {k: v for k, v in query_param_dict.items() if k != "viewby"}
     if period:
         dest_params.setdefault("period", [str(period)])
+    if budget_id is not None:
+        dest_params["budget_id"] = [str(budget_id)]
     query_string = urlencode(dest_params, doseq=True)
     return (
         f"{timeseries_path}?{query_string}",
