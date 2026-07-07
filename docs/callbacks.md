@@ -31,6 +31,14 @@ active filters (`update_figure_from_filters`), storing the clicked node
 data pipeline — `fetch_treemap_data` and `transform_treemap_data` (both `@lru_cache`d) —
 because `app.py`'s startup cache-prewarming imports them directly from here.
 
+`store-selected-id` holds a short id that's only meaningful relative to the
+`store-treemap-node-map` that was current when it was set — changing `viewby` or
+`spending_type` rebuilds that map with different short ids. `update_figure_from_filters`
+tracks the `(viewby, spending_type)` pair that produced the current map in
+`store-treemap-hierarchy-key` and clears `store-selected-id` whenever that pair no longer
+matches, even if the mismatch happened while the user was on another page (this callback
+only runs on `/`, so it can't observe filter changes made elsewhere as they happen).
+
 ### `callback_timeseries.py`
 Callbacks for the timeseries page (`pages/timeseries.py`, `/timeseries`): rendering the
 bar chart from filters (`update_figure_from_filters`), CSV export
