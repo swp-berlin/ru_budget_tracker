@@ -285,14 +285,20 @@ def _resolve_filter_context(
     resolved_path = _resolve_selected_path(selected_node_id, compact_node_map, node_map, language)
     # Ancestor dim_ids from the clicked node's path context (for context-aware timeseries filtering).
     ancestor_dim_ids: tuple[int, ...] = ()
+    focus_dim_id: int | None = None
     if selected_node_id and compact_node_map:
         entry = compact_node_map.get(str(selected_node_id))
         if entry and isinstance(entry, dict):
             ancestor_dim_ids = tuple(int(x) for x in entry.get("ctx", []))
+            # If the selected dim isn't in the current budget's node_map (e.g. it only exists
+            # in a different budget year), remember its leaf id so we can still filter by it
+            # directly below, same as the URL deep-link fallback does.
+            leaf = entry.get("leaf")
+            if resolved_path is None and leaf is not None and str(leaf).isdigit():
+                focus_dim_id = int(leaf)
     # Deep-link fallback: compact_node_map is absent on fresh page loads, so short IDs
     # can't be decoded. Use ?focus=<dimension_id> from the URL instead.
-    focus_dim_id: int | None = None
-    if resolved_path is None and url_search:
+    if resolved_path is None and focus_dim_id is None and url_search:
         params = parse_qs(url_search.lstrip("?"))
         focus_raw = params.get("focus", [None])[0]
         if focus_raw:
