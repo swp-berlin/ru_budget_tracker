@@ -52,10 +52,10 @@ Deep data documentation for AI sessions: `.claude/data-guide.md`.
 ```bash
 uvx ruff check src/
 uvx ruff format src/
-uv run mypy src/
+uvx ty check
 ```
 
-Pre-commit hooks (Ruff, MyPy, detect-secrets) run automatically on commit.
+Pre-commit hooks (Ruff, ty, betterleaks) run automatically on commit.
 
 ## Architecture
 
@@ -65,11 +65,12 @@ This is a Dash (Plotly) multi-page dashboard for analyzing Russian government bu
 
 | Layer | Location | Role |
 |---|---|---|
-| UI / callbacks | `src/pages/`, `src/layout.py`, `src/callbacks.py` | Dash components and callback wiring |
+| UI / callbacks | `src/pages/`, `src/layout.py`, `src/callbacks/` | Dash components and callback wiring |
+| UI assets | `src/assets/` | Static CSS/fonts/icons auto-served by Dash; chart colors live separately in `src/utils/definitions.py` — see `docs/customization.md` |
 | Data fetching | `src/utils/fetch_*.py` | Queries DB, warms cache on startup |
 | Data transformation | `src/utils/transform_*.py`, `src/utils/calculate.py` | Shapes data for charts, unit conversions |
 | Database | `src/database/`, `src/models/` | SQLAlchemy + SQLite, Alembic migrations |
-| ETL / import | `src/scripts/` | Parses Excel/CSV, calls OpenAI for translations |
+| ETL / import | `src/scripts/` | Parses Excel/CSV, calls DeepL for translations |
 | Config | `src/settings.py` | Pydantic settings, reads from env vars |
 
 **Database:** SQLite with WAL mode and memory-mapped I/O pragmas. Core writable tables are `Budget`, `Dimension`, `Expense`, `ConversionRate`. Heavy read queries are backed by pre-computed SQL views (`LawClassifiedSpendingPerChapter`, `ReportClassifiedSpendingPerChapter`, etc.) — these are read-only SQLAlchemy models and should not be written to directly.
@@ -78,8 +79,26 @@ This is a Dash (Plotly) multi-page dashboard for analyzing Russian government bu
 
 **Caching:** Treemap and timeseries data is pre-warmed into an in-process cache on app startup (see `src/utils/fetch_*.py`). Cache population is triggered once at boot; keep cache keys stable when refactoring fetch functions.
 
-**Translations:** Dimension names are translated via OpenAI API (`src/scripts/translations.py`). Requires `OPENAI_API_KEY` in environment.
+**Translations:** Dimension names are translated via the DeepL API (`src/scripts/translations.py`). Requires `IMPORTER__DEEPL_API_KEY` in environment.
 
+## Documentation Map
+
+Check the relevant doc below before grepping the codebase cold — each covers one area in depth so you don't have to reconstruct it from source.
+
+| Need to know about... | Read |
+|---|---|
+| Setup, folder structure, deployment overview | `README.md` |
+| Operational handover notes (DB backup, deploy status, caching gotchas) | `HANDOVER.md` |
+| Changing colors, fonts, toolbar layout | `docs/customization.md` |
+| Callbacks architecture | `docs/callbacks.md` |
+| Database schema / SQLAlchemy models | `docs/models.md`, `docs/database.md` |
+| Data import pipeline, source file formats | `docs/data.md`, `docs/data-import-files.md`, `docs/scripts.md` |
+| Migrations | `docs/alembic.md` |
+| Static assets (CSS/icons) | `docs/assets.md`, `docs/assets-icons.md` |
+| Adding a new page | `docs/adding-a-page.md` |
+| Test tiers & blessed-data workflow | `docs/tests.md` |
+| Standalone importer component | `docs/importer.md` |
+| Deep data semantics for AI sessions | `.claude/data-guide.md` |
 
 ## Guidelines
 

@@ -71,7 +71,7 @@ or modify the necessary Secrets and Variables required for the deployment proces
 
 - `src/`: Main source code of the application.
   - `alembic/`: Database migration scripts and configurations. Refer to the [respective documentation](docs/alembic.md) for more details.
-  - `assets/`: Static assets served by Dash (icons, CSS).
+  - `assets/`: Static assets served by Dash (icons, CSS). See [`docs/customization.md`](docs/customization.md) for a guide to changing colors, fonts, and toolbar layout.
   - `callbacks/`: All Dash callbacks (shared and page-specific), plus their rendering/data-shaping helpers. Refer to the [respective documentation](docs/callbacks.md) for more details.
   - `data/`: Data files. Includes Database file as well as raw import data files. Refer to the [respective documentation](docs/data.md) for more details.
     - `import_files/`: Raw source files used by the import scripts.
