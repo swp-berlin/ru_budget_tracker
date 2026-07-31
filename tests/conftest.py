@@ -5,7 +5,7 @@ Tiers (see tests/README.md):
 - db: assertions against the locally built src/data/budget.db (skipped if absent).
 - golden: parses the real Excel/CSV files under src/data/import_files.
 - e2e: real import into a temporary database.
-- external: needs untracked third-party CSVs in .claude/validation/.
+- external: compares against the third-party CSVs in src/data/validation/.
 """
 
 import os
@@ -28,7 +28,7 @@ LAWS_DIR = IMPORT_FILES_DIR / "clean" / "laws"
 REPORTS_DIR = IMPORT_FILES_DIR / "clean" / "reports"
 TOTALS_DIR = IMPORT_FILES_DIR / "raw" / "totals"
 GOLDENS_DIR = REPO_ROOT / "tests" / "goldens"
-EXTERNAL_VALIDATION_DIR = REPO_ROOT / ".claude" / "validation"
+VALIDATION_DIR = REPO_ROOT / "src" / "data" / "validation"
 
 
 @pytest.fixture(scope="session")

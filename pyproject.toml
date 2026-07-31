@@ -45,7 +45,7 @@ markers = [
     "db: runs against the locally built src/data/budget.db (skipped if absent)",
     "golden: slow; parses the real Excel/CSV files under src/data/import_files",
     "e2e: slow; runs a real import into a temporary database",
-    "external: needs untracked third-party files (.claude/validation/*.csv)",
+    "external: cross-validation against third-party files (src/data/validation/*.csv)",
 ]
 
 # Ruff settings
@@ -73,7 +73,6 @@ module = [
     "dash_bootstrap_components.*",
     "plotly.*",
     "alembic.*",
-    "openai.*",
     "pandas.*",
     "networkx.*",
     "openpyxl.*",

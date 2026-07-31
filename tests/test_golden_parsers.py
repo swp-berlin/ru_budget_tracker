@@ -1,7 +1,7 @@
 """Golden characterization tests: parse every real law/report file, compare to goldens.
 
 Each golden in tests/goldens/ pins what the parser produced when the output was
-last validated against official sources (see .claude/learnings.md). Any diff means
+last validated against official sources. Any diff means
 parser behavior changed: either a regression, or a deliberate change — in which
 case regenerate via `make test-regen-goldens` and explain the change in the commit.
 """

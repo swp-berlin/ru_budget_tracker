@@ -7,7 +7,6 @@ logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
 
-openai_api_key = importer_settings.deepl_api_key
 download_link = importer_settings.nextcloud_download_link
 archive_output_path = importer_settings.archive_output_file
 extract_output_dir = importer_settings.base_dir

@@ -10,8 +10,6 @@ cent; the previous aggregate-VR import overcounted in 22 of them.
 Reports only: law files' printed "ВСЕГО" legitimately differs from the
 ved-structure leaf sum (~445M ₽ in law_2025 — a property of the file, confirmed
 by an independent parse), so there is no analogous law check.
-
-Ported from .claude/validation/official_totals.py (untracked).
 """
 
 import re

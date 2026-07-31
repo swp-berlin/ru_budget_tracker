@@ -52,7 +52,7 @@ make quality-report  # data-quality report → src/data/quality/report.md (track
 Fixtures (goldens, frozen totals) protect **blessed** data; new files show up as skips
 and in the quality report until blessed deliberately (`make test-regen-goldens`,
 `make test-regen-frozen`) in a commit whose message explains why the numbers changed.
-Deep data documentation for AI sessions: `.claude/data-guide.md`.
+Deep data documentation: `docs/data-guide.md`.
 
 **Lint / format / typecheck:**
 ```bash
@@ -75,7 +75,7 @@ This is a Dash (Plotly) multi-page dashboard for analyzing Russian government bu
 | Data fetching | `src/utils/fetch_*.py` | Queries DB, warms cache on startup |
 | Data transformation | `src/utils/transform_*.py`, `src/utils/calculate.py` | Shapes data for charts, unit conversions |
 | Database | `src/database/`, `src/models/` | SQLAlchemy + SQLite, Alembic migrations |
-| ETL / import | `src/scripts/` | Parses Excel/CSV, calls OpenAI for translations |
+| ETL / import | `src/scripts/` | Parses Excel/CSV, calls DeepL for translations |
 | Config | `src/settings.py` | Pydantic settings, reads from env vars |
 
 **Database:** SQLite with WAL mode and memory-mapped I/O pragmas. `src/data/budget.db` is a build artifact, not committed — `db`-tier tests skip when it is absent. Core writable tables are `Budget`, `Dimension`, `Expense`, `ConversionRate`. Heavy read queries are backed by pre-computed SQL views (`LawClassifiedSpendingPerChapter`, `ReportClassifiedSpendingPerChapter`, etc.) — these are read-only SQLAlchemy models and should not be written to directly.
@@ -84,7 +84,7 @@ This is a Dash (Plotly) multi-page dashboard for analyzing Russian government bu
 
 **Caching:** Treemap and timeseries data is pre-warmed into an in-process cache on app startup (see `src/utils/fetch_*.py`). Cache population is triggered once at boot; keep cache keys stable when refactoring fetch functions.
 
-**Translations:** Dimension names are translated via OpenAI API (`src/scripts/translations.py`). Requires `OPENAI_API_KEY` in environment.
+**Translations:** Dimension names are translated via the DeepL API (`src/scripts/translations.py`). Requires `DEEPL_API_KEY` in environment; `DEEPL_SERVER_URL` optionally overrides the free/pro endpoint the client picks from the key suffix.
 
 
 ## Guidelines

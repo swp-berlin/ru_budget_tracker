@@ -47,11 +47,11 @@ git diff tests/fixtures/frozen_budget_totals.json src/data/quality/
 | Import exits 1: "N ERROR-severity data issue(s) … data was written" | e.g. unresolved dimension parents, printed total off by ≥ 0.1% | Read `src/data/quality/issues/<file>.json`; data is in the DB but do not bless until understood |
 | `make test`: skips like "no golden for X — unblessed" | New data awaiting blessing | Expected; bless when the quality report looks good |
 | `make test`: a BLESSED golden/fixture fails | Regression — parser, dependency, or data changed under you | Investigate before touching fixtures; `generate_goldens.py --dump-rows <stem>` diffs row level |
-| Quality report WARNINGs (`law_detail_exceeds_total`, printed-total 1₽–0.1%, `unblessed_items`) | Source inconsistencies or pending blessings; import is fine | Review when convenient; documented in `.claude/findings-2026-07.md` |
+| Quality report WARNINGs (`law_detail_exceeds_total`, printed-total 1₽–0.1%, `unblessed_items`) | Source inconsistencies or pending blessings; import is fine | Review when convenient; each finding is itemized in `src/data/quality/report.md` |
 | Quality report exit 1 (ERROR findings) | Structural DB problem (undimensioned LAW/REPORT expenses, dangling links) | Should never happen after a clean import — investigate immediately |
 
-Background reading for a new contributor (or AI session): `.claude/data-guide.md` — the
-data model, units, file quirks, and validation anchors in one place.
+Background reading for a new contributor: `docs/data-guide.md` — the data model,
+units, file quirks, and validation anchors in one place.
 
 ## Tiers
 
@@ -61,7 +61,7 @@ data model, units, file quirks, and validation anchors in one place.
 | `db` | Assertions against the locally built `src/data/budget.db` | the DB (not in git; skipped if absent) | seconds |
 | `golden` | Parse all real law/report/totals files, compare to `tests/goldens/*.json` | data files | ~6 min |
 | `e2e` | Real import of one report into a temporary DB | data files + alembic | ~1 min |
-| `external` | Cross-validation vs third-party CSVs in `.claude/validation/` | untracked CSVs | skipped if absent |
+| `external` | Cross-validation vs third-party CSVs in `src/data/validation/` | the DB + those CSVs | seconds |
 
 ## Running
 

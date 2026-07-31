@@ -2,9 +2,9 @@
 
 Where an ideal invariant is violated today, the CURRENT count is pinned
 (marked `characterization`) so the suite passes now but screams on change.
-Baselines verified 2026-07-03 against budget.db; the TOTAL-* baselines match
-.claude/learnings.md (zero/one-dim expenses are by design for totals budgets:
-one undimensioned grand total + chapter-only expenses per totals budget).
+Baselines verified 2026-07-03 against budget.db. Zero/one-dim expenses are by
+design for totals budgets: one undimensioned grand total + chapter-only
+expenses per totals budget.
 """
 
 import hashlib

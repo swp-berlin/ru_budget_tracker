@@ -2,13 +2,13 @@
 
 Fedbud.csv (report_2026_03.xlsx) and Fedlaw.csv (law_2025.xlsx) were produced
 by another person with a different parser. Comparison is per
-(agency, рзпр, ЦСР-stripped, VR) key. Ported from
-.claude/validation/compare_fedbud.py / compare_fedlaw.py.
+(agency, рзпр, ЦСР-stripped, VR) key.
 
-The CSVs are third-party data and not tracked in git (~20 MB); these tests
-skip when they are absent. Expected results as of 2026-07-03: report — 4,979
-keys, zero mismatches; law — all 3,156 DB keys match (108 keys exist only in
-the CSV because they are funded only in planning years 2026/2027).
+The CSVs live in src/data/validation/ (see the README there for their origin and
+column semantics); src/scripts/validation/ holds diagnostic versions of these
+comparisons that print the differing keys. Expected results as of 2026-07-03:
+report — 4,979 keys, zero mismatches; law — all 3,156 DB keys match (108 keys
+exist only in the CSV because they are funded only in planning years 2026/2027).
 """
 
 import sqlite3
@@ -19,12 +19,12 @@ import pytest
 
 from scripts.parsers.report_parser import parse_program_code
 
-from tests.conftest import EXTERNAL_VALIDATION_DIR
+from tests.conftest import VALIDATION_DIR
 
 pytestmark = pytest.mark.external
 
-FEDBUD_CSV = EXTERNAL_VALIDATION_DIR / "Fedbud.csv"
-FEDLAW_CSV = EXTERNAL_VALIDATION_DIR / "Fedlaw.csv"
+FEDBUD_CSV = VALIDATION_DIR / "Fedbud.csv"
+FEDLAW_CSV = VALIDATION_DIR / "Fedlaw.csv"
 
 
 def db_expense_keys(db_connection: sqlite3.Connection, budget_identifier: str) -> pd.Series:
@@ -90,7 +90,7 @@ def compare(theirs: pd.Series, ours: pd.Series, tolerance: float) -> tuple[int, 
     return mismatched, only_theirs, only_ours
 
 
-@pytest.mark.skipif(not FEDBUD_CSV.exists(), reason=f"untracked third-party CSV: {FEDBUD_CSV}")
+@pytest.mark.skipif(not FEDBUD_CSV.exists(), reason=f"missing third-party CSV: {FEDBUD_CSV}")
 def test_report_2026_03_matches_independent_parse(db_connection: sqlite3.Connection) -> None:
     theirs = csv_expense_keys(FEDBUD_CSV, value_column="Executed", multiplier=1.0)
     # Detail rows only (VR not divisible by 100) — matches what we import.
@@ -103,7 +103,7 @@ def test_report_2026_03_matches_independent_parse(db_connection: sqlite3.Connect
     assert (mismatched, only_theirs, only_ours) == (0, 0, 0)
 
 
-@pytest.mark.skipif(not FEDLAW_CSV.exists(), reason=f"untracked third-party CSV: {FEDLAW_CSV}")
+@pytest.mark.skipif(not FEDLAW_CSV.exists(), reason=f"missing third-party CSV: {FEDLAW_CSV}")
 def test_law_2025_matches_independent_parse(db_connection: sqlite3.Connection) -> None:
     # Law CSV values are thousands ₽; Budget = first planning year (2025), the
     # only one we import. Rows with an empty Budget (funded only in 2026/2027)
