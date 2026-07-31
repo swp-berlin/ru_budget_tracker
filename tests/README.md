@@ -1,7 +1,7 @@
 # Test suite
 
 Characterization tests for the data-import pipeline: they pin **blessed** behavior
-(validated against official sources, see `.claude/learnings.md`) so that any change
+(validated against official sources) so that any change
 to it fails loudly and deliberately. A failure on a blessed item means either a
 regression, or an intentional change — in which case regenerate the affected
 fixtures **in a commit whose message explains why the numbers changed**.
@@ -58,7 +58,7 @@ data model, units, file quirks, and validation anchors in one place.
 | Marker | What | Needs | Speed |
 |---|---|---|---|
 | *(none)* | Pure parser functions, synthetic inputs | nothing | < 1 s |
-| `db` | Assertions against the checked-in `src/data/budget.db` | the DB | seconds |
+| `db` | Assertions against the locally built `src/data/budget.db` | the DB (not in git; skipped if absent) | seconds |
 | `golden` | Parse all real law/report/totals files, compare to `tests/goldens/*.json` | data files | ~6 min |
 | `e2e` | Real import of one report into a temporary DB | data files + alembic | ~1 min |
 | `external` | Cross-validation vs third-party CSVs in `.claude/validation/` | untracked CSVs | skipped if absent |
@@ -89,8 +89,10 @@ uv run --group dev python tests/generate_goldens.py --dump-rows report_2024_03
 
 ## Comparing against a prior database version
 
+`budget.db` is not in git, so keep a copy of the old one *before* rebuilding:
+
 ```bash
-git show <rev>:src/data/budget.db > /tmp/prior.db
+cp src/data/budget.db /tmp/prior.db     # before `make download-and-bootstrap-data`
 make test-compare-db prior=/tmp/prior.db
 ```
 

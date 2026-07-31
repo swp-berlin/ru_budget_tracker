@@ -4,7 +4,7 @@ The only test of the DB-write path (save_budget / save_dimensions / save_expense
 + the alembic schema); the parser side is covered per-file by the golden tier.
 Runs via subprocess because database/sessions.py binds the engine to
 settings.database at import time — the env must be set before interpreter start.
-Writes only to pytest's tmp_path; the checked-in src/data/budget.db is untouched.
+Writes only to pytest's tmp_path; the local src/data/budget.db is untouched.
 """
 
 import json

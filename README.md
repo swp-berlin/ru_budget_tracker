@@ -73,7 +73,7 @@ or modify the necessary Secrets and Variables required for the deployment proces
   - `alembic/`: Database migration scripts and configurations. Refer to the [respective documentation](src/alembic/README.md) for more details.
   - `assets/`: Static assets served by Dash (icons, CSS).
   - `callbacks.py`: Global Dash callbacks registered at app startup.
-  - `data/`: Data files. Includes Database file as well as raw import data files. Refer to the [respective documentation](src/data/README.md) for more details.
+  - `data/`: Data files — raw import data files (tracked) and the generated `budget.db` (**not** tracked, see [respective documentation](src/data/README.md)).
     - `import_files/`: Raw source files used by the import scripts.
   - `database/`: Database connection and session management. Refer to the [respective documentation](src/database/README.md) for more details.
   - `layout.py`: Top-level Dash app layout and navigation structure.
@@ -109,17 +109,26 @@ or modify the necessary Secrets and Variables required for the deployment proces
       uv sync
       ```
 
-3. **Database Initialization**
-   Initialize the database and run migrations using Alembic via the [Makefile](Makefile):
+3. **Get the Data and Build the Database**
+   `src/data/budget.db` is **not** part of the repository — it is a build artifact. A fresh
+   clone has no database and must build one from the source files hosted on Nextcloud:
 
    ```bash
-   make alembic-upgrade
+   make download-and-bootstrap-data
    ```
 
-4. **Import Initial Data**
-   Import data using the `make` targets (run in order from the project root):
+   This downloads the raw files, recreates the schema via Alembic, runs the full import and
+   the quality report. It requires a `.env.importer` file with at least
+   `NEXTCLOUD_DOWNLOAD_LINK` and `DEEPL_API_KEY` — see
+   [`src/importer/README.md`](src/importer/README.md). Without it (or without those secrets)
+   there is no way to obtain the database; ask a maintainer for the Nextcloud link.
+
+4. **Import Steps Individually (optional)**
+   If the source files are already in place, the import can also be run step by step with the
+   `make` targets (in order, from the project root):
 
    ```bash
+   make alembic-upgrade   # create/upgrade the schema
    make import-fix        # fix corrupt source files first
    make import-budget     # import all budget laws and reports
    make import-totals-all # import default report + law totals files
@@ -270,6 +279,11 @@ erDiagram
 
 Component to import data and generate the budget.db
 See [here for documentation](src/importer/README.md)
+
+Since `budget.db` is not in the repository, this is the only way the database comes into
+existence — locally via `make download-and-bootstrap-data`, and in deployment via the importer
+container (`Dockerfile.importer`, whose entrypoint runs the same target). The app container
+reads the resulting file from the mounted data volume; it does not ship a database.
 
 
 ### How to mount volumes

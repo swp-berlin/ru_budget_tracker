@@ -26,7 +26,13 @@ make alembic-revision m="description" rev-id="0001"  # create migration
 make alembic-downgrade                            # rollback latest
 ```
 
-**Data import (run in order after migrations):**
+**Get the data** — `src/data/budget.db` is not version-controlled; it is rebuilt from the
+Nextcloud source files. Needs `.env.importer` with `NEXTCLOUD_DOWNLOAD_LINK` and `DEEPL_API_KEY`.
+```bash
+make download-and-bootstrap-data   # download + rebuild-db + full import + quality report
+```
+
+**Data import (individual steps, in order after migrations):**
 ```bash
 make import-fix
 make import-budget [years="2023 2024"]
@@ -72,7 +78,7 @@ This is a Dash (Plotly) multi-page dashboard for analyzing Russian government bu
 | ETL / import | `src/scripts/` | Parses Excel/CSV, calls OpenAI for translations |
 | Config | `src/settings.py` | Pydantic settings, reads from env vars |
 
-**Database:** SQLite with WAL mode and memory-mapped I/O pragmas. Core writable tables are `Budget`, `Dimension`, `Expense`, `ConversionRate`. Heavy read queries are backed by pre-computed SQL views (`LawClassifiedSpendingPerChapter`, `ReportClassifiedSpendingPerChapter`, etc.) — these are read-only SQLAlchemy models and should not be written to directly.
+**Database:** SQLite with WAL mode and memory-mapped I/O pragmas. `src/data/budget.db` is a build artifact, not committed — `db`-tier tests skip when it is absent. Core writable tables are `Budget`, `Dimension`, `Expense`, `ConversionRate`. Heavy read queries are backed by pre-computed SQL views (`LawClassifiedSpendingPerChapter`, `ReportClassifiedSpendingPerChapter`, etc.) — these are read-only SQLAlchemy models and should not be written to directly.
 
 **Routing:** App URL base pathname is configured via `settings.py`. All Dash callback pathname guards must use `get_relative_path()` (from `dash`) — never hardcode strings like `"/timeseries"`. See `src/pages/` for examples.
 

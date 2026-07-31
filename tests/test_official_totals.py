@@ -23,7 +23,7 @@ import pytest
 
 from tests.golden_utils import report_files
 
-# Needs both the checked-in DB and the real report Excel files.
+# Needs both the local DB and the real report Excel files.
 pytestmark = [pytest.mark.db, pytest.mark.golden]
 
 DB_SUM_QUERY = """
