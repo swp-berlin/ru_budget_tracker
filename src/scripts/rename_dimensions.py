@@ -40,12 +40,15 @@ logger = logging.getLogger(__name__)
 # TRANSFORMATIONS
 # =============================================================================
 
-# Strip "<prefix> "title" trailing" -> "title trailing". Quotes are " or '.
+# Strip "<prefix> "title" trailing" -> "title trailing". Quotes are " or '. The
+# closing quote must be the same character as the opening one (\1), otherwise an
+# apostrophe inside the title closes the match early: "Russia's Space Activities"
+# used to become 'Russias Space Activities"' - apostrophe eaten, quote dangling.
 PROGRAM_PREFIX_RU = re.compile(
-    r'^Государственная программа Российской Федерации\s*["\'](.+?)["\'](.*)$'
+    r'^Государственная программа Российской Федерации\s*(["\'])(.+?)\1(.*)$'
 )
 PROGRAM_PREFIX_EN = re.compile(
-    r'^State Program of the Russian Federation\s*["\'](.+?)["\'](.*)$',
+    r'^State Program of the Russian Federation\s*(["\'])(.+?)\1(.*)$',
     re.IGNORECASE,
 )
 
@@ -63,7 +66,7 @@ def strip_program_prefix(value: str | None) -> str | None:
     for pattern in (PROGRAM_PREFIX_RU, PROGRAM_PREFIX_EN):
         match = pattern.match(value)
         if match:
-            return (match.group(1) + match.group(2)).strip()
+            return (match.group(2) + match.group(3)).strip()
     return value
 
 
