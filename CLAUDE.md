@@ -61,7 +61,7 @@ uvx ruff format src/
 uv run mypy src/
 ```
 
-Pre-commit hooks (Ruff, MyPy, detect-secrets) run automatically on commit.
+Pre-commit hooks (Ruff, ty, betterleaks) run automatically on commit.
 
 ## Architecture
 

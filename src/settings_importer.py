@@ -3,7 +3,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class ImporterSettings(BaseSettings):
-
     model_config = SettingsConfigDict(
         env_file="../.env.importer",
         env_file_encoding="utf-8",
@@ -53,4 +52,5 @@ class ImporterSettings(BaseSettings):
     #     return self.data_dir / "reports"
 
 
-importer_settings = ImporterSettings()
+# deepl_api_key / nextcloud_download_link come from the environment (.env.importer).
+importer_settings = ImporterSettings()  # ty: ignore[missing-argument]

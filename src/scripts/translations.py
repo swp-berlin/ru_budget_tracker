@@ -138,9 +138,8 @@ def translate_names_batch(names: List[str], translator: deepl.Translator) -> Dic
 
     for attempt in range(RETRY_ATTEMPTS):
         try:
-            results = translator.translate_text(names, source_lang="RU", target_lang="EN-US")
-            if not isinstance(results, list):
-                results = [results]
+            response = translator.translate_text(names, source_lang="RU", target_lang="EN-US")
+            results = [response] if isinstance(response, deepl.TextResult) else response
             translations = {name: result.text for name, result in zip(names, results)}
             logger.debug(f"Translated batch of {len(translations)} names")
             return translations
