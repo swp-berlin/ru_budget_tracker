@@ -40,7 +40,7 @@
       "status": "warning",
       "severity": "WARNING",
       "description": "LAW ved-structure chapter sums must not exceed the official chapter totals from the PDF appendix (TOTAL-LAW-EXPENSE, thousands ×1000). Positive gaps are classified spending; an EXCESS means the two official sources disagree (or a totals-CSV transcription slip) and shows as negative classified spending in the app",
-      "finding_count": 14,
+      "finding_count": 11,
       "findings": [
         {
           "year": "2018",
@@ -118,27 +118,6 @@
           "law_detail_rub": 1074191872200.0,
           "official_total_rub": 969200000000.0,
           "excess_rub": 104991872200.0
-        },
-        {
-          "year": "2026",
-          "chapter": "05",
-          "law_detail_rub": 2025968919100.0,
-          "official_total_rub": 1996122000000.0,
-          "excess_rub": 29846919100.0
-        },
-        {
-          "year": "2026",
-          "chapter": "10",
-          "law_detail_rub": 7244476311800.0,
-          "official_total_rub": 7103486600000.0,
-          "excess_rub": 140989711800.0
-        },
-        {
-          "year": "2026",
-          "chapter": "12",
-          "law_detail_rub": 148211395200.0,
-          "official_total_rub": 146294300000.0,
-          "excess_rub": 1917095200.0
         }
       ]
     },
