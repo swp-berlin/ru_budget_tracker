@@ -170,7 +170,11 @@ Source: [https://minfin.gov.ru/ru/document?id_4=80042-kratkaya_ezhemesyachnaya_i
 
 **Law totals** (`total_law_YYYY.csv`): Annual budget law allocations by chapter. Used for comparing planned vs actual spending. These originate from russian bgd PDF reports.
 
-**Caveat:** transcribe chapter totals from the **enacted law** («бюджет для граждан» *law* edition), not the draft. The 2026 totals currently come from `bdg draft 26-28.pdf` (no law edition was available yet); the enacted law added e.g. +141bn ₽ to Social Policy, so ved-structure detail exceeds these draft totals for chapters 05/10/12 — the app then (correctly) hides the negative classified-spending nodes, and `make quality-report` flags them under `law_detail_exceeds_total`. Update the CSV when the enacted-law figures are available.
+**Caveat:** transcribe chapter totals from the **enacted law** («бюджет для граждан» *law* edition), not the draft. The 2026 totals originally came from `bdg draft 26-28.pdf` (no law edition was available yet) and were corrected once the enacted brochure appeared — the enacted law added e.g. +141bn ₽ to Social Policy, so ved-structure detail exceeded the draft totals and the app (correctly) hid the negative classified-spending nodes.
+
+**2018 and 2021 have the same symptom with no available fix**: MinFin's *law*-edition brochures for those years reprint the **draft** chapter chart (verified numerically identical to `bdg draft 18-20.pdf` / `bdg draft 21-23.pdf`), so chapters topped up in the Duma's second reading (05/06/07/08/11/12/14 in 2018; 05/08/11/14 in 2021) show ved detail above the printed totals — flagged permanently under `law_detail_exceeds_total`. The grand totals are the correct enacted ст.6 figures, and no public source publishes enacted open+closed chapter totals (the law's appendices contain only the open part). If enacted chapter figures ever surface, re-transcribe those two years.
+
+**Known misprint pending fix:** the 2021 law brochure prints chapter 13 (debt service) as 1 230.9bn; the correct figure is **1 203.9bn** (the chapters otherwise over-sum the law's own grand total by exactly 26.9bn, the draft prints 1 203.9, and ved detail is 1 203.85 in a chapter with no classified spending). Fix `total_law_2021.csv` (1230900000 → 1203900000) **at the Nextcloud source** — a local edit is overwritten by the next `make download-data` — then re-import totals and re-bless `TOTAL-LAW-EXPENSE-2021`.
 
 ### `raw/conversion_tables/`
 

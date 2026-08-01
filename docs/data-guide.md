@@ -132,15 +132,32 @@ full differential re-import (compare_dbs: 251 budgets, 1,386 chapter sums identi
 
 ## Open data issues
 
-The one substantive open item: **law chapter-years where the ved-structure detail exceeds
-the PDF-transcribed chapter total** (up to ~+105bn ₽) → negative classified spending in the
-app for those cells. They surface as the `law_detail_exceeds_total` WARNING; the current
-list, per year and chapter, is in `src/data/quality/report.md`.
+**Law chapter-years where the ved-structure detail exceeds the transcribed chapter
+total** (up to ~+105bn ₽) → negative classified spending in the app for those cells
+(the app hides them: `classified_spending > 0` filter). They surface as the
+`law_detail_exceeds_total` WARNING; the current list, per year and chapter, is in
+`src/data/quality/report.md`.
 
-The parser is exonerated (LAW-2025 matches the independent Fedlaw parse on all 3,156 keys),
-so the discrepancy is on the totals side. The affected cells cluster in **2018 and 2021**
-— the largest being 2018 chapter 14 (+24.7bn) and 2021 chapter 14 Межбюджетные трансферты
-(+105bn). Two candidate causes, both needing a human pass over the source PDFs in
-`raw/totals/pdf_source_law_totals`: a transcription slip in the hand-made
-`total_law_*.csv`, or a genuine edition mismatch (the ved-structure xlsx being the *amended*
-law while the PDF appendix is the *original enacted* one — 2021 amendments were large).
+Root cause, established 2026-08-01 by comparing all four source brochures in
+`raw/totals/pdf_source_law_totals`: **MinFin's 2018 and 2021 "law"-edition «Бюджет
+для граждан» brochures reprint the draft chapter chart** (numerically identical to
+the draft brochures for year 1). The Duma's second reading tops up exactly the small
+chapters (05/06/07/08/11/12/14 in 2018; 05/08/11/14 in 2021), so the enacted
+ved-structure detail legitimately exceeds those stale draft-era totals. Control:
+2020, whose draft and law brochures differ, shows the identical chapter signature
+between its two editions. Ruled out: transcription slips (every CSV value matches
+its brochure to the digit) and amended-edition xlsx files (all law files were pulled
+from budget.gov.ru the same day; the 2020 file matches the enacted brochure despite
+that law's later large amendments). Since the law's own appendices publish only the
+open part, no public source for enacted open+closed chapter totals exists — the
+warnings are documented as a permanent source caveat, not fixable data.
+
+Two genuine source errors found by the same investigation:
+- **2021 chapter 13 is a brochure misprint**: printed 1,230.9bn, should be 1,203.9bn
+  (chapters over-sum the law's ст.6 grand total by exactly 26.9bn; the draft prints
+  1,203.9; ved detail is 1,203.85 and debt service has no classified part). Until
+  the CSV is fixed at the Nextcloud source, the app fabricates ~27bn of phantom
+  classified debt service in LAW-2021.
+- **2023 chapters sum 16.7bn *below* the grand total** — same family, currently
+  unflagged (the check only flags per-chapter excess, and the gap sits in the
+  chapter-14 positive direction).
