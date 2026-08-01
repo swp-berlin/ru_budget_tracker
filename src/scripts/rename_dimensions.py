@@ -5,12 +5,25 @@ Cleans up dimension names in the database for better display. Runs after
 import + translation. All transformations are idempotent.
 
 Transformations (applied in order):
+    0. Quote normalization (all types, name_translated only):
+         curly “ ” -> ", curly ‘ ’ -> ', and a trailing `,"` -> `"`.
+       DeepL emits both quote styles, often unpaired, which breaks the
+       back-referenced quote matching the strip rules rely on.
     1. Program-title prefix strip (type == PROGRAM, name + name_translated):
          Государственная программа Российской Федерации "xyz" ...  ->  xyz ...
          State Program of the Russian Federation "xyz" ...         ->  xyz ...
        The quoted title and any trailing text are kept; the prefix and the
        surrounding quotes are removed.
-    2. Federation short-form (all types, name + name_translated):
+    2. Program type-label strip (type == PROGRAM, name_translated only):
+         Main Event: "xyz"          ->  xyz
+         "xyz" Federal Project      ->  xyz
+         Subprogram: xyz            ->  xyz
+       DeepL renders the Russian type prefixes (Основное мероприятие,
+       Федеральный проект, Подпрограмма, ...) with wildly varying English
+       wording, position and punctuation; PROGRAM_TYPE_LABELS lists what it
+       actually produced. Applied repeatedly because the source data nests
+       type labels (Основное мероприятие "Приоритетный проект "xyz"").
+    3. Federation short-form (all types, name + name_translated):
          Российск.. Федерац..  ->  РФ
          Russian Federation    ->  RF
 
@@ -52,6 +65,54 @@ PROGRAM_PREFIX_EN = re.compile(
     re.IGNORECASE,
 )
 
+# English renderings DeepL produced for each Russian program type prefix. Keyed
+# by the Russian prefix so the inventory stays traceable; the values are the
+# label alone - articles, punctuation and the quoted title are handled below.
+PROGRAM_TYPE_LABELS = {
+    "Государственная программа Российской Федерации": (
+        r"State Program of the (?:Russian Federation|RF)"
+    ),
+    "Комплекс процессных мероприятий": (
+        r"(?:Set|Series|Complex|Program|Package) of [\w\s-]{0,40}?"
+        r"(?:Measures|Activities|Initiatives|Events|Actions)"
+    ),
+    "Подпрограмма": r"Subprogram(?:me)?",
+    "Основное мероприятие": (
+        r"(?:Main|Key|Flagship) (?:Event|Activity|Initiative|Project|Program|Measure)"
+    ),
+    "Федеральный проект": r"Federal Project",
+    "Национальный проект": r"National Project",
+    "Приоритетный проект": r"Priority Project",
+    "Ведомственный проект": (
+        r"(?:Departmental|Agency|Agency-Level|Agency-led|Ministry|Ministry-led)"
+        r" (?:Project|Draft|Bill)"
+    ),
+    "Ведомственная целевая программа": r"(?:Departmental|Ministry-Level) Targeted Program",
+    "Федеральная целевая программа": r"Federal Target Program",
+}
+
+_LABEL = r"(?:A|An|The)?\s*(?:" + "|".join(PROGRAM_TYPE_LABELS.values()) + r")"
+# What DeepL put between the label and the title: "titled", "for", ":" or ",".
+_LINK = r"(?:\s+titled|\s+named|\s+for|\s+aimed at)?\s*[:,]?\s*"
+
+# The three shapes DeepL used, most specific first. All of them require either a
+# quoted title (with the same back-reference as above, so an apostrophe inside
+# the title cannot close it) or an explicit colon, so a title that merely starts
+# with a label word - "Federal Target Program for the Development of the
+# Kaliningrad Region ..." - is left alone.
+LABEL_RULES = [
+    # Main Event: "xyz" (trailing)  ->  xyz (trailing)
+    (re.compile(rf'^{_LABEL}{_LINK}(["\'])(.+)\1(.*)$', re.IGNORECASE), (2, 3)),
+    # The "xyz" Federal Project     ->  xyz   (labels stack: "xyz" A B)
+    (re.compile(rf'^(?:The\s+)?(["\'])(.+)\1(?:\s+{_LABEL})+$', re.IGNORECASE), (2,)),
+    # Subprogram: xyz               ->  xyz
+    (re.compile(rf'^{_LABEL}\s*:\s*(?![\'"])(.+)$', re.IGNORECASE), (1,)),
+]
+
+# Quote normalization, applied to every translated name before the strip rules.
+CURLY_QUOTES = str.maketrans({"“": '"', "”": '"', "‘": "'", "’": "'"})
+TRAILING_COMMA_QUOTE = re.compile(r',(["\'])$')
+
 # Federation short-form. \w* covers all declension endings (and truncated source
 # values); IGNORECASE covers the all-caps ministry names. The leading \b prevents
 # matching inside larger words such as "Всероссийской федерации" (a sports org).
@@ -70,6 +131,35 @@ def strip_program_prefix(value: str | None) -> str | None:
     return value
 
 
+def normalize_quotes(value: str | None) -> str | None:
+    """Fold DeepL's curly quotes to straight ones and drop the `,"` artifact."""
+    if not value:
+        return value
+    return TRAILING_COMMA_QUOTE.sub(r"\1", value.translate(CURLY_QUOTES))
+
+
+def _strip_type_label_once(value: str) -> str:
+    """Strip one leading/trailing program type label, if any rule matches."""
+    for pattern, groups in LABEL_RULES:
+        match = pattern.match(value)
+        if match:
+            stripped = "".join(match.group(group) for group in groups).strip()
+            if stripped:
+                return stripped
+    return value
+
+
+def strip_type_label(value: str | None) -> str | None:
+    """Strip program type labels until none is left (labels can be nested)."""
+    if not value:
+        return value
+    while True:
+        stripped = _strip_type_label_once(value)
+        if stripped == value:
+            return value
+        value = stripped
+
+
 def shorten_federation(value: str | None) -> str | None:
     """Replace the long 'Russian Federation' forms with the short form."""
     if not value:
@@ -80,9 +170,17 @@ def shorten_federation(value: str | None) -> str | None:
 
 
 def normalize_name(value: str | None, is_program: bool) -> str | None:
-    """Apply all transformations in order to a single name."""
+    """Apply all transformations in order to a single Russian name."""
     if is_program:
         value = strip_program_prefix(value)
+    return shorten_federation(value)
+
+
+def normalize_translated_name(value: str | None, is_program: bool) -> str | None:
+    """Apply all transformations in order to a single English name."""
+    value = normalize_quotes(value)
+    if is_program:
+        value = strip_type_label(strip_program_prefix(value))
     return shorten_federation(value)
 
 
@@ -113,7 +211,7 @@ def compute_changes() -> List[Tuple[int, str | None, str | None, str | None, str
     for dim_id, dim_type, name, name_translated in rows:
         is_program = dim_type == "PROGRAM"
         new_name = normalize_name(name, is_program)
-        new_translated = normalize_name(name_translated, is_program)
+        new_translated = normalize_translated_name(name_translated, is_program)
         if new_name != name or new_translated != name_translated:
             changes.append((dim_id, new_name, new_translated, name, name_translated))
 
