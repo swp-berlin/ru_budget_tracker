@@ -22,6 +22,7 @@ from callbacks.helper import build_server_node_map, get_unit_label
 from utils.calculate import Calculator
 from utils.definitions import (
     BudgetTypeLiteral,
+    Colors,
     LanguageTypeLiteral,
     PeriodTypeLiteral,
     SpendingTypeLiteral,
@@ -147,9 +148,11 @@ def generate_figure(
         y="expenses",
         color="types",
         barmode="stack",
+        # Open spending takes a brand tint; classified reuses the treemap's gray, which
+        # is deliberately outside the palette because it marks "no category identity".
         color_discrete_map={
-            "OPEN": "#1f77b4",
-            "CLASSIFIED": "#cccccc",
+            "OPEN": Colors.BRAND_BLUE_DARK,
+            "CLASSIFIED": Colors.CLASSIFIED_GRAY,
         },
         template="none",
     )

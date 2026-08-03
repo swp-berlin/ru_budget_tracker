@@ -14,12 +14,14 @@ from callbacks.helper import (
     build_compact_node_map,
     build_name_cols,
     create_treemap_colors,
+    create_treemap_text_colors,
     get_unit_label,
     shape_dataframe,
 )
 from utils.calculate import Calculator
 from utils.definitions import (
     BudgetTypeLiteral,
+    Colors,
     SpendingTypeLiteral,
     UnitTypeLiteral,
     ViewByDimensionTypeLiteral,
@@ -159,10 +161,12 @@ def _prepare_trace_overrides(
     colors = create_treemap_colors(
         node_ids,
         budget_types,
+        values,
         spending_type,
         viewby,
         program_label_to_orig_id or None,
     )
+    text_colors = create_treemap_text_colors(colors)
 
     # Replace long path-string ids with short integer ids to reduce JSON payload.
     # The root virtual node keeps its empty-string id; all others get sequential integers.
@@ -174,6 +178,7 @@ def _prepare_trace_overrides(
         ids=[path_to_short_id.get(nid, nid) for nid in node_ids],
         parents=[path_to_short_id.get(p, p) for p in parents],
         marker_colors=colors,
+        textfont_color=text_colors,
         pathbar_textfont_size=18,  # Max size of pathbar text. Increase with text size.
         marker_pad=dict(t=25, l=5, r=5, b=5),
         customdata=list(
@@ -225,7 +230,8 @@ def generate_figure(
         width=None,  # don't hardcode width
         height=None,  # don't hardcode height
         margin=dict(t=27, l=10, r=10, b=10),
-        font=dict(family="Source Sans 3", color="#444444"),
+        # Default for pathbar and title; tile labels are overridden per node above.
+        font=dict(family="Source Sans 3", color=Colors.TEXT_ON_LIGHT),
     )
 
     return fig, path_to_short_id

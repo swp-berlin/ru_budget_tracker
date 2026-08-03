@@ -213,73 +213,108 @@ MilitarySpending = _MilitarySpendingConfig()
 class _ColorsConfig(BaseModel):
     """Named color constants and computed chapter color mapping for the treemap.
 
-    ``filler_colors`` is a curated palette used for program nodes that have no
-    fixed color assignment; colors are picked deterministically by CRC32 hash.
-    ``color_mapping_chapters`` maps chapter orig_ids to their official colors.
+    All category colors come from the SWP corporate-design palette (six hues at
+    three tints). ``filler_colors`` is that palette as a flat list, used for program
+    nodes that have no fixed color assignment; they take slots by spending rank.
+    ``color_mapping_chapters`` maps chapter orig_ids onto the same slots.
     """
 
     model_config = ConfigDict(frozen=True)
 
+    # SWP corporate-design palette: six hues, three tints each.
+    BRAND_GOLD_DARK: str = "#B37C00"
+    BRAND_GOLD_MID: str = "#CDAC62"
+    BRAND_GOLD_LIGHT: str = "#E8D6B0"
+    BRAND_GREEN_DARK: str = "#699470"
+    BRAND_GREEN_MID: str = "#9BB79B"
+    BRAND_GREEN_LIGHT: str = "#D0DACD"
+    BRAND_TEAL_DARK: str = "#669199"
+    BRAND_TEAL_MID: str = "#99B5BA"
+    BRAND_TEAL_LIGHT: str = "#CCD9DB"
+    BRAND_BLUE_DARK: str = "#668FAD"
+    BRAND_BLUE_MID: str = "#99B5C7"
+    BRAND_BLUE_LIGHT: str = "#CCD9E3"
+    BRAND_MAUVE_DARK: str = "#B07A91"
+    BRAND_MAUVE_MID: str = "#C9A6B5"
+    BRAND_MAUVE_LIGHT: str = "#E3D1D9"
+    BRAND_SALMON_DARK: str = "#BF7873"
+    BRAND_SALMON_MID: str = "#D4A39E"
+    BRAND_SALMON_LIGHT: str = "#E6D1CF"
+
+    # Grays are deliberately outside the brand palette: they mark nodes that carry no
+    # category identity, so they must not collide with a chapter or program color.
     CLASSIFIED_GRAY: str = "#dddddd"
-    CULTURE_PINK: str = "#ffafcc"
-    ECONOMY_BLUE: str = "#80cbc4"
-    EDUCATION_PURPLE: str = "#cdb4db"
-    ENVIRONMENT_GREEN: str = "#81cf83"
-    GENERAL_STATE_BLUE: str = "#93c5fd"
-    HEALTHCARE_BLUE: str = "#8dd5e4"
-    HOUSING_ORANGE: str = "#f7bb73"
-    SERVICING_DEBT_YELLOW: str = "#ffd166"
-    INTERBUDGETARY_TRANSFERS_ORANGE: str = "#e0c097"
-    LAW_ENFORCEMENT_BLUE: str = "#b3c7ff"
-    MASS_MEDIA_PURPLE: str = "#b3c7ff"
-    MILITARY_GREEN: str = "#949d85"
     MINISTRY_GRAY: str = CLASSIFIED_GRAY
     ROOT_WHITE: str = "#ffffff"
-    SOCIAL_RED: str = "#e46a6a"
-    SPORT_GREEN: str = "#c6e48b"
+    # Root node in "Military only" mode; matches chapter 02 so the root reads as its total.
+    MILITARY_GREEN: str = BRAND_GREEN_DARK
+
+    # Label text. #444444 fails contrast on every dark tint (2.7-2.9:1); white clears
+    # the WCAG large-text threshold there (3.4-3.6:1), so dark-filled tiles flip to it.
+    TEXT_ON_LIGHT: str = "#444444"
+    TEXT_ON_DARK: str = "#ffffff"
 
     # Filler palette for nodes that don't match a CHAPTER or PROGRAM color mapping.
+    # Order is load-bearing: program colors index into this list by spending rank, so
+    # reordering repaints every program node. Dark tints come first so the largest
+    # programs get the most separable steps, as with the chapters below.
     filler_colors: list[str] = [
-        "#B37C00",
-        "#699470",
-        "#669199",
-        "#668FAD",
-        "#B07A91",
-        "#BF7873",
-        "#CDAC62",
-        "#9BB79B",
-        "#99B5BA",
-        "#99B5C7",
-        "#C9A6B5",
-        "#D4A39E",
-        "#E8D6B0",
-        "#D0DACD",
-        "#CCD9DB",
-        "#CCD9E3",
-        "#E3D1D9",
-        "#E6D1CF",
+        BRAND_GOLD_DARK,
+        BRAND_GREEN_DARK,
+        BRAND_TEAL_DARK,
+        BRAND_BLUE_DARK,
+        BRAND_MAUVE_DARK,
+        BRAND_SALMON_DARK,
+        BRAND_GOLD_MID,
+        BRAND_GREEN_MID,
+        BRAND_TEAL_MID,
+        BRAND_BLUE_MID,
+        BRAND_MAUVE_MID,
+        BRAND_SALMON_MID,
+        BRAND_GOLD_LIGHT,
+        BRAND_GREEN_LIGHT,
+        BRAND_TEAL_LIGHT,
+        BRAND_BLUE_LIGHT,
+        BRAND_MAUVE_LIGHT,
+        BRAND_SALMON_LIGHT,
     ]
 
-    # Color mapping for CHAPTERs based on the official color coding in the original dashboard.
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def color_mapping_chapters(self) -> dict[str, str]:
-        return {
-            "01": self.GENERAL_STATE_BLUE,
-            "02": self.MILITARY_GREEN,
-            "03": self.LAW_ENFORCEMENT_BLUE,
-            "04": self.ECONOMY_BLUE,
-            "05": self.HOUSING_ORANGE,
-            "06": self.ENVIRONMENT_GREEN,
-            "07": self.EDUCATION_PURPLE,
-            "08": self.CULTURE_PINK,
-            "09": self.HEALTHCARE_BLUE,
-            "10": self.SOCIAL_RED,
-            "11": self.SPORT_GREEN,
-            "12": self.MASS_MEDIA_PURPLE,
-            "13": self.SERVICING_DEBT_YELLOW,
-            "14": self.INTERBUDGETARY_TRANSFERS_ORANGE,
+    # Fills that need TEXT_ON_DARK label text — the six dark tints.
+    dark_fills: frozenset[str] = frozenset(
+        {
+            BRAND_GOLD_DARK,
+            BRAND_GREEN_DARK,
+            BRAND_TEAL_DARK,
+            BRAND_BLUE_DARK,
+            BRAND_MAUVE_DARK,
+            BRAND_SALMON_DARK,
         }
+    )
+
+    # Chapter colors, drawn from the SWP brand palette above.
+    #
+    # Slots are assigned by share of total spending, not by chapter number: the six
+    # largest chapters (~77% of spending) take the six dark tints, which are the most
+    # distinguishable steps the palette offers, and the smallest chapters take the
+    # light tints. Fourteen categories exceed what any palette can separate by color
+    # alone, so this ordering concentrates the unavoidable near-collisions on the
+    # tiles too small to read anyway; the treemap's own labels carry identity.
+    color_mapping_chapters: dict[str, str] = {
+        "01": BRAND_BLUE_DARK,  # National Issues, 6.9%
+        "02": BRAND_GREEN_DARK,  # National Defense, 11.5%
+        "03": BRAND_MAUVE_DARK,  # Security and Law Enforcement, 9.0%
+        "04": BRAND_TEAL_DARK,  # National Economy, 13.8%
+        "05": BRAND_SALMON_MID,  # Housing and Public Utilities, 3.0%
+        "06": BRAND_GREEN_MID,  # Environmental Protection, 1.7%
+        "07": BRAND_MAUVE_MID,  # Education, 5.2%
+        "08": BRAND_MAUVE_LIGHT,  # Culture, Cinema, 0.7%
+        "09": BRAND_TEAL_MID,  # Health Care, 5.6%
+        "10": BRAND_SALMON_DARK,  # Social Policy, 30.0%
+        "11": BRAND_GREEN_LIGHT,  # Physical Education and Sports, 0.3%
+        "12": BRAND_BLUE_MID,  # Mass Media, 0.5%
+        "13": BRAND_GOLD_DARK,  # Servicing State and Municipal Debt, 6.1%
+        "14": BRAND_GOLD_MID,  # Intergovernmental Transfers, 5.7%
+    }
 
 
 Colors = _ColorsConfig()

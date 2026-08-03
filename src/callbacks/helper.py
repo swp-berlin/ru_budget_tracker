@@ -2,7 +2,6 @@
 Miscellaneous utility functions
 """
 
-import zlib
 from functools import lru_cache
 
 import pandas as pd
@@ -26,10 +25,10 @@ def get_unit_label(unit: UnitTypeLiteral) -> str:
 def create_treemap_colors(
     node_ids: list[str],
     budget_types: list[str],
+    values: list[float],
     spending_type: SpendingTypeLiteral,
     viewby: ViewByDimensionTypeLiteral,
     program_label_to_orig_id: dict[str, str] | None = None,
-    seed: str = "abcd",
 ) -> list[str]:
     """Return a color for each treemap node, in the same order as node_ids.
 
@@ -37,26 +36,41 @@ def create_treemap_colors(
     military green in MILITARY mode); classified nodes are always gray. For all
     other nodes, the color depends on viewby — MINISTRY uses a fixed gray for
     ministry-level nodes and chapter colors below; CHAPTER uses chapter colors
-    directly; PROGRAM derives a color deterministically from the program's
-    language-agnostic orig_id via CRC32, using seed to control the distribution.
+    directly; PROGRAM assigns filler slots by descending spending rank of the
+    top-level program, so the largest programs get the six dark tints and any
+    two programs sharing a slot sit at least len(filler_colors) ranks apart.
 
     Args:
         node_ids: Slash-separated node paths, e.g. ``"ROOT/02 - Defence/0200 - …"``.
         budget_types: Budget type string for each node (e.g. ``"LAW"``, ``"CLASSIFIED"``).
+        values: Aggregated value per node, used to rank top-level programs.
         spending_type: Whether to render all spending or military only.
         viewby: The active hierarchy dimension driving color logic.
         program_label_to_orig_id: Optional mapping from display label to orig_id,
             used to keep program colors stable across UI language changes.
-        seed: Arbitrary string mixed into the PROGRAM hash so the color
-            distribution can be adjusted without changing the keys.
 
     Returns:
         List of hex color strings, one per node, in the same order as node_ids.
     """
 
-    def _stable_deterministic_color(seed: str, key: str) -> str:
-        index = zlib.crc32(f"{seed}:{key}".encode()) % len(Colors.filler_colors)
-        return Colors.filler_colors[index]
+    def _program_key(label: str) -> str:
+        # Program labels are plain names without an orig_id prefix (unlike CHAPTER/MINISTRY),
+        # so resolve them to the language-agnostic orig_id where possible; that keeps a
+        # program's color identical when the UI language changes.
+        return program_label_to_orig_id.get(label, label) if program_label_to_orig_id else label
+
+    program_rank: dict[str, int] = {}
+    if viewby == "PROGRAM":
+        # Rank the top-level programs (depth 2) by value, largest first. Sorting on the
+        # key as a tiebreaker keeps the order deterministic when values are equal.
+        totals: dict[str, float] = {}
+        for node_id, budget_type, value in zip(node_ids, budget_types, values):
+            parts = node_id.split("/")
+            if len(parts) != 2 or "CLASSIFIED" in budget_type.upper():
+                continue
+            totals[_program_key(parts[1])] = value
+        ranked = sorted(totals.items(), key=lambda item: (-item[1], item[0]))
+        program_rank = {key: rank for rank, (key, _) in enumerate(ranked)}
 
     colors: list[str] = []
     for node_id, budget_type in zip(node_ids, budget_types):
@@ -86,22 +100,29 @@ def create_treemap_colors(
             # Path is ROOT/Chapter/…; chapter is at index 1. Same orig_id extraction as above.
             color = Colors.color_mapping_chapters.get(parts[1].split(" ")[0], Colors.ROOT_WHITE)
         elif viewby == "PROGRAM":
-            # Program labels are plain names without an orig_id prefix (unlike CHAPTER/MINISTRY).
-            # Use the full PROGRAM_0 path segment to look up the language-agnostic orig_id so
-            # that the color stays identical when the UI language changes.
-            program_label = parts[1]
-            main_program_key = (
-                program_label_to_orig_id.get(program_label, program_label)
-                if program_label_to_orig_id
-                else program_label
+            # Every node inherits the color of its top-level program at parts[1], so a
+            # program's whole subtree reads as one block. Programs that outnumber the
+            # palette wrap around, but only far down the ranking where tiles are tiny.
+            rank = program_rank.get(_program_key(parts[1]))
+            color = (
+                Colors.filler_colors[rank % len(Colors.filler_colors)]
+                if rank is not None
+                else Colors.ROOT_WHITE
             )
-            color = _stable_deterministic_color(seed, main_program_key)
         else:
             color = Colors.ROOT_WHITE
 
         colors.append(color)
 
     return colors
+
+
+def create_treemap_text_colors(fill_colors: list[str]) -> list[str]:
+    """Return a label color per node: white on the dark tints, dark gray on the rest."""
+    return [
+        Colors.TEXT_ON_DARK if fill in Colors.dark_fills else Colors.TEXT_ON_LIGHT
+        for fill in fill_colors
+    ]
 
 
 def shape_for_spending_type(
