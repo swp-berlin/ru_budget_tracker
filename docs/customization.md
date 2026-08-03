@@ -11,23 +11,111 @@ manual look is the only way to confirm a change is correct before committing it.
 
 ## Change a chapter's color in the treemap
 
-Chapter colors (Education, Military, Healthcare, etc.) are defined in one place:
+All chart colors come from the SWP corporate-design palette — six hues (gold, green, teal,
+blue, mauve, salmon) at three tints each — defined in one place:
 [`src/utils/definitions.py`](../src/utils/definitions.py), in the `_ColorsConfig` class
-(starting around line 213). Each named constant is a hex color:
+(starting around line 213). Each slot is a named hex constant:
 
 ```python
-MILITARY_GREEN: str = "#949d85"
-EDUCATION_PURPLE: str = "#cdb4db"
+BRAND_GREEN_DARK: str = "#699470"
+BRAND_MAUVE_MID: str = "#C9A6B5"
 ```
 
-Change the hex value to recolor that chapter everywhere it appears (treemap, legends, exports).
-The mapping from official chapter code to color name lives just below, in
-`color_mapping_chapters` (around line 264) — you only need to touch this if you're
-reassigning which chapter uses which named color, not for a plain color swap.
+To recolor a chapter, don't edit these hex values — that would change the brand color
+everywhere it is used. Instead reassign which slot the chapter points at, in
+`color_mapping_chapters` (around line 302), where each entry is annotated with the
+chapter's name and its share of total spending:
 
-There's also a `filler_colors` list (around line 242) used for lower-level program nodes that
-don't have a fixed chapter color — edit that list the same way if you want to change the
-"unassigned" palette.
+```python
+"07": BRAND_MAUVE_MID,  # Education, 5.2%
+```
+
+(The percentages in those comments are undated and do not match any single budget year
+in the current database — treat them as a rough ordering hint, not as figures to cite.)
+
+Slots are assigned by spending share rather than chapter number, deliberately. Fourteen
+chapters is more than any palette can keep distinguishable by color alone, so the six dark
+tints — the most separable steps available — go to the six largest chapters (~77% of
+spending) and the light tints go to the smallest. If you reassign slots, keep that
+principle: give the darkest tints to the biggest chapters, or large neighbouring areas of
+the treemap will become hard to tell apart. Two chapters must never share a slot.
+
+## Change the colors in the treemap's program view
+
+Programs have no fixed color assignment the way chapters do — there are 56–64 top-level
+programs in a typical budget year and only 18 palette slots, so colors here separate
+neighbouring tiles rather than identify a category. The palette is the `filler_colors` list
+in the same file (around line 261): the same six hues, flattened, **dark tints first, then
+mid, then light**.
+
+Slots are handed out by spending rank. `create_treemap_colors` in
+[`src/callbacks/helper.py`](../src/callbacks/helper.py) ranks the top-level **tiles** by
+value, largest first, and gives rank *n* the slot at `n % 18`. Things worth knowing before
+you change anything:
+
+- The 18 largest tiles always get 18 different colors, and any two tiles sharing a slot are
+  at least 18 ranks apart. Plotly sorts treemap children by value, so rank order is also
+  roughly layout order — that adjacency is what the ranking buys you. (The previous
+  CRC32-hash assignment put 14–19 same-color pairs within 5 ranks of each other in every
+  budget year.)
+- Ranking is per **rendered tile**, not per program id. One program can appear as two
+  top-level tiles under different name variants that share a `PROGRAM_0_ORIG_ID`; keying
+  the rank map on the id collapses them into one rank and corrupts every rank below, which
+  puts two large same-colored tiles side by side. There is a regression test for this in
+  `tests/test_treemap_colors_unit.py`.
+- **The order of `filler_colors` is load-bearing**, though only for appearance now — with
+  the hash gone, reordering just changes which rank gets which slot. Two rules if you edit
+  it: keep the dark six first, or the biggest tiles get the least separable colors; and
+  keep perceptually close hues apart, because consecutive slots land on adjacent tiles.
+  The hues within each tint band are ordered to maximise that gap — the worst adjacent
+  pair is ΔE00 16.4, where plain hue order (gold, green, teal, blue, mauve, salmon) drops
+  to 3.9 by putting teal beside blue and mauve beside salmon in the lighter bands.
+
+A program's whole subtree inherits its top-level color, so each program reads as one block.
+Because rank drives the color, a tile can change color when you switch budget year, toggle
+"Military only", or — on quarterly REPORT budgets, where per-quarter values are derived by
+subtraction rather than rescaling — switch unit. Colors do *not* change with the EN/RU
+language toggle: ties are broken on the language-agnostic `orig_id`.
+
+## Change the label text color on treemap tiles
+
+Tile labels are not a single color. `TEXT_ON_LIGHT` (`#444444`) and `TEXT_ON_DARK`
+(`#ffffff`) are defined in `_ColorsConfig` (around line 254), and
+`create_treemap_text_colors` in [`src/callbacks/helper.py`](../src/callbacks/helper.py)
+picks between them per tile: any tile filled with one of the six dark tints gets white
+text, everything else gets dark gray.
+
+This is a readability improvement, but be honest about how far it goes: `#444444` on the
+dark tints measures 2.7–2.9:1 and white measures 3.4–3.6:1, so white clears the WCAG 3:1
+**large-text** threshold. Tile labels render at Plotly's default ~12px and shrink to fit,
+which is *not* large text — the applicable bar is 4.5:1, and white does not reach it either.
+The mid tints are similarly marginal against `#444444` (4.4–4.5:1). If strict compliance
+matters more than the light-on-dark look, a single darker label color (`#1a1a1a` clears
+4.5:1 on every fill in the palette) would do it with no per-node array at all.
+
+The set of fills treated as "dark" is the `dark_fills` field (around line 283); if you
+promote another slot to a dark tint, add it there too or its labels will stay gray — a test
+pins `dark_fills` to the first six entries of `filler_colors` so the two cannot drift apart. The `font=dict(...)` color in
+[`src/callbacks/callback_treemap.py`](../src/callbacks/callback_treemap.py) is only the
+fallback for the pathbar and title — changing it will not affect tile labels.
+
+## Change the timeseries chart colors
+
+The stacked bars on the timeseries page get their colors from `color_discrete_map` in
+[`src/callbacks/callback_timeseries.py`](../src/callbacks/callback_timeseries.py) (around
+line 153):
+
+```python
+color_discrete_map={
+    "OPEN": Colors.BRAND_BLUE_DARK,
+    "CLASSIFIED": Colors.CLASSIFIED_GRAY,
+},
+```
+
+Use a `Colors.BRAND_*` constant rather than a literal hex so the chart stays on brand.
+Classified spending deliberately uses the same gray as the treemap's classified tiles —
+the grays sit outside the brand palette precisely because they mark nodes with no category
+identity, so keep those two in sync if you change either.
 
 ## Change button and menu text colors
 
