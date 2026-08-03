@@ -19,6 +19,8 @@ wheels/
 .claude
 
 # database files
+# budget.db is not version-controlled — rebuild it with `make download-and-bootstrap-data`
+src/data/budget.db
 *_mock.db
 *.db-shm
 *.db-wal

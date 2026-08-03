@@ -35,10 +35,10 @@ package = false
 testpaths = ["tests"]
 pythonpath = ["src"]
 markers = [
-    "db: runs against the checked-in src/data/budget.db artifact",
+    "db: runs against the locally built src/data/budget.db (skipped if absent)",
     "golden: slow; parses the real Excel/CSV files under src/data/import_files",
     "e2e: slow; runs a real import into a temporary database",
-    "external: needs untracked third-party files (.claude/validation/*.csv)",
+    "external: cross-validation against third-party files (src/data/validation/*.csv)",
 ]
 
 # Ruff settings

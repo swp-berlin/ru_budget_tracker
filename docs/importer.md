@@ -14,6 +14,7 @@ The following Env Vars should be part of the `.env` file located in `/src`
 | ARCHIVE_OUTPUT_PATH                                          | PATH  | Path where to store the downloaded archive, e.g. /tmp/ru_budget_raw.zip                                                                        |
 | EXTRACT_OUTPUT_PATH                                          | PATH  | Path where the extracted archive data is stored, e.g. /tmp/ru_budget_raw                                                                       |
 |IMPORTER__DEEPL_API_KEY  | STR   | DeepL API Key for translations                                                                                                                  |
+| DEEPL_SERVER_URL                                             | URL   | Optional, read from the environment directly (not via settings). Overrides the DeepL endpoint, e.g. https://api.deepl.com for scoped Pro keys the client would otherwise route to the free endpoint |
 
 ## Run project
 

@@ -12,6 +12,9 @@ repos:
       - id: end-of-file-fixer
       - id: check-yaml
       - id: check-added-large-files
+        # The third-party cross-validation CSVs are ~20 MB by nature and are
+        # tracked deliberately so that `pytest -m external` is reproducible.
+        exclude: ^src/data/validation/.*\.csv$
   - repo: https://github.com/betterleaks/betterleaks
     rev: v1.6.1
     hooks:

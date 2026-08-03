@@ -10,8 +10,6 @@ cent; the previous aggregate-VR import overcounted in 22 of them.
 Reports only: law files' printed "ВСЕГО" legitimately differs from the
 ved-structure leaf sum (~445M ₽ in law_2025 — a property of the file, confirmed
 by an independent parse), so there is no analogous law check.
-
-Ported from .claude/validation/official_totals.py (untracked).
 """
 
 import re
@@ -23,7 +21,7 @@ import pytest
 
 from tests.golden_utils import report_files
 
-# Needs both the checked-in DB and the real report Excel files.
+# Needs both the local DB and the real report Excel files.
 pytestmark = [pytest.mark.db, pytest.mark.golden]
 
 DB_SUM_QUERY = """

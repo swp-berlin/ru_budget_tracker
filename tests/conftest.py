@@ -2,10 +2,10 @@
 
 Tiers (see docs/tests.md):
 - unit (no marker): pure parser functions, synthetic inputs, no data files or DB.
-- db: assertions against the checked-in src/data/budget.db.
+- db: assertions against the locally built src/data/budget.db (skipped if absent).
 - golden: parses the real Excel/CSV files under src/data/import_files.
 - e2e: real import into a temporary database.
-- external: needs untracked third-party CSVs in .claude/validation/.
+- external: compares against the third-party CSVs in src/data/validation/.
 """
 
 import os
@@ -28,14 +28,17 @@ LAWS_DIR = IMPORT_FILES_DIR / "clean" / "laws"
 REPORTS_DIR = IMPORT_FILES_DIR / "clean" / "reports"
 TOTALS_DIR = IMPORT_FILES_DIR / "raw" / "totals"
 GOLDENS_DIR = REPO_ROOT / "tests" / "goldens"
-EXTERNAL_VALIDATION_DIR = REPO_ROOT / ".claude" / "validation"
+VALIDATION_DIR = REPO_ROOT / "src" / "data" / "validation"
 
 
 @pytest.fixture(scope="session")
 def db_connection() -> Iterator[sqlite3.Connection]:
-    """Read-only connection to the checked-in budget.db."""
+    """Read-only connection to the locally built budget.db.
+
+    The database is not version-controlled; a fresh clone has to build it first.
+    """
     if not DB_PATH.exists():
-        pytest.fail(f"Database file not found: {DB_PATH}")
+        pytest.skip(f"No database at {DB_PATH} — build it with `make download-and-bootstrap-data`")
 
     connection = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
     try:

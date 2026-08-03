@@ -27,6 +27,9 @@ QUERY = """
 
 
 def main() -> None:
+    if not DB_PATH.exists():
+        sys.exit(f"No database at {DB_PATH} — build it with `make download-and-bootstrap-data`")
+
     connection = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
     try:
         rows = connection.execute(QUERY).fetchall()

@@ -139,7 +139,7 @@ download-and-bootstrap-data: download-data bootstrap-data fix-db-chmod
 test-frozen-db:
 	uv run --group dev pytest tests/test_frozen_db.py -q
 
-# Fast tiers only: pure-function unit tests + checks against the checked-in budget.db.
+# Fast tiers only: pure-function unit tests + checks against the local budget.db.
 test-fast:
 	uv run --group dev pytest -m "not golden and not e2e and not external" -q
 
@@ -158,7 +158,7 @@ test-regen-frozen:
 
 # Diff per-budget expense counts/totals between the current budget.db and a prior one.
 # Usage: make test-compare-db prior=/tmp/prior.db
-# (extract a prior version with: git show <rev>:src/data/budget.db > /tmp/prior.db)
+# (budget.db is not in git — keep a copy before rebuilding: cp src/data/budget.db /tmp/prior.db)
 test-compare-db:
 	@test -n "$(prior)" || (echo "Usage: make test-compare-db prior=<path-to-prior-db>" && exit 1)
 	uv run --group dev python tests/compare_dbs.py src/data/budget.db $(prior)

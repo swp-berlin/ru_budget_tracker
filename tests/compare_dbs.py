@@ -6,9 +6,9 @@ Usage (from repo root):
     # or directly:
     uv run --group dev python tests/compare_dbs.py <current.db> <prior.db>
 
-Extract a prior version from git history with:
+budget.db is not version-controlled, so keep a copy before rebuilding:
 
-    git show <rev>:src/data/budget.db > /tmp/prior.db
+    cp src/data/budget.db /tmp/prior.db
 
 Exits 1 if the databases differ, with a report naming each diverging budget.
 """

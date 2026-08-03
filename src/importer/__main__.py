@@ -7,7 +7,6 @@ from settings import settings
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
-openai_api_key = settings.importer.deepl_api_key
 download_link = (
     os.environ.get("NEXTCLOUD_DOWNLOAD_LINK") or settings.importer.nextcloud_download_link
 )

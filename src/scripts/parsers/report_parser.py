@@ -14,7 +14,7 @@ Structure differs from LAW files:
 
 import pandas as pd
 from pathlib import Path
-from typing import List, Tuple, Optional, Dict
+from typing import List, Tuple, Optional, Dict, SupportsInt
 import logging
 import warnings
 
@@ -361,10 +361,9 @@ def extract_row_data(row: pd.Series, issues: IssueCollector | None = None) -> Op
         try:
             value = float(value_raw)
         except (ValueError, TypeError):
-            try:
-                row_idx = int(row.name)  # DataFrame index label of this row
-            except (TypeError, ValueError):
-                row_idx = None
+            # DataFrame index label of this row (int for the default RangeIndex)
+            label = row.name
+            row_idx = int(label) if isinstance(label, SupportsInt) else None
             if expense_type_code:
                 # The value would become an Expense — losing it silently is not OK.
                 raise ParseError(

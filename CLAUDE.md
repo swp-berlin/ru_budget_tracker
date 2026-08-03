@@ -26,7 +26,14 @@ make alembic-revision m="description" rev-id="0001"  # create migration
 make alembic-downgrade                            # rollback latest
 ```
 
-**Data import (run in order after migrations):**
+**Get the data** — `src/data/budget.db` is not version-controlled; it is rebuilt from the
+Nextcloud source files. Needs `src/.env` with `IMPORTER__NEXTCLOUD_DOWNLOAD_LINK` and
+`IMPORTER__DEEPL_API_KEY` — see `src/.env.example`.
+```bash
+make download-and-bootstrap-data   # download + rebuild-db + full import + quality report
+```
+
+**Data import (individual steps, in order after migrations):**
 ```bash
 make import-fix
 make import-budget [years="2023 2024"]
@@ -46,7 +53,7 @@ make quality-report  # data-quality report → src/data/quality/report.md (track
 Fixtures (goldens, frozen totals) protect **blessed** data; new files show up as skips
 and in the quality report until blessed deliberately (`make test-regen-goldens`,
 `make test-regen-frozen`) in a commit whose message explains why the numbers changed.
-Deep data documentation for AI sessions: `.claude/data-guide.md`.
+Deep data documentation: `docs/data-guide.md`.
 
 **Lint / format / typecheck:**
 ```bash
@@ -73,13 +80,13 @@ This is a Dash (Plotly) multi-page dashboard for analyzing Russian government bu
 | ETL / import | `src/scripts/` | Parses Excel/CSV, calls DeepL for translations |
 | Config | `src/settings.py` | Pydantic settings, reads from env vars |
 
-**Database:** SQLite with WAL mode and memory-mapped I/O pragmas. Core writable tables are `Budget`, `Dimension`, `Expense`, `ConversionRate`. Heavy read queries are backed by pre-computed SQL views (`LawClassifiedSpendingPerChapter`, `ReportClassifiedSpendingPerChapter`, etc.) — these are read-only SQLAlchemy models and should not be written to directly.
+**Database:** SQLite with WAL mode and memory-mapped I/O pragmas. `src/data/budget.db` is a build artifact, not committed — `db`-tier tests skip when it is absent. Core writable tables are `Budget`, `Dimension`, `Expense`, `ConversionRate`. Heavy read queries are backed by pre-computed SQL views (`LawClassifiedSpendingPerChapter`, `ReportClassifiedSpendingPerChapter`, etc.) — these are read-only SQLAlchemy models and should not be written to directly.
 
 **Routing:** App URL base pathname is configured via `settings.py`. All Dash callback pathname guards must use `get_relative_path()` (from `dash`) — never hardcode strings like `"/timeseries"`. See `src/pages/` for examples.
 
 **Caching:** Treemap and timeseries data is pre-warmed into an in-process cache on app startup (see `src/utils/fetch_*.py`). Cache population is triggered once at boot; keep cache keys stable when refactoring fetch functions.
 
-**Translations:** Dimension names are translated via the DeepL API (`src/scripts/translations.py`). Requires `IMPORTER__DEEPL_API_KEY` in environment.
+**Translations:** Dimension names are translated via the DeepL API (`src/scripts/translations.py`). Requires `IMPORTER__DEEPL_API_KEY` in environment; `DEEPL_SERVER_URL` optionally overrides the free/pro endpoint the client picks from the key suffix.
 
 ## Documentation Map
 
@@ -99,7 +106,7 @@ Check the relevant doc below before grepping the codebase cold — each covers o
 | Adding a new page | `docs/adding-a-page.md` |
 | Test tiers & blessed-data workflow | `docs/tests.md` |
 | Standalone importer component | `docs/importer.md` |
-| Deep data semantics for AI sessions | `.claude/data-guide.md` |
+| Deep data semantics for AI sessions | `docs/data-guide.md` |
 
 ## Guidelines
 
