@@ -50,7 +50,8 @@ by `app.py`'s prewarming for the same reason as above.
 ### `helper.py`
 Pure rendering/shaping helpers shared by both page-specific callback modules: unit labels
 for CSV headers (`get_unit_label`), deterministic treemap node coloring
-(`create_treemap_colors`), spending-type/viewby DataFrame shaping
+(`create_treemap_colors`) and its per-node label colors (`create_treemap_text_colors`),
+spending-type/viewby DataFrame shaping
 (`shape_for_spending_type`, `shape_for_viewby`, `shape_dataframe`), and two node-id maps —
 `build_compact_node_map` (sent to the browser, short integer ids) and
 `build_server_node_map` (server-only, full dimension metadata, `@lru_cache`d).

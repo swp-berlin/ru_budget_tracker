@@ -61,16 +61,20 @@ def create_treemap_colors(
 
     program_rank: dict[str, int] = {}
     if viewby == "PROGRAM":
-        # Rank the top-level programs (depth 2) by value, largest first. Sorting on the
-        # key as a tiebreaker keeps the order deterministic when values are equal.
-        totals: dict[str, float] = {}
+        # Rank the top-level tiles (depth 2) by value, largest first, and hand out palette
+        # slots in that order. Ranking per rendered tile rather than per orig_id is what
+        # keeps the separation guarantee honest: one program can appear as two tiles under
+        # different name variants, and keying on orig_id would collapse them into a single
+        # rank, corrupting every rank below it. The tiebreaker is the language-agnostic
+        # orig_id, so EN and RU order the tiles identically and colors survive the toggle.
+        tiles: list[tuple[float, str, str]] = []
         for node_id, budget_type, value in zip(node_ids, budget_types, values):
             parts = node_id.split("/")
             if len(parts) != 2 or "CLASSIFIED" in budget_type.upper():
                 continue
-            totals[_program_key(parts[1])] = value
-        ranked = sorted(totals.items(), key=lambda item: (-item[1], item[0]))
-        program_rank = {key: rank for rank, (key, _) in enumerate(ranked)}
+            tiles.append((value, _program_key(parts[1]), parts[1]))
+        tiles.sort(key=lambda tile: (-tile[0], tile[1]))
+        program_rank = {label: rank for rank, (_, _, label) in enumerate(tiles)}
 
     colors: list[str] = []
     for node_id, budget_type in zip(node_ids, budget_types):
@@ -103,7 +107,7 @@ def create_treemap_colors(
             # Every node inherits the color of its top-level program at parts[1], so a
             # program's whole subtree reads as one block. Programs that outnumber the
             # palette wrap around, but only far down the ranking where tiles are tiny.
-            rank = program_rank.get(_program_key(parts[1]))
+            rank = program_rank.get(parts[1])
             color = (
                 Colors.filler_colors[rank % len(Colors.filler_colors)]
                 if rank is not None

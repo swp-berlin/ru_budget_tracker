@@ -257,26 +257,29 @@ class _ColorsConfig(BaseModel):
     # Filler palette for nodes that don't match a CHAPTER or PROGRAM color mapping.
     # Order is load-bearing: program colors index into this list by spending rank, so
     # reordering repaints every program node. Dark tints come first so the largest
-    # programs get the most separable steps, as with the chapters below.
+    # programs get the most separable steps, as with the chapters below. Within each
+    # tint band the hues are ordered to maximise the perceptual gap between consecutive
+    # slots (worst adjacent pair ΔE00 16.4, up from 3.9 in plain hue order) — Plotly
+    # sorts treemap children by value, so consecutive slots land on adjacent tiles.
     filler_colors: list[str] = [
-        BRAND_GOLD_DARK,
-        BRAND_GREEN_DARK,
         BRAND_TEAL_DARK,
-        BRAND_BLUE_DARK,
-        BRAND_MAUVE_DARK,
         BRAND_SALMON_DARK,
-        BRAND_GOLD_MID,
+        BRAND_GREEN_DARK,
+        BRAND_MAUVE_DARK,
+        BRAND_GOLD_DARK,
+        BRAND_BLUE_DARK,
         BRAND_GREEN_MID,
-        BRAND_TEAL_MID,
-        BRAND_BLUE_MID,
         BRAND_MAUVE_MID,
+        BRAND_GOLD_MID,
+        BRAND_BLUE_MID,
         BRAND_SALMON_MID,
-        BRAND_GOLD_LIGHT,
-        BRAND_GREEN_LIGHT,
-        BRAND_TEAL_LIGHT,
-        BRAND_BLUE_LIGHT,
+        BRAND_TEAL_MID,
         BRAND_MAUVE_LIGHT,
+        BRAND_GREEN_LIGHT,
         BRAND_SALMON_LIGHT,
+        BRAND_TEAL_LIGHT,
+        BRAND_GOLD_LIGHT,
+        BRAND_BLUE_LIGHT,
     ]
 
     # Fills that need TEXT_ON_DARK label text — the six dark tints.
