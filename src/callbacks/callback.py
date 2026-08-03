@@ -85,12 +85,21 @@ def track_previous_path(pathname: str | None):
     Input("url", "pathname"),
     State("store-previous-path", "data"),
     State("store-budget-id", "data"),
+    State("url", "search"),
 )
-def update_about_button(pathname: str | None, previous_path: str | None, budget_id: int | None):
+def update_about_button(
+    pathname: str | None,
+    previous_path: str | None,
+    budget_id: int | None,
+    current_search: str | None,
+):
     """Swap icon and destination for the about/back button based on current page."""
     if pathname == get_relative_path("/about"):
         back_path = previous_path or get_relative_path("/")
-        query = f"?budget_id={budget_id}" if budget_id is not None else ""
+        params = _parse_search(current_search)
+        if budget_id is not None:
+            params["budget_id"] = [str(budget_id)]
+        query = "?" + urlencode(params, doseq=True) if params else ""
         return (
             f"{back_path}{query}",
             html.Img(src=get_asset_url("icons/arrow_back.svg"), alt="Back icon"),
@@ -119,7 +128,7 @@ def update_about_button(pathname: str | None, previous_path: str | None, budget_
 def switch_graphs(
     url: str,
     url_pathname: str | None,
-    _budget_id: int | None,
+    budget_id: int | None,
     selected_id: str | None,
     compact_node_map: dict | None,
     viewby: str | None,
@@ -127,8 +136,9 @@ def switch_graphs(
 ):
     """Swap destination, icon, and label based on current page.
 
-    URL is always current (write-through), so filter params are read directly
-    from it. Only focus needs computing from the node map.
+    Most filter params are read directly from the current URL. budget_id and
+    focus are exceptions: they're recomputed from stores, since the URL isn't
+    guaranteed to already reflect the latest store-budget-id/store-selected-id.
     """
     url_parsed = urlparse(url)
     query_param_dict = parse_qs(url_parsed.query)
@@ -166,6 +176,8 @@ def switch_graphs(
         dest_params = {k: v for k, v in query_param_dict.items() if k != "period"}
         if viewby:
             dest_params.setdefault("viewby", [str(viewby)])
+        if budget_id is not None:
+            dest_params["budget_id"] = [str(budget_id)]
         query_string = urlencode(dest_params, doseq=True)
         return (
             f"{treemap_path}?{query_string}",
@@ -180,6 +192,8 @@ def switch_graphs(
     dest_params = {k: v for k, v in query_param_dict.items() if k != "viewby"}
     if period:
         dest_params.setdefault("period", [str(period)])
+    if budget_id is not None:
+        dest_params["budget_id"] = [str(budget_id)]
     query_string = urlencode(dest_params, doseq=True)
     return (
         f"{timeseries_path}?{query_string}",
@@ -378,7 +392,9 @@ def init_filters_from_url(
 # --- Filter selections (pattern-matched menu items) ---
 
 
-def _make_select_callback(item_type: str, store: str, url_param: str) -> None:
+def _make_select_callback(
+    item_type: str, store: str, url_param: str, clears_focus: bool = False
+) -> None:
     @callback(
         Output("url", "search", allow_duplicate=True),
         Output(store, "data"),
@@ -388,14 +404,20 @@ def _make_select_callback(item_type: str, store: str, url_param: str) -> None:
     )
     def _cb(_clicks, current_search):
         value = _triggered_value(item_type)
-        return _update_search_param(current_search, url_param, str(value)), value
+        params = _parse_search(current_search)
+        params[url_param] = [str(value)]
+        if clears_focus:
+            params.pop("focus", None)
+        return "?" + urlencode(params, doseq=True), value
 
     _cb.__name__ = f"select_{item_type.replace('-', '_')}"
 
 
-_make_select_callback("viewby-item", "store-viewby", "viewby")
+_make_select_callback("viewby-item", "store-viewby", "viewby", clears_focus=True)
 _make_select_callback("period-item", "store-period", "period")
-_make_select_callback("spending-type-item", "store-spending-type", "spending_type")
+_make_select_callback(
+    "spending-type-item", "store-spending-type", "spending_type", clears_focus=True
+)
 _make_select_callback("unit-item", "store-unit", "unit")
 
 

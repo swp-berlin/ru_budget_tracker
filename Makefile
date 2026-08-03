@@ -98,7 +98,7 @@ import-ppp:
 
 # Run the translation pipeline to translate unseen dimension names.
 # Translates missing dimension names via DeepL (cached in clean/translations/).
-# Requires DEEPL_API_KEY in the environment. For scoped Pro keys also set
+# Requires IMPORTER__DEEPL_API_KEY in the environment. For scoped Pro keys also set
 # DEEPL_SERVER_URL=https://api.deepl.com (the client misroutes them otherwise).
 import-translations:
 	cd src && uv run python -m scripts.translations --batch-size 50 && cd -

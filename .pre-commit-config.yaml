@@ -16,7 +16,7 @@ repos:
         # tracked deliberately so that `pytest -m external` is reproducible.
         exclude: ^src/data/validation/.*\.csv$
   - repo: https://github.com/betterleaks/betterleaks
-    rev: v1.5.0
+    rev: v1.6.1
     hooks:
       - id: betterleaks
   - repo: https://github.com/astral-sh/ruff-pre-commit
@@ -26,6 +26,6 @@ repos:
         args: [--fix]
       - id: ruff-format
   - repo: https://github.com/astral-sh/ty-pre-commit
-    rev: v0.0.54
+    rev: v0.0.56
     hooks:
       - id: ty

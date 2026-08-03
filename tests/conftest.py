@@ -1,6 +1,6 @@
 """Shared fixtures and paths for the test suite.
 
-Tiers (see tests/README.md):
+Tiers (see docs/tests.md):
 - unit (no marker): pure parser functions, synthetic inputs, no data files or DB.
 - db: assertions against the locally built src/data/budget.db (skipped if absent).
 - golden: parses the real Excel/CSV files under src/data/import_files.
@@ -15,8 +15,8 @@ from pathlib import Path
 
 import pytest
 
-# scripts.import pulls in settings_importer, whose pydantic settings require these
-# env vars at import time. Tests never download or translate anything, so stubs
+# scripts.import pulls in settings.importer, whose pydantic settings require
+# these env vars at import time. Tests never download or translate anything, so stubs
 # are enough. Must run before any test module imports scripts.*.
 os.environ.setdefault("DEEPL_API_KEY", "test-dummy")
 os.environ.setdefault("NEXTCLOUD_DOWNLOAD_LINK", "https://example.invalid")

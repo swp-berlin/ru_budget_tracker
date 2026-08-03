@@ -6,7 +6,7 @@ Run from the repo root:
 
 The fixture pins expense count and total value for EVERY budget in the DB.
 Only regenerate deliberately after a re-import whose changes are understood;
-the commit message must explain why the numbers changed (see tests/README.md).
+the commit message must explain why the numbers changed (see docs/tests.md).
 """
 
 import json

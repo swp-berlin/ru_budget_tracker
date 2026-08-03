@@ -60,7 +60,7 @@ or modify the necessary Secrets and Variables required for the deployment proces
 
 ### Structured Documentation
 
-- **README Files**: Each major module or directory should contain a `README.md` file that explains its purpose, usage, and any important details. This helps new developers understand the structure and functionality of the codebase quickly.
+- **Module Docs**: Each major module or directory should have a corresponding doc file under [`docs/`](docs/) that explains its purpose, usage, and any important details. This helps new developers understand the structure and functionality of the codebase quickly.
 - **Code Comments**: Use comments within the code to explain complex logic or important decisions.
 
 ### Code Quality
@@ -70,17 +70,17 @@ or modify the necessary Secrets and Variables required for the deployment proces
 ## Folders Structure
 
 - `src/`: Main source code of the application.
-  - `alembic/`: Database migration scripts and configurations. Refer to the [respective documentation](src/alembic/README.md) for more details.
-  - `assets/`: Static assets served by Dash (icons, CSS).
-  - `callbacks.py`: Global Dash callbacks registered at app startup.
-  - `data/`: Data files — raw import data files (tracked) and the generated `budget.db` (**not** tracked, see [respective documentation](src/data/README.md)).
+  - `alembic/`: Database migration scripts and configurations. Refer to the [respective documentation](docs/alembic.md) for more details.
+  - `assets/`: Static assets served by Dash (icons, CSS). See [`docs/customization.md`](docs/customization.md) for a guide to changing colors, fonts, and toolbar layout.
+  - `callbacks/`: All Dash callbacks (shared and page-specific), plus their rendering/data-shaping helpers. Refer to the [respective documentation](docs/callbacks.md) for more details.
+  - `data/`: Data files — raw import data files (tracked) and the generated `budget.db` (**not** tracked). Refer to the [respective documentation](docs/data.md) for more details.
     - `import_files/`: Raw source files used by the import scripts.
-  - `database/`: Database connection and session management. Refer to the [respective documentation](src/database/README.md) for more details.
+  - `database/`: Database connection and session management. Refer to the [respective documentation](docs/database.md) for more details.
   - `layout.py`: Top-level Dash app layout and navigation structure.
-  - `models/`: SQLAlchemy models representing the database schema, including view-backed read-only models for pre-computed spending aggregates. Refer to the [respective documentation](src/models/README.md) for more details.
-  - `pages/`: Dash multi-page views (`treemap.py`, `timeseries.py`, `about.py`). Each file defines the layout and page-specific callbacks for one dashboard view.
-  - `scripts/`: Various scripts used for development and maintenance of the project, including data import scripts and sanity checks. Refer to the [respective documentation](src/scripts/README.md) for more details.
-  - `utils/`: Shared backend utilities — data fetching, transformation, unit calculation, and chart helpers. Refer to the [respective documentation](src/utils/README.md) for more details.
+  - `models/`: SQLAlchemy models representing the database schema, including view-backed read-only models for pre-computed spending aggregates. Refer to the [respective documentation](docs/models.md) for more details.
+  - `pages/`: Dash multi-page views (`treemap.py`, `timeseries.py`, `about.py`). Each file defines the layout for one dashboard view; callbacks live in `callbacks/`.
+  - `scripts/`: Various scripts used for development and maintenance of the project, including data import scripts and sanity checks. Refer to the [respective documentation](docs/scripts.md) for more details.
+  - `utils/`: Shared backend utilities — data fetching, transformation, unit calculation, and chart helpers. Refer to the [respective documentation](docs/utils.md) for more details.
   - `settings.py`: Application configuration and settings.
   - `alembic.ini`: Alembic configuration file for database migrations.
   - `app.py`: Main application entry point. Creates the Dash instance and registers layout and callbacks.
@@ -118,10 +118,11 @@ or modify the necessary Secrets and Variables required for the deployment proces
    ```
 
    This downloads the raw files, recreates the schema via Alembic, runs the full import and
-   the quality report. It requires a `.env.importer` file with at least
-   `NEXTCLOUD_DOWNLOAD_LINK` and `DEEPL_API_KEY` — see
-   [`src/importer/README.md`](src/importer/README.md). Without it (or without those secrets)
-   there is no way to obtain the database; ask a maintainer for the Nextcloud link.
+   the quality report. It requires a `src/.env` file with at least
+   `IMPORTER__NEXTCLOUD_DOWNLOAD_LINK` and `IMPORTER__DEEPL_API_KEY` — see
+   [`docs/importer.md`](docs/importer.md) and [`src/.env.example`](src/.env.example). Without
+   it (or without those secrets) there is no way to obtain the database; ask a maintainer for
+   the Nextcloud link.
 
 4. **Import Steps Individually (optional)**
    If the source files are already in place, the import can also be run step by step with the
@@ -137,7 +138,7 @@ or modify the necessary Secrets and Variables required for the deployment proces
    make import-translations
    ```
 
-   See [`src/scripts/README.md`](src/scripts/README.md) for full details and options.
+   See [`docs/scripts.md`](docs/scripts.md) for full details and options.
 5. **Run the Application (without Docker)**
    Start the Dash development server directly:
 
@@ -165,9 +166,9 @@ or modify the necessary Secrets and Variables required for the deployment proces
 
 ## Data Import Instructions
 
-For guidance on **obtaining and placing new source files** (budget laws, reports, totals, GDP and PPP conversion tables), see [`src/data/README.md`](src/data/README.md) and the detailed [`src/data/import_files/Readme.md`](src/data/import_files/Readme.md).
+For guidance on **obtaining and placing new source files** (budget laws, reports, totals, GDP and PPP conversion tables), see [`docs/data.md`](docs/data.md) and the detailed [`docs/data-import-files.md`](docs/data-import-files.md).
 
-For guidance on **running the import scripts** once source files are in place, see [`src/scripts/README.md`](src/scripts/README.md).
+For guidance on **running the import scripts** once source files are in place, see [`docs/scripts.md`](docs/scripts.md).
 
 ## Database Schema Overview
 
@@ -278,7 +279,7 @@ erDiagram
 ## Importer Component
 
 Component to import data and generate the budget.db
-See [here for documentation](src/importer/README.md)
+See [here for documentation](docs/importer.md)
 
 Since `budget.db` is not in the repository, this is the only way the database comes into
 existence — locally via `make download-and-bootstrap-data`, and in deployment via the importer

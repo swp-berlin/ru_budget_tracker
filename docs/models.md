@@ -1,7 +1,7 @@
 # Data Model
 
 The current database schema is visualized in the
-[Database Schema Overview](../../README.md#database-schema-overview)
+[Database Schema Overview](../README.md#database-schema-overview)
 using a Mermaid ER diagram.
 
 All models use SQLAlchemy 2.0-style `Mapped` / `mapped_column()` declarations. View-backed models carry `__table_args__ = {"info": {"is_view": True}}` so they are excluded from `Base.metadata.create_all()`; their underlying views are managed by Alembic.

@@ -1,0 +1,537 @@
+import io
+from datetime import datetime
+from typing import Any, cast
+from urllib.parse import parse_qs, unquote_plus
+
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+from dash import (
+    ClientsideFunction,
+    Input,
+    Output,
+    State,
+    callback,
+    clientside_callback,
+    dcc,
+    get_relative_path,
+)
+from dash.exceptions import PreventUpdate
+
+from callbacks.helper import build_server_node_map, get_unit_label
+from utils.calculate import Calculator
+from utils.definitions import (
+    BudgetTypeLiteral,
+    LanguageTypeLiteral,
+    PeriodTypeLiteral,
+    SpendingTypeLiteral,
+    UnitTypeLiteral,
+)
+from utils.fetch_timeseries import TimeseriesDataFetcher
+from utils.transform_timeseries import TimeseriesTransformer
+
+unit_labels = {
+    "ABSOLUTE": "billion RUB (nominal)",
+    "DOLLARS": "billion PPP dollar (OECD)",
+    "PERCENT_GDP_FULL_YEAR": "% of full-year GDP",
+    "PERCENT_GDP_YEAR_TO_DATE": "% of GDP (year-to-date)",
+    "PERCENT_FULL_YEAR_SPENDING": "% of full-year spending",
+    "PERCENT_YEAR_TO_DATE_SPENDING": "% of spending (year-to-date)",
+    "PERCENT_YEAR_TO_DATE_REVENUE": "% year-to-date revenue",
+}
+
+
+def _calculate_values(
+    df: pd.DataFrame, budget_id: int, unit: UnitTypeLiteral, budget_type: BudgetTypeLiteral
+) -> pd.DataFrame:
+    df = df[df["dates"].notna()].copy()
+    rows_to_drop: list = []
+    for budget_date, group_idx in df.groupby(df["dates"].dt.date).groups.items():
+        calc = Calculator(budget_id=budget_id, unit=unit, date=budget_date, budget_type=budget_type)
+        try:
+            df.loc[group_idx, "expenses"] = calc.calculate_series(
+                df.loc[group_idx, "expenses"]
+            ).to_numpy()
+        except ValueError:
+            rows_to_drop.extend(group_idx.tolist())
+    if rows_to_drop:
+        df = df.drop(rows_to_drop)
+    return df
+
+
+# Maps each quarter label to its last month — REPORT data is cumulative and dated at quarter-end.
+_PERIOD_MONTH = {"Q1": 3, "Q2": 6, "Q3": 9, "Q4": 12}
+
+
+def _shape_for_period(df: pd.DataFrame, period: PeriodTypeLiteral) -> pd.DataFrame:
+    if period == "ALL":
+        return df
+    month = _PERIOD_MONTH.get(period)
+    if month is None:
+        raise ValueError(f"Invalid period: {period}")
+    return df.loc[df["dates"].dt.month == month]
+
+
+_timeseries_cache: dict[tuple, tuple[pd.DataFrame, str, BudgetTypeLiteral]] = {}
+
+
+def fetch_timeseries_data(
+    budget_id: int,
+    spending_type: SpendingTypeLiteral = "ALL",
+    unit: UnitTypeLiteral = "ABSOLUTE",
+    period: PeriodTypeLiteral = "ALL",
+    selected_dimension: dict[str, int | str] | None = None,
+    classified_only: bool = False,
+    ancestor_dim_ids: tuple[int, ...] = (),
+) -> tuple[pd.DataFrame, str, BudgetTypeLiteral]:
+    """Fetch and transform treemap data for the current filters."""
+    # Dicts aren't hashable, so convert selected_dimension to a sorted tuple for the cache key.
+    dim_key = tuple(sorted(selected_dimension.items())) if selected_dimension else None
+    cache_key = (budget_id, spending_type, unit, period, dim_key, classified_only, ancestor_dim_ids)
+    if cache_key in _timeseries_cache:
+        cached_df, cached_type, cached_budget_type = _timeseries_cache[cache_key]
+        return cached_df.copy(), cached_type, cached_budget_type
+
+    data_fetcher = TimeseriesDataFetcher(spending_type)
+    dimension_id = None
+    if selected_dimension is not None:
+        dimension_id_value = selected_dimension.get("dimension_id")
+        dimension_orig_id = selected_dimension.get("dimension_original_identifier", "")
+        # Skip synthetic classified nodes that do not map to real dimensions.
+        if isinstance(dimension_id_value, int) and "CLASSIFIED" not in str(dimension_orig_id):
+            dimension_id = dimension_id_value
+
+    budgets, type = data_fetcher.fetch_data(
+        budget_id=budget_id,
+        dimension_id=dimension_id,
+        ancestor_dim_ids=list(ancestor_dim_ids),
+    )
+    transformer = TimeseriesTransformer()
+    if unit in {"PERCENT_YEAR_TO_DATE_SPENDING", "PERCENT_YEAR_TO_DATE_REVENUE"}:
+        df = transformer.transform_data(budgets, normalize=True, spending_type=spending_type)
+    else:
+        df = transformer.transform_data(budgets, normalize=False, spending_type=spending_type)
+    budget_type: BudgetTypeLiteral = next(
+        (row["type"] for row in budgets if row["type"] in ["LAW", "REPORT"]), "LAW"
+    )
+    # Period filtering only applies to REPORT budgets; LAW uses full-year values.
+    if budget_type == "REPORT":
+        df = _shape_for_period(df, period)
+    df = _calculate_values(df, budget_id, unit, budget_type)
+    # Normalisation (e.g. percent-of-GDP) can produce tiny negatives; clamp to zero.
+    df["expenses"] = df["expenses"].clip(lower=0)
+    # Rename LAW and REPORT to OPEN for clearer legend labeling in the timeseries view.
+    # where() keeps the value when the condition is True, so CLASSIFIED is preserved
+    # and every other type becomes "OPEN".
+    df["types"] = df["types"].where(df["types"] == "CLASSIFIED", "OPEN")
+    if classified_only:
+        df = df.loc[df["types"] == "CLASSIFIED"]
+
+    _timeseries_cache[cache_key] = (df.copy(), type, budget_type)
+    return df, type, budget_type
+
+
+def generate_figure(
+    df: pd.DataFrame,
+    metadata: list[str] = [],
+    unit: UnitTypeLiteral = "ABSOLUTE",
+    spending_type: SpendingTypeLiteral = "ALL",
+    language: LanguageTypeLiteral = "EN",
+    budget_type: BudgetTypeLiteral = "LAW",
+) -> go.Figure:
+    """Build a treemap with stable ids and clean hover info."""
+    # Build figure
+    fig = px.bar(
+        df,
+        x="dates",
+        y="expenses",
+        color="types",
+        barmode="stack",
+        color_discrete_map={
+            "OPEN": "#1f77b4",
+            "CLASSIFIED": "#cccccc",
+        },
+        template="none",
+    )
+    # Get unit label
+    unit_label = unit_labels.get(unit, "billion RUB (nominal)")
+
+    # Layout adjustments
+    # Change font to Source Sans 3 and make it wrapped
+    fig.update_layout(
+        margin=dict(t=0, l=70, r=50, b=90, autoexpand=True),
+        font=dict(family="Source Sans 3"),
+        legend=dict(
+            orientation="h",
+            yref="container",
+            y=0.01,
+            yanchor="bottom",
+            xanchor="center",
+            x=0.5,
+            title_text="",
+        ),
+        yaxis_title=f"{unit_label}",
+        xaxis_title="",  # Format x-axis to show quarter labels (e.g., "2018-Q1")
+        uirevision=f"unit:{unit}",  # changing unit forces a full chart reset (zoom/pan cleared)
+    )
+    # Set x-axis tick labels and hover format based on budget type
+    if budget_type == "REPORT":
+        # Constrain ticks to visible data to avoid extra quarters.
+        tick_values = df["dates"].dropna().sort_values().unique().tolist()
+        fig.update_layout(
+            xaxis=dict(
+                tickformat="%Y-Q%q",  # Plotly quarter format: year-quarter
+                tickangle=-45,  # Angle text to prevent overlap
+                tickmode="array",
+                tickvals=tick_values,
+                tick0=df["dates"].min() if not df.empty else None,
+                hoverformat="%Y-Q%q",
+            ),  # Force a full redraw when unit changes so the chart reloads reliably
+        )
+    else:
+        fig.update_layout(
+            xaxis=dict(
+                hoverformat="%Y",
+                tickformat="%Y",
+                tickangle=-45,
+                dtick="M12",
+                tick0="2000-01-01",
+            )
+        )
+
+    # Set custom hover templates per trace, matched by name for robustness.
+    classified_label = (
+        "Classified spending (est.)" if spending_type == "MILITARY" else "Classified spending"
+    )
+    open_label = "Open spending"
+    for trace in fig.data:
+        bar = cast(go.Bar, trace)
+        n = len(bar.x) if bar.x is not None else 0
+        bar.customdata = [[unit_label]] * n
+        if bar.name == "OPEN":
+            bar.hovertemplate = (
+                f"<b>%{{x}}: {open_label}</b><br>%{{y:,.1f}} %{{customdata[0]}}<br><extra></extra>"
+            )
+            bar.name = open_label
+        elif bar.name == "CLASSIFIED":
+            bar.hovertemplate = f"<b>%{{x}}: {classified_label}</b><br>%{{y:,.1f}} %{{customdata[0]}}<br><extra></extra>"
+            bar.name = classified_label
+
+    return fig
+
+
+def _find_path_by_dimension_id(
+    dim_id: int, node_map: dict, language: LanguageTypeLiteral = "RU"
+) -> str | None:
+    """Look up a node path directly by dimension_id, used for deep-link fallback."""
+    lang_key = language.upper()
+    fallback: str | None = None
+    for path, info in node_map.items():
+        if info.get("dimension_id") == dim_id:
+            if info.get("language", "").upper() == lang_key:
+                return path
+            fallback = path
+    return fallback
+
+
+def _resolve_selected_path(
+    selected_node_id: str | None,
+    compact_node_map: dict | None,
+    node_map: dict,
+    language: LanguageTypeLiteral,
+) -> str | None:
+    """Resolve a short treemap id to the full path for the given language.
+
+    Treemap figures use short integer ids to reduce JSON payload. This maps
+    the stored short id back to the full path string needed for dimension
+    lookups and title generation.
+    """
+    if not selected_node_id or not compact_node_map:
+        return None
+    entry = compact_node_map.get(str(selected_node_id))
+    if not entry:
+        return None
+    raw_dim_id = entry.get("leaf") if isinstance(entry, dict) else entry
+    if not raw_dim_id:
+        return None
+    return _find_path_by_dimension_id(int(raw_dim_id), node_map, language)
+
+
+def _resolve_classified_dimension(
+    selected_dimension: dict | None,
+    path: str | None,
+    node_map: dict,
+) -> tuple[bool, dict | None]:
+    """Collapse a CLASSIFIED node to its parent chapter for API filtering."""
+    if selected_dimension and "CLASSIFIED" in str(
+        selected_dimension.get("dimension_original_identifier", "")
+    ):
+        parent_path = "/".join(path.split("/")[:-1]) if path else None
+        return True, node_map.get(parent_path) if parent_path else None
+    return False, selected_dimension
+
+
+def _resolve_filter_context(
+    selected_node_id: str | None,
+    compact_node_map: dict | None,
+    node_map: dict,
+    language: LanguageTypeLiteral,
+    url_search: str | None = None,
+) -> tuple[dict | None, bool, tuple[int, ...], str | None]:
+    """Resolve a treemap selection (short id or deep-link) into fetch_timeseries_data args.
+
+    Returns (selected_dimension, classified_only, ancestor_dim_ids, resolved_path).
+    """
+    resolved_path = _resolve_selected_path(selected_node_id, compact_node_map, node_map, language)
+    # Ancestor dim_ids from the clicked node's path context (for context-aware timeseries filtering).
+    ancestor_dim_ids: tuple[int, ...] = ()
+    focus_dim_id: int | None = None
+    if selected_node_id and compact_node_map:
+        entry = compact_node_map.get(str(selected_node_id))
+        if entry and isinstance(entry, dict):
+            ancestor_dim_ids = tuple(int(x) for x in entry.get("ctx", []))
+            # If the selected dim isn't in the current budget's node_map (e.g. it only exists
+            # in a different budget year), remember its leaf id so we can still filter by it
+            # directly below, same as the URL deep-link fallback does.
+            leaf = entry.get("leaf")
+            if resolved_path is None and leaf is not None and str(leaf).isdigit():
+                focus_dim_id = int(leaf)
+    # Deep-link fallback: compact_node_map is absent on fresh page loads, so short IDs
+    # can't be decoded. Use ?focus=<dimension_id> from the URL instead.
+    if resolved_path is None and focus_dim_id is None and url_search:
+        params = parse_qs(url_search.lstrip("?"))
+        focus_raw = params.get("focus", [None])[0]
+        if focus_raw:
+            focus_raw = unquote_plus(focus_raw).strip()
+            # ?focus= is "leaf" (single dim_id) or "ctx1,ctx2,...,leaf" (ancestor chain).
+            # Always use the leaf (last element) for timeseries lookup.
+            leaf_str = focus_raw.split(",")[-1]
+            if leaf_str.isdigit():
+                focus_dim_id = int(leaf_str)
+                resolved_path = _find_path_by_dimension_id(focus_dim_id, node_map, language)
+    selected_dimension = node_map.get(resolved_path) if resolved_path else None
+    # If the focus dim isn't in the current budget's node_map (e.g. it only exists in
+    # a different budget year), use the dimension_id directly so the data is still filtered.
+    if selected_dimension is None and focus_dim_id is not None:
+        selected_dimension = {"dimension_id": focus_dim_id, "dimension_original_identifier": ""}
+    classified_only, selected_dimension = _resolve_classified_dimension(
+        selected_dimension, resolved_path, node_map
+    )
+    return selected_dimension, classified_only, ancestor_dim_ids, resolved_path
+
+
+def _format_timeseries_title(
+    resolved_path: str | None,
+    spending_type: SpendingTypeLiteral,
+    budget_type: BudgetTypeLiteral,
+) -> str:
+    if budget_type == "LAW":
+        title = "Russian federal budget law (spending)"
+    else:
+        title = "Russian federal budget spending"
+    if resolved_path:
+        node_label = resolved_path.split("/")[-1]
+        # Strip the leading original identifier prefix like "123 - " for cleaner titles.
+        if " - " in node_label:
+            node_label = node_label.split(" - ", 1)[1]
+        if "<br>" in node_label:
+            node_label = node_label.replace("<br>", " ")
+        title = f"{title}: {node_label}"
+
+    # Append a military suffix when that filter is active.
+    if spending_type == "MILITARY":
+        title = f"{title} (military)"
+
+    return title
+
+
+@callback(
+    Output("timeseries-graph", "figure"),
+    Output("timeseries-graph", "style"),
+    Output("store-timeseries-ticks", "data"),
+    Output("timeseries-title", "children"),
+    Input("url", "pathname"),
+    Input("store-budget-id", "data"),
+    Input("store-period", "data"),
+    Input("store-spending-type", "data"),
+    Input("store-unit", "data"),
+    Input("store-selected-id", "data"),
+    Input("store-language", "data"),
+    State("store-treemap-node-map", "data"),
+    State("url", "search"),
+)
+def update_figure_from_filters(
+    pathname: str | None,
+    budget_id: int,
+    period: PeriodTypeLiteral = "ALL",
+    spending_type: SpendingTypeLiteral = "ALL",
+    unit: UnitTypeLiteral = "ABSOLUTE",
+    selected_node_id: str | None = None,
+    language: LanguageTypeLiteral = "RU",
+    compact_node_map: dict | None = None,
+    url_search: str | None = None,
+) -> tuple[go.Figure, dict[str, str], dict | None, str | None]:
+    # Guard: only render on the timeseries page to keep hidden graphs hidden.
+    if pathname != get_relative_path("/timeseries"):
+        return go.Figure(), {"display": "none"}, None, None
+    # Guard: wait until a budget is selected
+    if budget_id is None:
+        raise PreventUpdate
+
+    try:
+        node_map = build_server_node_map(budget_id, spending_type, unit)
+    except ValueError:
+        node_map = {}
+
+    selected_dimension, classified_only, ancestor_dim_ids, resolved_path = _resolve_filter_context(
+        selected_node_id, compact_node_map, node_map, language or "RU", url_search
+    )
+    df, _, budget_type = fetch_timeseries_data(
+        budget_id=budget_id,
+        spending_type=spending_type,
+        unit=unit,
+        period=period,
+        selected_dimension=selected_dimension,
+        classified_only=classified_only,
+        ancestor_dim_ids=ancestor_dim_ids,
+    )
+    # Build a title from the resolved path so the label matches the current language.
+    title = _format_timeseries_title(resolved_path, spending_type, budget_type)
+
+    # Provide tick metadata for the clientside responsive-tick callback.
+    # Only needed for REPORT budgets shown with all periods (many quarterly ticks).
+    tick_info: dict | None = None
+    if budget_type == "REPORT" and period == "ALL":
+        tick_values = df["dates"].dropna().sort_values().unique().tolist()
+        # Dash serialises store data as JSON, so timestamps must be ISO strings not datetime objects.
+        tick_info = {"tickvals": [t.isoformat() for t in tick_values]}
+
+    return (
+        generate_figure(df, [], unit, spending_type, language="EN", budget_type=budget_type),
+        {"visibility": "visible"},
+        tick_info,
+        title,
+    )
+
+
+@callback(
+    Output("download-timeseries-data", "data"),
+    Input("btn-download-csv", "n_clicks"),
+    State("url", "pathname"),
+    State("store-budget-id", "data"),
+    State("store-budget-options", "data"),
+    State("store-period", "data"),
+    State("store-spending-type", "data"),
+    State("store-unit", "data"),
+    State("store-selected-id", "data"),
+    State("store-treemap-node-map", "data"),
+    State("store-language", "data"),
+    State("url", "search"),
+    prevent_initial_call=True,
+    optional=True,
+)
+def download_timeseries_data(
+    n_clicks,
+    pathname: str | None,
+    budget_id: int | None = None,
+    budget_options: list[dict] | None = None,
+    period: PeriodTypeLiteral = "ALL",
+    spending_type: SpendingTypeLiteral = "ALL",
+    unit: UnitTypeLiteral = "ABSOLUTE",
+    selected_node_id: str | None = None,
+    compact_node_map: dict | None = None,
+    language: LanguageTypeLiteral = "RU",
+    url_search: str | None = None,
+) -> dict[str, Any]:
+    """
+    Callback to download the current timeseries data as a csv file.
+    Returns:
+        dict[str, Any]: The data for download.
+    """
+    if pathname != get_relative_path("/timeseries"):
+        raise PreventUpdate
+    if budget_id is None:
+        raise PreventUpdate
+    try:
+        node_map = build_server_node_map(budget_id, spending_type, unit)
+    except ValueError:
+        node_map = {}
+    selected_dimension, classified_only, ancestor_dim_ids, _ = _resolve_filter_context(
+        selected_node_id, compact_node_map, node_map, language or "RU", url_search
+    )
+    df, _, budget_type = fetch_timeseries_data(
+        budget_id=budget_id,
+        spending_type=spending_type,
+        unit=unit,
+        period=period,
+        selected_dimension=selected_dimension,
+        classified_only=classified_only,
+        ancestor_dim_ids=ancestor_dim_ids,
+    )
+
+    value_col = get_unit_label(unit)
+
+    def _format_period(dt: pd.Timestamp) -> str:
+        if budget_type == "REPORT":
+            # Data is pre-filtered to quarter-end months (3,6,9,12), so month//3 always
+            # yields the correct quarter number 1–4 with no off-by-one.
+            quarter = dt.month // 3
+            return f"{dt.year}-Q{quarter}"
+        return str(dt.year)
+
+    download_df = df[["dates", "expenses", "types"]].copy()
+    download_df["Period"] = download_df["dates"].apply(_format_period)
+    if classified_only:
+        pivoted = (
+            download_df.groupby("Period")["expenses"]
+            .sum()
+            .round(2)
+            .reset_index()
+            .rename(columns={"expenses": f"Classified ({value_col})"})
+        )
+    else:
+        pivoted = (
+            download_df.groupby(["Period", "types"])["expenses"]
+            .sum()
+            .round(2)
+            .unstack(fill_value=0)
+            .reindex(columns=["OPEN", "CLASSIFIED"], fill_value=0)
+            .reset_index()
+            .rename(
+                columns={"OPEN": f"Open ({value_col})", "CLASSIFIED": f"Classified ({value_col})"}
+            )
+        )
+        pivoted[f"Total ({value_col})"] = (
+            pivoted[f"Open ({value_col})"] + pivoted[f"Classified ({value_col})"]
+        ).round(2)
+
+    budget_label = next(
+        (o["label"] for o in (budget_options or []) if o["value"] == budget_id), str(budget_id)
+    )
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    sanitized = budget_label.replace(" ", "_").replace("/", "-")
+    military = "_military" if spending_type == "MILITARY" else ""
+    period_suffix = f"_{period.lower()}" if period and period != "ALL" else ""
+    filename = f"timeseries_{timestamp}_{sanitized}_{unit.lower()}{military}{period_suffix}.csv"
+    buf = io.BytesIO()
+    pivoted.to_csv(buf, sep=";", index=False, encoding="utf-8-sig")  # utf-8-sig adds BOM for Excel
+    return dcc.send_bytes(buf.getvalue(), filename)
+
+
+# Poll window width via a lightweight interval so resize events reach Dash.
+clientside_callback(
+    "function(n) { return window.innerWidth; }",
+    Output("store-window-width", "data"),
+    Input("timeseries-resize-interval", "n_intervals"),
+)
+
+# Adjust quarterly tick labels when the viewport crosses the 640 px stacking threshold.
+# Only active for REPORT budgets with all periods selected (many quarterly ticks).
+clientside_callback(
+    ClientsideFunction(namespace="clientside", function_name="adjustTimeseriesTicks"),
+    Output("timeseries-graph", "figure", allow_duplicate=True),
+    Input("store-window-width", "data"),
+    Input("store-timeseries-ticks", "data"),
+    State("timeseries-graph", "figure"),
+    prevent_initial_call=True,
+)

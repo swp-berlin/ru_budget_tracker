@@ -14,7 +14,7 @@ Central source of truth for types, constants, and configuration.
 - **`Colors`** — hex color constants and chapter/program color mappings for charts.
 
 ### `calculate.py`
-`Calculator` class — converts raw expense values into the unit selected by the user (absolute RUB, PPP dollars, % of GDP, % of spending, % of revenue). Fetches conversion rates, GDP, spending, and revenue denominators from the database with class-level caching.
+`Calculator` class — converts raw expense values into the unit selected by the user (absolute RUB, PPP dollars, % of GDP, % of spending, % of revenue). Fetches conversion rates, GDP, spending, and revenue denominators from the database with class-level caching. See [`calculations.md`](calculations.md) for the per-unit formulas.
 
 ### `fetch_treemap.py`
 `TreemapDataFetcher` class — queries the database for a single budget's expenses and dimension hierarchy, classified spending (from pre-computed DB views), and the recursive program hierarchy. Returns the raw rows that `transform_treemap.py` will shape into a DataFrame.
@@ -29,11 +29,3 @@ Also exposes `fetch_budgets_for_dropdown()` (used by the sidebar) and `_execute_
 
 ### `transform_timeseries.py`
 `TimeseriesTransformer` class — converts raw budget rows into a Pandas DataFrame for the bar chart. De-cumulates quarterly REPORT values (Q2 = cumulative Q2 − Q1) and splits each period into open + classified bars.
-
-### `helper.py`
-Miscellaneous utility functions used across views:
-
-- `get_unit_label` — maps a `UnitTypeLiteral` to its human-readable dropdown label.
-- `create_treemap_colors` — returns per-node hex colors based on dimension type, viewby mode, military status, and spending type.
-- `shape_for_spending_type` — filters a DataFrame to military-only rows when `spending_type == "MILITARY"`.
-- `shape_for_viewby` — drops irrelevant hierarchy columns based on the selected `viewby` dimension (MINISTRY / CHAPTER / PROGRAM).

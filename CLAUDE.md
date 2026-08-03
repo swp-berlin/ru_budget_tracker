@@ -27,7 +27,8 @@ make alembic-downgrade                            # rollback latest
 ```
 
 **Get the data** — `src/data/budget.db` is not version-controlled; it is rebuilt from the
-Nextcloud source files. Needs `.env.importer` with `NEXTCLOUD_DOWNLOAD_LINK` and `DEEPL_API_KEY`.
+Nextcloud source files. Needs `src/.env` with `IMPORTER__NEXTCLOUD_DOWNLOAD_LINK` and
+`IMPORTER__DEEPL_API_KEY` — see `src/.env.example`.
 ```bash
 make download-and-bootstrap-data   # download + rebuild-db + full import + quality report
 ```
@@ -42,7 +43,7 @@ make import-ppp
 make import-translations
 ```
 
-**Tests** (see `tests/README.md` for tiers, fixtures, and the data-blessing workflow):
+**Tests** (see `docs/tests.md` for tiers, fixtures, and the data-blessing workflow):
 ```bash
 make test-fast       # unit + DB tiers, seconds — run on every change
 make test            # + golden/e2e tiers (~10 min) — run before/after touching the importer
@@ -58,7 +59,7 @@ Deep data documentation: `docs/data-guide.md`.
 ```bash
 uvx ruff check src/
 uvx ruff format src/
-uv run mypy src/
+uvx ty check
 ```
 
 Pre-commit hooks (Ruff, ty, betterleaks) run automatically on commit.
@@ -71,7 +72,8 @@ This is a Dash (Plotly) multi-page dashboard for analyzing Russian government bu
 
 | Layer | Location | Role |
 |---|---|---|
-| UI / callbacks | `src/pages/`, `src/layout.py`, `src/callbacks.py` | Dash components and callback wiring |
+| UI / callbacks | `src/pages/`, `src/layout.py`, `src/callbacks/` | Dash components and callback wiring |
+| UI assets | `src/assets/` | Static CSS/fonts/icons auto-served by Dash; chart colors live separately in `src/utils/definitions.py` — see `docs/customization.md` |
 | Data fetching | `src/utils/fetch_*.py` | Queries DB, warms cache on startup |
 | Data transformation | `src/utils/transform_*.py`, `src/utils/calculate.py` | Shapes data for charts, unit conversions |
 | Database | `src/database/`, `src/models/` | SQLAlchemy + SQLite, Alembic migrations |
@@ -84,8 +86,27 @@ This is a Dash (Plotly) multi-page dashboard for analyzing Russian government bu
 
 **Caching:** Treemap and timeseries data is pre-warmed into an in-process cache on app startup (see `src/utils/fetch_*.py`). Cache population is triggered once at boot; keep cache keys stable when refactoring fetch functions.
 
-**Translations:** Dimension names are translated via the DeepL API (`src/scripts/translations.py`). Requires `DEEPL_API_KEY` in environment; `DEEPL_SERVER_URL` optionally overrides the free/pro endpoint the client picks from the key suffix.
+**Translations:** Dimension names are translated via the DeepL API (`src/scripts/translations.py`). Requires `IMPORTER__DEEPL_API_KEY` in environment; `DEEPL_SERVER_URL` optionally overrides the free/pro endpoint the client picks from the key suffix.
 
+## Documentation Map
+
+Check the relevant doc below before grepping the codebase cold — each covers one area in depth so you don't have to reconstruct it from source.
+
+| Need to know about... | Read |
+|---|---|
+| Setup, folder structure, deployment overview | `README.md` |
+| Operational handover notes (DB backup, deploy status, caching gotchas) | `HANDOVER.md` |
+| Changing colors, fonts, toolbar layout | `docs/customization.md` |
+| Callbacks architecture | `docs/callbacks.md` |
+| Database schema / SQLAlchemy models | `docs/models.md`, `docs/database.md` |
+| Unit conversion calculations (GDP/spending/revenue %, PPP) | `docs/calculations.md` |
+| Data import pipeline, source file formats | `docs/data.md`, `docs/data-import-files.md`, `docs/scripts.md` |
+| Migrations | `docs/alembic.md` |
+| Static assets (CSS/icons) | `docs/assets.md`, `docs/assets-icons.md` |
+| Adding a new page | `docs/adding-a-page.md` |
+| Test tiers & blessed-data workflow | `docs/tests.md` |
+| Standalone importer component | `docs/importer.md` |
+| Deep data semantics for AI sessions | `docs/data-guide.md` |
 
 ## Guidelines
 

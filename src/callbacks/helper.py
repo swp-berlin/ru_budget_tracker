@@ -266,9 +266,9 @@ def build_server_node_map(
 ) -> dict:
     """Server-side cached node map for dimension resolution. Never sent to the browser.
 
-    Uses lazy imports to avoid a circular dependency with pages.treemap.
+    Uses lazy imports to avoid a circular dependency with callbacks.callback_treemap.
     """
-    from pages.treemap import transform_treemap_data  # noqa: PLC0415
+    from callbacks.callback_treemap import transform_treemap_data  # noqa: PLC0415
 
     df = transform_treemap_data(budget_id=budget_id, spending_type=spending_type, unit=unit)
 

@@ -13,7 +13,7 @@ Usage:
     python translations.py --limit 20         # Test with first 20 names only
 
 Environment:
-    DEEPL_API_KEY: Required. Your DeepL API key.
+   IMPORTER__DEEPL_API_KEY: Required. Your DeepL API key.
 """
 
 import sys
@@ -32,7 +32,7 @@ import deepl
 from sqlalchemy import select, update
 from models import Dimension
 from database.sessions import get_sync_session
-from settings_importer import importer_settings
+from settings import settings
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 
 # TRANSLATIONS_DIR = Path(__file__).parent.parent / "data" / "import_files" / "clean" / "translations"
 # TRANSLATIONS_FILE = TRANSLATIONS_DIR / "dimension_translations.csv"
-TRANSLATIONS_DIR = importer_settings.translation_dir
+TRANSLATIONS_DIR = settings.importer.translation_dir
 TRANSLATIONS_FILE = TRANSLATIONS_DIR / "dimension_translations.csv"
 
 BATCH_SIZE = 50  # DeepL supports up to 50 texts per request
@@ -238,9 +238,9 @@ def main():
     )
     args = parser.parse_args()
 
-    api_key = os.environ.get("DEEPL_API_KEY") or importer_settings.deepl_api_key
+    api_key = os.environ.get("IMPORTER__DEEPL_API_KEY") or settings.importer.deepl_api_key
     if not api_key and not args.dry_run:
-        logger.error("DEEPL_API_KEY not found")
+        logger.error("IMPORTER__DEEPL_API_KEY not found")
         sys.exit(1)
 
     db_names = get_unique_dimension_names()

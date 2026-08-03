@@ -12,10 +12,10 @@ for example data import scripts.
 
 ## Importing Data
 
-To import data into the database, use [`import.py`](src/scripts/import.py).
+To import data into the database, use [`import.py`](../src/scripts/import.py).
 
 Since some of the Excel files can be corrupt, run the fixer first:
-[`fix_corrupt_excel_files.py`](src/scripts/fix_corrupt_excel_files.py).
+[`fix_corrupt_excel_files.py`](../src/scripts/fix_corrupt_excel_files.py).
 
 ### Order of Import
 1. Fix Excel files
@@ -70,12 +70,12 @@ make import-translations
 ```
 
 ### Data Model
-The SQLAlchemy models defining the database schema can be found in the [`src/models/`](src/models/) directory.
+The SQLAlchemy models defining the database schema can be found in the [`src/models/`](../src/models/) directory.
 They are defined using SQLAlchemy's ORM capabilities, allowing for easy interaction with the database.
 When writing import scripts, you can directly use these models to insert data into the database either by creating new instances  and adding them to the session or writing SQL statements.
 
 The current database schema is visualized in the
-[Database Schema Overview](../../README.md#database-schema-overview)
+[Database Schema Overview](../README.md#database-schema-overview)
 using a Mermaid ER diagram.
 
 ### SQL Queries
@@ -90,10 +90,10 @@ When importing data, maintain this order to satisfy foreign-key constraints:
 ConversionRates have no dependencies and can be imported at any time.
 
 ### Mapping Expenses to Dimensions
-- `DimensionTypeLiteral`: Found in the [budget.py file](src/models/budget.py). Use to ensure the correct type is assigned to each dimension. Can be expanded as needed.
+- `DimensionTypeLiteral`: Found in the [budget.py file](../src/models/budget.py). Use to ensure the correct type is assigned to each dimension. Can be expanded as needed.
 - `original_identifier`: Each dimension has a unique `original_identifier` that can be used to reference it when linking expenses.
-- Relationships: The relationships between expenses and dimensions are defined in the SQLAlchemy models. Use these relationships to link expenses to their corresponding dimensions. Example can be found in the [`example_import_script.py`](src/scripts/example_import_script.py).
-- Session Management: Use the provided SQLAlchemy session to add and commit changes to the database. Example usage is shown in the [`example_import_script.py`](src/scripts/example_import_script.py).
-- Error Handling: Implement error handling to manage issues such as missing dimensions or data inconsistencies during the import process using try-except blocks and logging as demonstrated in the [`example_import_script.py`](src/scripts/example_import_script.py).
+- Relationships: The relationships between expenses and dimensions are defined in the SQLAlchemy models. Use these relationships to link expenses to their corresponding dimensions. Example can be found in the [`example_import_script.py`](../src/scripts/example_import_script.py).
+- Session Management: Use the provided SQLAlchemy session to add and commit changes to the database. Example usage is shown in the [`example_import_script.py`](../src/scripts/example_import_script.py).
+- Error Handling: Implement error handling to manage issues such as missing dimensions or data inconsistencies during the import process using try-except blocks and logging as demonstrated in the [`example_import_script.py`](../src/scripts/example_import_script.py).
 - Data Validation: Validate the data before importing into the database to ensure it meets the required format and constraints defined in the database schema. This could include directly using the SQLalchemy models for insertion
-- Upsert Logic: Implement logic to handle existing records in the database to avoid duplicates. This can be done by using the `on_conflict_do_...` method provided by the sqlite dialect. You need to provide a unique key constraint for the relevant columns in the model definition for this to work. For reference see the [`example_import_script.py`](src/scripts/example_import_script.py).
+- Upsert Logic: Implement logic to handle existing records in the database to avoid duplicates. This can be done by using the `on_conflict_do_...` method provided by the sqlite dialect. You need to provide a unique key constraint for the relevant columns in the model definition for this to work. For reference see the [`example_import_script.py`](../src/scripts/example_import_script.py).

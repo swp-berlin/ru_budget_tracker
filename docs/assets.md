@@ -7,10 +7,11 @@ assets/
 ├── css/
 │   ├── about.css          # Styles for the About page
 │   ├── menu.css           # Toolbar and dropdown layout
+│   ├── plot.css           # Full-height layout for chart pages (.plot-page)
 │   └── typography.css     # Font loading and text styles
 ├── fonts/
 │   └── Source_Sans_3/     # Variable font (OFL licence)
-├── icons/                 # Material Icons SVGs (see icons/README.md)
+├── icons/                 # Material Icons SVGs (see docs/assets-icons.md)
 ├── javascript/
 │   ├── clientside_export.js   # Share link + PNG download
 │   ├── clientside_treemap.js  # Treemap deep-link focus + text inset
@@ -39,6 +40,10 @@ Layout rules for the main toolbar. Covers:
   - `≤ 600 px` — dropdowns stack full-width vertically; action buttons form a centred horizontal row; timeseries button label hidden.
   - `≤ 480 px` — dropdowns capped at 180 px.
 - **Loading spinner** — `.treemap-spinner` CSS animation (`treemap-spin` keyframe, 0.8 s rotation).
+
+### `plot.css`
+
+Full-height flex layout for chart pages, scoped via `#app-layout:has(.plot-page)` to any page whose root element has the `.plot-page` class (treemap, timeseries).
 
 ### `typography.css`
 
@@ -71,7 +76,7 @@ Only the upright variable font is loaded by `typography.css`.
 
 ## Icons
 
-Material Icons SVGs sourced from Google Fonts. See [`icons/README.md`](icons/README.md) for the full list.
+Material Icons SVGs sourced from Google Fonts. See [`assets-icons.md`](assets-icons.md) for the full list.
 
 ---
 
