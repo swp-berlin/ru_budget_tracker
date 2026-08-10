@@ -120,6 +120,9 @@ bootstrap-data: rebuild-db import-all quality-report
 cache-budgets:
 	cd src && uv run python -m scripts.generate_budget_cache && cd -
 
+cache-timeseries:
+	cd src && uv run python -m scripts.generate_timeseries_cache && cd -
+
 # Generate the data-quality report (src/data/quality/report.{md,json}).
 # Exit 1 only on ERROR-severity findings; WARNINGs (known source
 # inconsistencies) are listed but do not fail.

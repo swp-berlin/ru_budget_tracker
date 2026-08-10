@@ -8,6 +8,7 @@ budget data for timeseries (bar chart) visualization.
 from typing import ClassVar, Sequence, cast
 from datetime import date
 from functools import lru_cache
+from unittest import result
 
 from sqlalchemy import (
     ColumnElement,
@@ -331,25 +332,7 @@ class TimeseriesDataFetcher:
         with get_sync_session() as session:
             return session.execute(stmt).mappings().all()
 
-    def _fetch_law_budget_expenses(self) -> Sequence[RowMapping]:
-        """
-        Fetch LAW budgets and their corresponding TOTAL budgets.
-
-        Returns a union of:
-        - LAW budgets with MINISTRY dimension expenses (summed)
-        - TOTAL budgets with CHAPTER dimension expenses (summed * 1000)
-
-        Returns:
-            Sequence of budget expense row mappings.
-        """
-        if self.spending_type in TimeseriesDataFetcher._law_budget_cache:
-            return TimeseriesDataFetcher._law_budget_cache[self.spending_type]
-
-        precomputed = _fetch_timeseries_summary(self.spending_type, "LAW")
-        if precomputed:
-            TimeseriesDataFetcher._law_budget_cache[self.spending_type] = precomputed
-            return precomputed
-
+    def _aggregate_law_budget_expenses(self) -> Sequence[RowMapping]:
         base_columns = self._get_budget_expense_columns()
 
         military_conditions = self._build_military_spending_condition()
@@ -463,8 +446,8 @@ class TimeseriesDataFetcher:
             union_stmt = law_stmt.union(total_stmt)
             with get_sync_session() as session:
                 result = session.execute(union_stmt).mappings().all()
-            _store_timeseries_summary(result, self.spending_type, "LAW")
-            TimeseriesDataFetcher._law_budget_cache[self.spending_type] = result
+            # _store_timeseries_summary(result, self.spending_type, "LAW")
+            # TimeseriesDataFetcher._law_budget_cache[self.spending_type] = result
             return result
 
         union_stmt = law_ministry_stmt.union(total_chapter_stmt)
@@ -472,33 +455,44 @@ class TimeseriesDataFetcher:
         with get_sync_session() as session:
             raw = session.execute(union_stmt).mappings().all()
         result = cast(Sequence[RowMapping], self._precompute_classified_in_total_rows(raw))
-        _store_timeseries_summary(result, self.spending_type, "LAW")
-        TimeseriesDataFetcher._law_budget_cache[self.spending_type] = result
+        # _store_timeseries_summary(result, self.spending_type, "LAW")
+        # TimeseriesDataFetcher._law_budget_cache[self.spending_type] = result
         return result
 
-    def _fetch_execution_budget_expenses(self) -> Sequence[RowMapping]:
+    def _fetch_law_budget_expenses(self) -> Sequence[RowMapping]:
         """
-        Fetch REPORT budgets and their corresponding TOTAL budgets.
+        Fetch LAW budgets and their corresponding TOTAL budgets.
 
-            Includes:
-            - REPORT budgets with MINISTRY dimension
-            - TOTAL budgets with NULL dimension (expense totals)
+        Returns a union of:
+        - LAW budgets with MINISTRY dimension expenses (summed)
+        - TOTAL budgets with CHAPTER dimension expenses (summed * 1000)
 
-            Only includes quarterly data (months 3, 6, 9, 12).
-
-            Returns:
-                Sequence of budget expense row mappings.
+        Returns:
+            Sequence of budget expense row mappings.
         """
-        if self.spending_type in TimeseriesDataFetcher._execution_budget_cache:
-            return TimeseriesDataFetcher._execution_budget_cache[self.spending_type]
+        if self.spending_type in TimeseriesDataFetcher._law_budget_cache:
+            return TimeseriesDataFetcher._law_budget_cache[self.spending_type]
 
-        precomputed = _fetch_timeseries_summary(self.spending_type, "REPORT")
+        precomputed = _fetch_timeseries_summary(self.spending_type, "LAW")
         if precomputed:
-            TimeseriesDataFetcher._execution_budget_cache[self.spending_type] = precomputed
+            TimeseriesDataFetcher._law_budget_cache[self.spending_type] = precomputed
             return precomputed
+        else:
+            raise Exception("Pre-caching did not work for LAW budgets.)")
 
+        result = self._aggregate_law_budget_expenses()
+
+        # populate SQL cache
+        _store_timeseries_summary(result, self.spending_type, "LAW")
+        TimeseriesDataFetcher._law_budget_cache[self.spending_type] = result
+
+        return result
+
+    def _aggregate_execution_budget_expenses(self) -> Sequence[RowMapping]:
+        # SQL Alchemy column names
         base_columns = self._get_budget_expense_columns()
 
+        # SQL Alchemy sub query
         military_conditions = self._build_military_spending_condition()
 
         if self.spending_type == "MILITARY":
@@ -568,8 +562,8 @@ class TimeseriesDataFetcher:
             union_stmt = report_stmt.union(total_stmt)
             with get_sync_session() as session:
                 result = session.execute(union_stmt).mappings().all()
-            _store_timeseries_summary(result, self.spending_type, "REPORT")
-            TimeseriesDataFetcher._execution_budget_cache[self.spending_type] = result
+            # _store_timeseries_summary(result, self.spending_type, "REPORT")
+            # TimeseriesDataFetcher._execution_budget_cache[self.spending_type] = result
             return result
 
         stmt = (
@@ -608,8 +602,40 @@ class TimeseriesDataFetcher:
         with get_sync_session() as session:
             raw = session.execute(stmt).mappings().all()
         result = cast(Sequence[RowMapping], self._precompute_classified_in_total_rows(raw))
-        _store_timeseries_summary(result, self.spending_type, "REPORT")
-        TimeseriesDataFetcher._execution_budget_cache[self.spending_type] = result
+        # _store_timeseries_summary(result, self.spending_type, "REPORT")
+        # TimeseriesDataFetcher._execution_budget_cache[self.spending_type] = result
+        return result
+
+    def _fetch_execution_budget_expenses(self) -> Sequence[RowMapping]:
+        """
+        Fetch REPORT budgets and their corresponding TOTAL budgets.
+
+            Includes:
+            - REPORT budgets with MINISTRY dimension
+            - TOTAL budgets with NULL dimension (expense totals)
+
+            Only includes quarterly data (months 3, 6, 9, 12).
+
+            Returns:
+                Sequence of budget expense row mappings.
+        """
+        if self.spending_type in TimeseriesDataFetcher._execution_budget_cache:
+            return TimeseriesDataFetcher._execution_budget_cache[self.spending_type]
+
+        # If data is already pre-computed return pre-computed data
+        precomputed = _fetch_timeseries_summary(self.spending_type, "REPORT")
+        if precomputed:
+            TimeseriesDataFetcher._execution_budget_cache[self.spending_type] = precomputed
+            return precomputed
+        else:
+            raise Exception("Pre-caching did not work for REPORT budgets.")
+
+            # result = self._aggregate_execution_budget_expenses()
+
+            # # populate SQL cache
+            # _store_timeseries_summary(result, self.spending_type, "REPORT")
+            # TimeseriesDataFetcher._execution_budget_cache[self.spending_type] = result
+
         return result
 
     def fetch_budgets(self, budget_id: int) -> tuple[Sequence[RowMapping], BudgetTypeLiteral]:
@@ -638,6 +664,7 @@ class TimeseriesDataFetcher:
             raise ValueError(
                 f"No expenses found for budget ID {budget_id} with type {budget_type}."
             )
+
         return result, budget_type
 
     def _fetch_dimension_type(self, dimension_id: int) -> str | None:
