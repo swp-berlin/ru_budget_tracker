@@ -306,6 +306,17 @@ def test_normalize_translated_name_non_program_only_normalizes() -> None:
     )
 
 
+def test_normalize_translated_name_title_cases_ministry() -> None:
+    assert (
+        normalize_translated_name(
+            "MINISTRY OF JUSTICE OF THE RUSSIAN FEDERATION",
+            is_program=False,
+            is_ministry=True,
+        )
+        == "Ministry Of Justice"
+    )
+
+
 @pytest.mark.parametrize(("russian_prefix", "english", "expected"), TYPE_LABEL_CASES)
 def test_normalize_translated_name_is_idempotent(
     russian_prefix: str, english: str, expected: str
