@@ -123,6 +123,8 @@ cache-budgets:
 cache-timeseries:
 	cd src && uv run python -m scripts.generate_timeseries_cache && cd -
 
+cache-all: cache-budgets cache-timeseries
+
 # Generate the data-quality report (src/data/quality/report.{md,json}).
 # Exit 1 only on ERROR-severity findings; WARNINGs (known source
 # inconsistencies) are listed but do not fail.
@@ -139,7 +141,7 @@ fix-db-chmod:
 	cd src && chmod 664 data/budget.*
 
 # Download data from Nextcloud and bootstrap the database with the full dataset.
-download-and-bootstrap-data: download-data bootstrap-data fix-db-chmod
+download-and-bootstrap-data: download-data bootstrap-data cache-all fix-db-chmod
 
 # Validate a small set of frozen reference values against the final SQLite database.
 test-frozen-db:
