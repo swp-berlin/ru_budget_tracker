@@ -37,8 +37,8 @@ def create_treemap_colors(
     other nodes, the color depends on viewby — MINISTRY uses a fixed gray for
     ministry-level nodes and chapter colors below; CHAPTER uses chapter colors
     directly; PROGRAM assigns filler slots by descending spending rank of the
-    top-level program, so the largest programs get the six dark tints and any
-    two programs sharing a slot sit at least len(filler_colors) ranks apart.
+    top-level program. Program 31 is the sole fixed exception and uses the dark
+    brand green, which is reserved from the rank-based program palette.
 
     Args:
         node_ids: Slash-separated node paths, e.g. ``"ROOT/02 - Defence/0200 - …"``.
@@ -58,6 +58,10 @@ def create_treemap_colors(
         # so resolve them to the language-agnostic orig_id where possible; that keeps a
         # program's color identical when the UI language changes.
         return program_label_to_orig_id.get(label, label) if program_label_to_orig_id else label
+
+    program_colors = [
+        color for color in Colors.filler_colors if color != Colors.BRAND_GREEN_DARK
+    ]
 
     program_rank: dict[str, int] = {}
     if viewby == "PROGRAM":
@@ -108,11 +112,14 @@ def create_treemap_colors(
             # program's whole subtree reads as one block. Programs that outnumber the
             # palette wrap around, but only far down the ranking where tiles are tiny.
             rank = program_rank.get(parts[1])
-            color = (
-                Colors.filler_colors[rank % len(Colors.filler_colors)]
-                if rank is not None
-                else Colors.ROOT_WHITE
-            )
+            if _program_key(parts[1]) == "31":
+                color = Colors.BRAND_GREEN_DARK
+            else:
+                color = (
+                    program_colors[rank % len(program_colors)]
+                    if rank is not None
+                    else Colors.ROOT_WHITE
+                )
         else:
             color = Colors.ROOT_WHITE
 

@@ -42,19 +42,20 @@ the treemap will become hard to tell apart. Two chapters must never share a slot
 
 ## Change the colors in the treemap's program view
 
-Programs have no fixed color assignment the way chapters do — there are 56–64 top-level
-programs in a typical budget year and only 18 palette slots, so colors here separate
-neighbouring tiles rather than identify a category. The palette is the `filler_colors` list
-in the same file (around line 261): the same six hues, flattened, **dark tints first, then
-mid, then light**.
+Except for program 31, which is fixed to `BRAND_GREEN_DARK`, programs have no fixed color
+assignment the way chapters do — there are 56–64 top-level programs in a typical budget
+year and only 17 available palette slots, so colors here separate neighbouring tiles rather
+than identify a category. The program palette is the `filler_colors` list in the same file
+(around line 261) minus the reserved `BRAND_GREEN_DARK`: **dark tints first, then mid, then
+light**.
 
 Slots are handed out by spending rank. `create_treemap_colors` in
 [`src/callbacks/helper.py`](../src/callbacks/helper.py) ranks the top-level **tiles** by
 value, largest first, and gives rank *n* the slot at `n % 18`. Things worth knowing before
 you change anything:
 
-- The 18 largest tiles always get 18 different colors, and any two tiles sharing a slot are
-  at least 18 ranks apart. Plotly sorts treemap children by value, so rank order is also
+- The 17 largest tiles always get 17 different colors, and any two tiles sharing a slot are
+  at least 17 ranks apart. Plotly sorts treemap children by value, so rank order is also
   roughly layout order — that adjacency is what the ranking buys you. (The previous
   CRC32-hash assignment put 14–19 same-color pairs within 5 ranks of each other in every
   budget year.)

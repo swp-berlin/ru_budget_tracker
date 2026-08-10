@@ -26,6 +26,9 @@ Transformations (applied in order):
     3. Federation short-form (all types, name + name_translated):
          Российск.. Федерац..  ->  РФ
          Russian Federation    ->  RF
+    4. Trailing federation suffix (all types, name + name_translated):
+         xyz РФ                   ->  xyz
+         xyz of the RF           ->  xyz
 
 Usage:
     python rename_dimensions.py             # apply changes
@@ -118,6 +121,8 @@ TRAILING_COMMA_QUOTE = re.compile(r',(["\'])$')
 # matching inside larger words such as "Всероссийской федерации" (a sports org).
 FEDERATION_RU = re.compile(r"\bРоссийск\w* Федерац\w*", re.IGNORECASE)
 FEDERATION_EN = re.compile(r"\bRussian Federation\b", re.IGNORECASE)
+TRAILING_FEDERATION_RU = re.compile(r"\s+РФ$", re.IGNORECASE)
+TRAILING_FEDERATION_EN = re.compile(r"\s+of the RF$", re.IGNORECASE)
 
 
 def strip_program_prefix(value: str | None) -> str | None:
@@ -169,11 +174,19 @@ def shorten_federation(value: str | None) -> str | None:
     return value
 
 
+def strip_trailing_federation(value: str | None) -> str | None:
+    """Strip a Russian or English federation suffix at the end of a name."""
+    if not value:
+        return value
+    value = TRAILING_FEDERATION_RU.sub("", value)
+    return TRAILING_FEDERATION_EN.sub("", value)
+
+
 def normalize_name(value: str | None, is_program: bool) -> str | None:
     """Apply all transformations in order to a single Russian name."""
     if is_program:
         value = strip_program_prefix(value)
-    return shorten_federation(value)
+    return strip_trailing_federation(shorten_federation(value))
 
 
 def normalize_translated_name(value: str | None, is_program: bool) -> str | None:
@@ -181,7 +194,7 @@ def normalize_translated_name(value: str | None, is_program: bool) -> str | None
     value = normalize_quotes(value)
     if is_program:
         value = strip_type_label(strip_program_prefix(value))
-    return shorten_federation(value)
+    return strip_trailing_federation(shorten_federation(value))
 
 
 # =============================================================================
