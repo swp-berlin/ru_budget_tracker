@@ -5,8 +5,9 @@
 - [Haushaltsdashboard - Stiftung Wissenschaft und Politik (SWP)](#haushaltsdashboard---stiftung-wissenschaft-und-politik-swp)
   - [Table of Contents](#table-of-contents)
   - [Description](#description)
-  - [Deployment](#deployment)
-    - [Docker Compose Files](#docker-compose-files)
+  - [Structure](#structure)
+    - [Dashboard](#dashboard)
+  - [Is a Dash app that follow a `fetch → transform → calculate → render`](#is-a-dash-app-that-follow-a-fetch--transform--calculate--render)
   - [Development Guidelines](#development-guidelines)
     - [Git and GitHub](#git-and-github)
     - [Structured Documentation](#structured-documentation)
@@ -24,31 +25,60 @@
 
 A dashboard application for Stiftung Wissenschaft und Politik (SWP). Dashboard provides insights into budgets and expenditures of the russion government. Includes military spending and classified expenses.
 
-## Deployment
+## Structure
 
-The deployment pipeline is configured using GitHub Actions. Actions are manually triggered and
-deploy the latest changes to the staging environment. The pipeline separates build and deployment
-steps for better modularity. In the first step, a Docker image is built and pushed to a container
-registry. We use the short SHA of the commit as the image tag. In the second step, the application
-is deployed to the staging server using SSH.
+The projects consists of two main components:
+- ETL (importer and scripts)
+- Dash App
 
-### Docker Compose Files
+```mermaid
+---
+title: ETL
+---
+flowchart LR
+DATA@{shape: cloud, label: SWP Cloud}
+I[importer]
+RAW@{shape: docs, label: import_files/raw}
+T[scripts]
+BANK@{shape: cloud, label: World Bank}
+DEEPL@{shape: cloud, label: DEEPL}
+CLEAN@{shape: docs, label: import_files/clean}
+DB[(budget.db)]
 
-| File                     | Purpose                                                               |
-| ------------------------ | --------------------------------------------------------------------- |
-| `docker-compose.yaml`    | Local testing — builds image from source, mounts local data directory |
-| `docker-compose.yaml.j2` | Deployment template — rendered by CI/CD before use on the server      |
+DATA --> I -->|extract reports| RAW
+RAW --> T
+T <-->|get money conversion rates| BANK
+T <-->|translate RU to EN| DEEPL
+T[scripts] -->|transform| CLEAN
+CLEAN -.-> DB
+T -->|load| DB
+```
 
-**`docker-compose.yaml.j2`** is a Jinja2 template. Before deployment, the CI pipeline renders it into a plain `docker-compose.yaml` on the server by substituting `{{ image_tag }}` with the short SHA of the deployed commit (e.g. `a1b2c3d`). This ensures each deployment pulls the exact image that was built and pushed in the same pipeline run.
+```mermaid
+---
+title: Dashboard
+---
+flowchart LR
+DB[(budget.db)]
+UTILS[utils]
+DB -->|fetch and transform| UTILS -->|pre-caching and lazy-caching| DB
+UTILS <--> CTRL[callbacks] <--> V[pages]
+```
 
-To deploy the latest changes to the staging environment, navigate to the "Actions" tab in the GitHub
-repository, select the "Deployment Pipeline" workflow, and click on the "Run workflow" button.
-Ensure that you select the appropriate branch from the drop-down before triggering the deployment.
-This allows you to deploy changes from different branches as needed.
+### Dashboard
 
-To update Secrets and Variables used in the deployment pipeline, go to the "Settings" tab of the
-GitHub repository, then select "Environments" and select the "Staging" environment. Here, you can add
-or modify the necessary Secrets and Variables required for the deployment process.
+Is a Dash app that follow a `fetch → transform → calculate → render`
+-
+
+
+- App including
+  - FE (`src/pages`)
+  - BE ()
+  - Database
+- Importer (`src/importer`)
+-
+
+
 
 ## Development Guidelines
 
