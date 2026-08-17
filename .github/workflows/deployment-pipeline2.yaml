@@ -1,4 +1,4 @@
-name: Deployment Workflow 2
+name: Build Pipeline
 
 on:
   workflow_dispatch:
@@ -85,4 +85,3 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-  
