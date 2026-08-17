@@ -140,7 +140,7 @@ download-data:
 # This is a dirty workaround for a permission issue on the server
 # It ensures group rw access which is required because differt users of the same group write to budget.db
 fix-db-chmod:
-	cd src && chmod 664 data/budget.*
+	cd src && chmod 664 db/budget.*
 
 # Download data from Nextcloud and bootstrap the database with the full dataset.
 download-and-bootstrap-data: download-data bootstrap-data-and-cache fix-db-chmod
