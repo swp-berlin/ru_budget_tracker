@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class DatabaseSettings(BaseModel):
     """SQLite database settings."""
 
-    directory: Path = Field(default=Path("data"), description="Path to database file")
+    directory: Path = Field(default=Path("db"), description="Path to database file")
     file_name: str = Field(default="budget.db", description="Database file name")
 
     @property
