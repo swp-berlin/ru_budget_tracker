@@ -11,6 +11,7 @@ from scripts.rename_dimensions import (
     normalize_translated_name,
     shorten_federation,
     strip_program_prefix,
+    strip_trailing_federation,
     strip_type_label,
 )
 
@@ -89,6 +90,28 @@ def test_shorten_federation_en() -> None:
 
 
 # =============================================================================
+# strip_trailing_federation
+# =============================================================================
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("Космическая деятельность РФ", "Космическая деятельность"),
+        ("Space Activities of the RF", "Space Activities"),
+        ("Space Activities OF THE RF", "Space Activities"),
+    ],
+)
+def test_strip_trailing_federation(value: str, expected: str) -> None:
+    assert strip_trailing_federation(value) == expected
+
+
+def test_strip_trailing_federation_keeps_non_trailing_occurrence() -> None:
+    value = "Ministry of Justice of the RF Central Office"
+    assert strip_trailing_federation(value) == value
+
+
+# =============================================================================
 # normalize_name
 # =============================================================================
 
@@ -100,7 +123,7 @@ def test_normalize_name_program_strips_then_shortens() -> None:
             'Российской Федерации"',
             is_program=True,
         )
-        == "Космическая деятельность РФ"
+        == "Космическая деятельность"
     )
 
 
@@ -270,7 +293,7 @@ def test_normalize_translated_name_program_full_pipeline() -> None:
         normalize_translated_name(
             'Federal Project "Space Activities of the Russian Federation”', is_program=True
         )
-        == "Space Activities of the RF"
+        == "Space Activities"
     )
 
 
@@ -280,6 +303,17 @@ def test_normalize_translated_name_non_program_only_normalizes() -> None:
             "Ministry of Justice of the Russian Federation “Central Office”", is_program=False
         )
         == 'Ministry of Justice of the RF "Central Office"'
+    )
+
+
+def test_normalize_translated_name_title_cases_ministry() -> None:
+    assert (
+        normalize_translated_name(
+            "MINISTRY OF JUSTICE OF THE RUSSIAN FEDERATION",
+            is_program=False,
+            is_ministry=True,
+        )
+        == "Ministry Of Justice"
     )
 
 

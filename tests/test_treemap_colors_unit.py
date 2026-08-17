@@ -11,6 +11,8 @@ import pytest
 from callbacks.helper import create_treemap_colors, create_treemap_text_colors
 from utils.definitions import Colors
 
+PROGRAM_COLORS = [color for color in Colors.filler_colors if color != Colors.BRAND_GREEN_DARK]
+
 
 def _contrast(a: str, b: str) -> float:
     """WCAG relative-luminance contrast ratio between two hex colors."""
@@ -37,14 +39,14 @@ def _program_nodes(tiles: list[tuple[str, float]]):
 class TestProgramSeparation:
     def test_top_slots_are_all_distinct(self):
         """The n largest programs must not repeat a color within one palette cycle."""
-        n = len(Colors.filler_colors)
+        n = len(PROGRAM_COLORS)
         tiles = [(f"P{i}", float(100 - i)) for i in range(n)]
         colors = create_treemap_colors(*_program_nodes(tiles), "ALL", "PROGRAM")
         assert len(set(colors[1:])) == n
 
     def test_repeats_are_a_full_cycle_apart(self):
-        """Programs sharing a slot sit >= len(filler_colors) ranks apart."""
-        n = len(Colors.filler_colors)
+        """Programs sharing a slot sit at least one program-palette cycle apart."""
+        n = len(PROGRAM_COLORS)
         tiles = [(f"P{i}", float(1000 - i)) for i in range(n * 3)]
         colors = create_treemap_colors(*_program_nodes(tiles), "ALL", "PROGRAM")[1:]
         seen: dict[str, int] = {}
@@ -92,6 +94,35 @@ class TestProgramSeparation:
         )
         assert colors[1] == colors[2] == colors[3]
         assert colors[4] != colors[1]
+
+    def test_program_31_and_its_descendants_use_dark_green(self):
+        node_ids = ["ROOT", "ROOT/Defence", "ROOT/Defence/Sub", "ROOT/Other"]
+        mapping = {"Defence": "31", "Other": "99"}
+        colors = create_treemap_colors(
+            node_ids, ["LAW"] * 4, [30.0, 20.0, 10.0, 10.0], "ALL", "PROGRAM", mapping
+        )
+        assert colors[1] == colors[2] == Colors.BRAND_GREEN_DARK
+        assert colors[3] == Colors.filler_colors[1]
+
+    def test_only_exact_program_31_is_overridden(self):
+        tiles = [("Program 310", 20.0), ("Program 31", 10.0)]
+        mapping = {"Program 310": "310", "Program 31": "31"}
+        colors = create_treemap_colors(*_program_nodes(tiles), "ALL", "PROGRAM", mapping)
+        assert colors[1] == Colors.filler_colors[0]
+        assert colors[2] == Colors.BRAND_GREEN_DARK
+
+    def test_program_31_override_is_language_agnostic(self):
+        ru = _program_nodes([("Оборона", 10.0)])
+        en = _program_nodes([("Defence", 10.0)])
+        mapping = {"Оборона": "31", "Defence": "31"}
+        assert create_treemap_colors(*ru, "ALL", "PROGRAM", mapping) == create_treemap_colors(
+            *en, "ALL", "PROGRAM", mapping
+        )
+
+    def test_dark_green_is_reserved_from_other_programs(self):
+        tiles = [(f"P{i}", float(100 - i)) for i in range(len(PROGRAM_COLORS) * 2)]
+        colors = create_treemap_colors(*_program_nodes(tiles), "ALL", "PROGRAM")[1:]
+        assert Colors.BRAND_GREEN_DARK not in colors
 
     def test_rank_zero_is_not_treated_as_missing(self):
         """A single program must get slot 0, not the ROOT_WHITE fallback."""

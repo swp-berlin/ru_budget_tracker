@@ -23,9 +23,14 @@ Transformations (applied in order):
        wording, position and punctuation; PROGRAM_TYPE_LABELS lists what it
        actually produced. Applied repeatedly because the source data nests
        type labels (Основное мероприятие "Приоритетный проект "xyz"").
-    3. Federation short-form (all types, name + name_translated):
+    3. English ministry capitalization (type == MINISTRY, name_translated only):
+         MINISTRY OF JUSTICE  ->  Ministry Of Justice
+    4. Federation short-form (all types, name + name_translated):
          Российск.. Федерац..  ->  РФ
          Russian Federation    ->  RF
+    5. Trailing federation suffix (all types, name + name_translated):
+         xyz РФ                   ->  xyz
+         xyz of the RF           ->  xyz
 
 Usage:
     python rename_dimensions.py             # apply changes
@@ -118,6 +123,8 @@ TRAILING_COMMA_QUOTE = re.compile(r',(["\'])$')
 # matching inside larger words such as "Всероссийской федерации" (a sports org).
 FEDERATION_RU = re.compile(r"\bРоссийск\w* Федерац\w*", re.IGNORECASE)
 FEDERATION_EN = re.compile(r"\bRussian Federation\b", re.IGNORECASE)
+TRAILING_FEDERATION_RU = re.compile(r"\s+РФ$", re.IGNORECASE)
+TRAILING_FEDERATION_EN = re.compile(r"\s+of the RF$", re.IGNORECASE)
 
 
 def strip_program_prefix(value: str | None) -> str | None:
@@ -169,19 +176,31 @@ def shorten_federation(value: str | None) -> str | None:
     return value
 
 
+def strip_trailing_federation(value: str | None) -> str | None:
+    """Strip a Russian or English federation suffix at the end of a name."""
+    if not value:
+        return value
+    value = TRAILING_FEDERATION_RU.sub("", value)
+    return TRAILING_FEDERATION_EN.sub("", value)
+
+
 def normalize_name(value: str | None, is_program: bool) -> str | None:
     """Apply all transformations in order to a single Russian name."""
     if is_program:
         value = strip_program_prefix(value)
-    return shorten_federation(value)
+    return strip_trailing_federation(shorten_federation(value))
 
 
-def normalize_translated_name(value: str | None, is_program: bool) -> str | None:
+def normalize_translated_name(
+    value: str | None, is_program: bool, is_ministry: bool = False
+) -> str | None:
     """Apply all transformations in order to a single English name."""
     value = normalize_quotes(value)
     if is_program:
         value = strip_type_label(strip_program_prefix(value))
-    return shorten_federation(value)
+    if value and is_ministry:
+        value = value.title()
+    return strip_trailing_federation(shorten_federation(value))
 
 
 # =============================================================================
@@ -211,7 +230,9 @@ def compute_changes() -> List[Tuple[int, str | None, str | None, str | None, str
     for dim_id, dim_type, name, name_translated in rows:
         is_program = dim_type == "PROGRAM"
         new_name = normalize_name(name, is_program)
-        new_translated = normalize_translated_name(name_translated, is_program)
+        new_translated = normalize_translated_name(
+            name_translated, is_program, is_ministry=dim_type == "MINISTRY"
+        )
         if new_name != name or new_translated != name_translated:
             changes.append((dim_id, new_name, new_translated, name, name_translated))
 
