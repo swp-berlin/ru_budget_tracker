@@ -117,6 +117,8 @@ import-all: import-all-core import-translations import-rename
 # Reset the local database, rerun migrations, then import the full dataset.
 bootstrap-data: rebuild-db import-all quality-report
 
+bootstrap-data-and-cache: bootstrap-data cache-all
+
 cache-budgets:
 	cd src && uv run python -m scripts.generate_budget_cache && cd -
 
@@ -141,7 +143,7 @@ fix-db-chmod:
 	cd src && chmod 664 data/budget.*
 
 # Download data from Nextcloud and bootstrap the database with the full dataset.
-download-and-bootstrap-data: download-data bootstrap-data cache-all fix-db-chmod
+download-and-bootstrap-data: download-data bootstrap-data-and-cache fix-db-chmod
 
 # Validate a small set of frozen reference values against the final SQLite database.
 test-frozen-db:

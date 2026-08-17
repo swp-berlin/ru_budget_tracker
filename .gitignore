@@ -9,7 +9,6 @@ wheels/
 
 # environemnt files
 .env
-.env.importer
 
 # IDE files
 .DS_Store
@@ -20,11 +19,12 @@ wheels/
 
 # database files
 # budget.db is not version-controlled — rebuild it with `make download-and-bootstrap-data`
-src/data/budget.db
+*.db*
 *_mock.db
 *.db-shm
 *.db-wal
-
+src/db/*
+!src/db/.gitkeep
 # data-binary-files
 *.pdf
 *.zip
