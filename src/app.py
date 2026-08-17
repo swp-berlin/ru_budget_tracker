@@ -9,6 +9,7 @@ from dash import Dash
 from settings import settings
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 # The app must be created before importing layout or callbacks, because
 # get_asset_url (used in layout.py) requires the Dash instance to exist.
