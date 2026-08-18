@@ -3,7 +3,7 @@
 from dash import dcc, html, register_page, get_asset_url, get_relative_path
 
 # Register this page with Dash
-register_page(__name__, path="/about")
+register_page(__name__, path="/about", title="Russian Federal Budget Dashboard - About")
 
 # Define the layout of the about page using Dash HTML components
 layout = html.Div(

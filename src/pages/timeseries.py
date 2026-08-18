@@ -3,7 +3,7 @@ from dash import dcc, html, register_page
 
 from utils.definitions import unit_config, period_config, spending_type_config
 
-register_page(__name__, path="/timeseries", title="Time Series View")
+register_page(__name__, path="/timeseries", title="Russian Federal Budget Dashboard - Time Series")
 
 # Graph config kept simple and explicit for production clarity
 TIMESERIES_CONFIG = dcc.Graph.Config(

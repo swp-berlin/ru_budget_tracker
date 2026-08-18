@@ -1,6 +1,6 @@
 from dash import dcc, html, register_page
 
-register_page(__name__, path="/", title="Treemap View")
+register_page(__name__, path="/", title="Russian Federal Budget Dashboard - Treemap")
 
 # Graph config kept simple and explicit for production clarity
 TREEMAP_CONFIG = dcc.Graph.Config(
