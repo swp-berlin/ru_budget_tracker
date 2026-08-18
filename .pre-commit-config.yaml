@@ -14,6 +14,7 @@ repos:
       - id: check-added-large-files
         # The third-party cross-validation CSVs are ~20 MB by nature and are
         # tracked deliberately so that `pytest -m external` is reproducible.
+        # also ignore clean/.*.xlxs files most important for clean/translations/...
         exclude: ^src/data/((validation/.*\.csv$)|import_files/.*\.xlsx)$
   - repo: https://github.com/betterleaks/betterleaks
     rev: v1.6.1
