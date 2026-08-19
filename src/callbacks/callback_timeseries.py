@@ -108,10 +108,7 @@ def fetch_timeseries_data(
         ancestor_dim_ids=list(ancestor_dim_ids),
     )
     transformer = TimeseriesTransformer()
-    if unit in {"PERCENT_YEAR_TO_DATE_SPENDING", "PERCENT_YEAR_TO_DATE_REVENUE"}:
-        df = transformer.transform_data(budgets, normalize=True, spending_type=spending_type)
-    else:
-        df = transformer.transform_data(budgets, normalize=False, spending_type=spending_type)
+    df = transformer.transform_data(budgets, spending_type=spending_type)
     budget_type: BudgetTypeLiteral = next(
         (row["type"] for row in budgets if row["type"] in ["LAW", "REPORT"]), "LAW"
     )

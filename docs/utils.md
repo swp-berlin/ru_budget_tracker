@@ -28,4 +28,4 @@ Also exposes `fetch_budgets_for_dropdown()` (used by the sidebar) and `_execute_
 `TreemapTransformer` class — converts raw DB rows into a flat Pandas DataFrame suitable for Plotly's treemap figure. Builds the full dimension path hierarchy (ministry → chapter → subchapter → program), assigns military flags, appends synthetic classified-spending rows, and wraps long labels.
 
 ### `transform_timeseries.py`
-`TimeseriesTransformer` class — converts raw budget rows into a Pandas DataFrame for the bar chart. De-cumulates quarterly REPORT values (Q2 = cumulative Q2 − Q1) and splits each period into open + classified bars.
+`TimeseriesTransformer` class — converts raw budget rows into a Pandas DataFrame for the bar chart. Keeps quarterly REPORT values cumulative year-to-date (matching the denominators in `calculate.py`) and splits each period into open + classified bars.

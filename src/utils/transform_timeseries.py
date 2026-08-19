@@ -5,69 +5,19 @@ from utils.definitions import budget_config, SpendingTypeLiteral
 
 
 class TimeseriesTransformer:
-    def _normalize_cumulative_expenses(
-        self, budgets: Sequence[RowMapping], spending_type: SpendingTypeLiteral = "ALL"
-    ) -> list[dict[str, str | float | int]]:
-        """Normalize cumulative quarterly expenses by subtracting the previous quarter's value.
-
-        Budgets are quarterly and cumulative, so Q4 includes Q1+Q2+Q3+Q4.
-        This method calculates the actual quarterly value by subtracting the previous quarter.
-        Q1 is the base (no subtraction), Q2 = Q2_cumulative - Q1_cumulative, etc.
-        Normalization is done separately for each year and budget type (LAW, REPORT).
-        """
-        normalized_budgets: list[dict[str, str | float | int]] = []
-
-        # Group budgets by year and type for independent normalization
-        grouped: dict[tuple[int, str], list[RowMapping]] = {}
-        for budget in budgets:
-            key = (budget["published_at"].year, budget["type"])
-            grouped.setdefault(key, []).append(budget)
-
-        value_key = "military_value" if spending_type == "MILITARY" else "total_value"
-
-        # Process each year-type group
-        for (_, _), group_budgets in grouped.items():
-            # Sort by date ascending to process in chronological order
-            sorted_budgets = sorted(group_budgets, key=lambda b: b["published_at"])
-
-            # Track previous quarter's cumulative value for subtraction
-            prev_cumulative_value: float = 0.0
-
-            for budget in sorted_budgets:
-                # Convert RowMapping to mutable dict
-                normalized = dict(budget)
-                # TOTAL rows store pre-computed classified spending in total_value
-                # (military_value is explicitly 0 in the fetch query for TOTAL rows).
-                # Always read total_value for TOTAL rows regardless of spending_type.
-                read_key = "total_value" if budget.get("type") == "TOTAL" else value_key
-                current_cumulative = budget.get(read_key, 0.0) or 0.0
-
-                # Calculate quarterly value by subtracting previous quarter
-                quarterly_value = current_cumulative - prev_cumulative_value
-                normalized["total_value"] = quarterly_value
-
-                normalized_budgets.append(normalized)
-
-                # Update previous value for next iteration
-                prev_cumulative_value = current_cumulative
-
-        return normalized_budgets
-
     def _transform_budget_totals(
         self,
         budgets: Sequence[RowMapping],
-        normalize: bool,
         spending_type: SpendingTypeLiteral = "ALL",
     ) -> pd.DataFrame:
         """Transform law budget rows into a dataframe suitable for Timeseries visualization."""
         if not budgets:
             return pd.DataFrame()
 
-        # For every published_at, subtract the law value from the total value
-        # and set new value as Classified Spending
-        budgets_corrected: Sequence[RowMapping] | list[dict[str, str | float | int]] = budgets
-        if normalize:
-            budgets_corrected = self._normalize_cumulative_expenses(budgets, spending_type)
+        # REPORT rows are cumulative year-to-date and are kept that way: every unit's
+        # denominator in `utils.calculate` is cumulative through the same quarter, so
+        # de-cumulating here would divide a single quarter by a year-to-date total.
+        budgets_corrected: Sequence[RowMapping] = budgets
 
         # Use military_value for the OPEN bar when filtering for military spending.
         open_value_key = "military_value" if spending_type == "MILITARY" else "total_value"
@@ -103,7 +53,7 @@ class TimeseriesTransformer:
             if corresponding_budget["type"] == "REPORT":
                 multiplicator = budget_config.report_total_value_multiplier
 
-            total_value: float = budget["total_value"] * multiplicator  # type: ignore
+            total_value: float = budget["total_value"] * multiplicator
 
             # The fetch layer always pre-computes classified in TOTAL rows
             # (total_value = classified / multiplier, military_value = 0),
@@ -136,12 +86,11 @@ class TimeseriesTransformer:
     def transform_data(
         self,
         budgets: Sequence[RowMapping],
-        normalize: bool = True,
         spending_type: SpendingTypeLiteral = "ALL",
     ) -> pd.DataFrame:
         """Transform raw rows into a dataframe suitable for Timeseries visualization."""
         if not budgets:
             return pd.DataFrame()
-        df = self._transform_budget_totals(budgets, normalize, spending_type)
+        df = self._transform_budget_totals(budgets, spending_type)
 
         return df
