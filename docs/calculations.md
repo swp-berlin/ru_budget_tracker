@@ -52,13 +52,17 @@ excluding rows with dimensions (so only the grand total is counted):
   `budget_config.law_total_value_multiplier` (LAW totals are stored in
   thousands in the source data).
 - **REPORT**: uses `MONTHLY`-scope totals published in quarter-end months
-  (`budget_config.quarterly_months`). `PERCENT_FULL_YEAR_SPENDING` takes the
-  latest available cumulative total. `PERCENT_YEAR_TO_DATE_SPENDING` matches
-  the total by month and, for Q2 onward, subtracts the previous quarter's
-  cumulative total so the result reflects only that quarter's spending
-  rather than the year-to-date cumulative figure. Matching is done by month
-  rather than exact date because REPORT and `TOTAL`/`EXPENSE` budgets for
-  the same quarter can be published on different dates.
+  (`budget_config.quarterly_months`). For `PERCENT_FULL_YEAR_SPENDING`, a
+  December REPORT total is used when available. If the year is incomplete
+  and no December REPORT total exists, the denominator falls back to the
+  `YEARLY`-scope LAW total for that year. REPORT totals are scaled by
+  `budget_config.report_total_value_multiplier`; the LAW fallback is scaled
+  by `budget_config.law_total_value_multiplier`.
+  `PERCENT_YEAR_TO_DATE_SPENDING` matches the cumulative REPORT total by
+  month and uses it directly, so all spending from the beginning of the year
+  through the current quarter is included. Matching is done by month rather
+  than exact date because REPORT and `TOTAL`/`EXPENSE` budgets for the same
+  quarter can be published on different dates.
 
 ### `PERCENT_YEAR_TO_DATE_REVENUE`
 
@@ -68,9 +72,11 @@ restricted to quarter-end publications, excluding rows with dimensions:
 
 - **LAW**: uses the latest available quarter's cumulative total for the
   date's year.
-- **REPORT**: matches by month and, for Q2 onward, subtracts the previous
-  quarter's cumulative total (same de-cumulation logic as spending, and for
-  the same reason — matching by exact date would miss rows).
+- **REPORT**: matches the cumulative total by month and uses it directly, so
+  all revenue from the beginning of the year through the current quarter is
+  included. Matching by month rather than exact date avoids missing rows when
+  REPORT and `TOTAL`/`REVENUE` budgets for the same quarter are published on
+  different dates.
 
 If no revenue budgets exist for the year at all, the denominator is `0.0` and
 callers treat that as "no revenue data" (`_percentage_revenue` raises

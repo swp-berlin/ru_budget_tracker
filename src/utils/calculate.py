@@ -45,7 +45,11 @@ class Calculator:
     """A collection of methods for various budget calculations."""
 
     def __init__(
-        self, unit: UnitTypeLiteral, budget_id: int, date: date, budget_type: BudgetTypeLiteral
+        self,
+        unit: UnitTypeLiteral,
+        budget_id: int,
+        date: date,
+        budget_type: BudgetTypeLiteral,
     ) -> None:
         self.unit: UnitTypeLiteral = unit
         self.budget_id: int = budget_id
@@ -93,7 +97,8 @@ class Calculator:
         if self.unit == "PERCENT_GDP_FULL_YEAR":
             select_stmt = select_stmt.where(
                 or_(
-                    ConversionRate.name.not_like("%q_"), ConversionRate.name.like("%20___estimate")
+                    ConversionRate.name.not_like("%q_"),
+                    ConversionRate.name.like("%20___estimate"),
                 ),
                 extract("month", ConversionRate.ended_at) == 12,
                 extract("day", ConversionRate.ended_at) == 31,
@@ -193,14 +198,41 @@ class Calculator:
                 if b.published_at.month in budget_config.quarterly_months
             ]
         previous_spending_value = 0.0
+        # FIX
+        use_law_total = False
         max_date = max([b.published_at for b in relevant_total_budgets], default=1)
         spending_cumulative = next(
             (b.value for b in relevant_total_budgets if b.published_at == max_date), 0.0
         )
+        # FIX
+        # if self.unit == "PERCENT_FULL_YEAR_SPENDING" and self.budget_type == "REPORT":
+        #     # For REPORT and full-year spending, we want the latest monthly total budget available in the report
+        #     latest_budget = max(relevant_total_budgets, key=lambda b: b.published_at, default=None)
+        #     spending_cumulative = latest_budget.value if latest_budget else 0.0
         if self.unit == "PERCENT_FULL_YEAR_SPENDING" and self.budget_type == "REPORT":
-            # For REPORT and full-year spending, we want the latest monthly total budget available in the report
-            latest_budget = max(relevant_total_budgets, key=lambda b: b.published_at, default=None)
-            spending_cumulative = latest_budget.value if latest_budget else 0.0
+            december_budget = next(
+                (b for b in relevant_total_budgets if b.published_at.month == 12),
+                None,
+            )
+
+            if december_budget:
+                # Completed year: use actual full-year REPORT spending.
+                spending_cumulative = december_budget.value
+            else:
+                # Incomplete year: use the full-year LAW total.
+                yearly_budgets = self._fetch_spending_budgets("YEARLY")
+                relevant_yearly_budgets = [
+                    b
+                    for b in yearly_budgets
+                    if b.published_at.year == period_start_date.year and b.scope == "YEARLY"
+                ]
+                latest_budget = max(
+                    relevant_yearly_budgets,
+                    key=lambda b: b.published_at,
+                    default=None,
+                )
+                spending_cumulative = latest_budget.value if latest_budget else 0.0
+                use_law_total = True
         if self.unit == "PERCENT_YEAR_TO_DATE_SPENDING" and self.budget_type == "REPORT":
             # Match by month — exact dates may differ between REPORT and TOTAL EXPENSE budgets,
             # which would cause CLASSIFIED rows (dated from TOTAL EXPENSE budgets) to look up a
@@ -213,26 +245,33 @@ class Calculator:
                 ),
                 0.0,
             )
-            if period_start_date.month > 3:
-                previous_month = period_start_date.month - 3
-                previous_spending_value = next(
-                    (
-                        b.value
-                        for b in relevant_total_budgets
-                        if b.published_at.month == previous_month
-                    ),
-                    0.0,
-                )
+            # FIX
+            # if period_start_date.month > 3:
+            #     previous_month = period_start_date.month - 3
+            #     # previous_spending_value = next(
+            #     #     (
+            #     #         b.value
+            #     #         for b in relevant_total_budgets
+            #     #         if b.published_at.month == previous_month
+            #     #     ),
+            #     #     0.0,
+            #     # )
 
         if not spending_cumulative:
             raise ValueError(
                 f"No spending data found for {period_start_date.year} in {unit_config.map[self.unit]}"
             )
 
+        # FIX
+        # multiplier: float = budget_config.law_total_value_multiplier
+        # if self.budget_type == "REPORT":
+        #     multiplier = budget_config.report_total_value_multiplier
         multiplier: float = budget_config.law_total_value_multiplier
-        if self.budget_type == "REPORT":
+        if self.budget_type == "REPORT" and not use_law_total:
             multiplier = budget_config.report_total_value_multiplier
-        spending_value = spending_cumulative - previous_spending_value
+        # FIX
+        # spending_value = spending_cumulative - previous_spending_value
+        spending_value = spending_cumulative
         spending_value *= multiplier
         Calculator._spending_cache[cache_key] = spending_value
         return spending_value
@@ -284,7 +323,8 @@ class Calculator:
         if self.budget_type == "LAW":
             relevant_date = max([b.published_at for b in relevant_total_budgets])
             revenue_value = next(
-                (b.value for b in relevant_total_budgets if b.published_at == relevant_date), 0.0
+                (b.value for b in relevant_total_budgets if b.published_at == relevant_date),
+                0.0,
             )
         else:
             # For REPORT, match by month — exact dates may differ between EXPENSE and REVENUE
@@ -308,7 +348,8 @@ class Calculator:
                     ),
                     0.0,
                 )
-                revenue_value -= previous_revenue_value
+                # FIX
+                # revenue_value -= previous_revenue_value
 
         Calculator._revenue_cache[cache_key] = revenue_value
         return revenue_value
