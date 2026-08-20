@@ -2,7 +2,7 @@
 # DEFAULT PATHS
 # =============================================================================
 
-DB_FILE ?= src/data/budget.db
+DB_FILE ?= src/db/budget.db
 DB_WAL_FILE ?= $(DB_FILE)-wal
 DB_SHM_FILE ?= $(DB_FILE)-shm
 TOTALS_REPORT_FILE ?= data/import_files/raw/totals/total_report_2026.xlsx
