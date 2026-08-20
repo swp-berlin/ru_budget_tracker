@@ -31,7 +31,6 @@ from utils.fetch_treemap import (
     ClassifiedSpendingData,
     TreemapDataFetcher,
     fetch_treemap_hierarchy,
-    find_prev_report_budget_id,
 )
 from utils.transform_treemap import TreemapTransformer
 
@@ -68,27 +67,6 @@ def transform_treemap_data(
         df = transformer.transform_from_flat(flat_rows)
     else:
         df = transformer.transform_data()
-    if (
-        unit in {"PERCENT_YEAR_TO_DATE_SPENDING", "PERCENT_YEAR_TO_DATE_REVENUE"}
-        and budget_type == "REPORT"
-        and published_at.month > 3
-    ):
-        prev_budget_id = find_prev_report_budget_id(
-            year=published_at.year, month=published_at.month - 3
-        )
-        if prev_budget_id is not None:
-            prev_dims, prev_progs, prev_classified, _ = fetch_treemap_data(prev_budget_id)
-            prev_transformer = TreemapTransformer(
-                prev_dims, prev_progs, prev_classified, spending_type=spending_type
-            )
-            prev_flat = fetch_treemap_hierarchy(prev_budget_id)
-            prev_df = (
-                prev_transformer.transform_from_flat(prev_flat)
-                if prev_flat
-                else prev_transformer.transform_data()
-            )
-            df = transformer.subtract_prev_quarter(df, prev_df)
-
     calculator = Calculator(unit, budget_id, published_at, budget_type)
     df["VALUE"] = calculator.calculate_series(df["VALUE"]).clip(lower=0)
     return df
