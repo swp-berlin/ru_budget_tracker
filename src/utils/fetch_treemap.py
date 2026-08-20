@@ -387,6 +387,23 @@ class TreemapDataFetcher:
         if not leaf_program_ids:
             return []
 
+        # SQLite caps the number of bound parameters per statement; chunk large
+        # ID lists to stay under that limit ("too many SQL variables").
+        CHUNK_SIZE = 500
+        seen_dimension_ids: set[int] = set()
+        rows: list[RowMapping] = []
+        for i in range(0, len(leaf_program_ids), CHUNK_SIZE):
+            chunk = leaf_program_ids[i : i + CHUNK_SIZE]
+            for row in self._fetch_treemap_programs_recursive_chunk(chunk):
+                if row["dimension_id"] not in seen_dimension_ids:
+                    seen_dimension_ids.add(row["dimension_id"])
+                    rows.append(row)
+        return rows
+
+    def _fetch_treemap_programs_recursive_chunk(
+        self, leaf_program_ids: list[int]
+    ) -> Sequence[RowMapping]:
+        """Fetch program hierarchy rows for a single chunk of leaf program IDs."""
         # Base columns for the CTE
         base_columns = [
             Dimension.id.label("dimension_id"),
