@@ -215,6 +215,41 @@ def generate_figure(
     return fig, path_to_short_id
 
 
+def remap_selected_id(
+    selected_id: str | None,
+    previous_node_map: dict | None,
+    new_node_map: dict | None,
+) -> str | None:
+    """Map a transient Plotly id to the same semantic node in a new figure.
+
+    Compact ids are reassigned whenever the Treemap is rebuilt. The stable
+    identity is the leaf dimension id together with its ancestor context.
+    Returning ``None`` deliberately selects the root when that identity is not
+    available under the new hierarchy or spending filter.
+    """
+    if not selected_id or not previous_node_map or not new_node_map:
+        return None
+    previous = previous_node_map.get(str(selected_id))
+    if not isinstance(previous, dict):
+        return None
+    identity = (
+        str(previous.get("leaf", "")),
+        tuple(str(value) for value in (previous.get("ctx", []) or [])),
+    )
+    if not identity[0]:
+        return None
+    for node_id, entry in new_node_map.items():
+        if not isinstance(entry, dict):
+            continue
+        candidate = (
+            str(entry.get("leaf", "")),
+            tuple(str(value) for value in (entry.get("ctx", []) or [])),
+        )
+        if candidate == identity:
+            return str(node_id)
+    return None
+
+
 @callback(
     Output("treemap-graph", "figure"),
     Output("treemap-graph", "style"),
@@ -223,6 +258,7 @@ def generate_figure(
     Output("store-treemap-hierarchy-key", "data"),
     Output("warning-toast", "is_open", allow_duplicate=True),
     Output("warning-toast", "children", allow_duplicate=True),
+    Input("treemap-page-ready", "data"),
     Input("url", "pathname"),
     Input("store-budget-id", "data"),
     Input("store-viewby", "data"),
@@ -230,17 +266,24 @@ def generate_figure(
     Input("store-unit", "data"),
     Input("store-language", "data"),
     State("store-treemap-hierarchy-key", "data"),
-    prevent_initial_call=True,
+    State("store-selected-id", "data"),
+    State("store-treemap-node-map", "data"),
+    prevent_initial_call="initial_duplicate",
 )
 def update_figure_from_filters(
+    page_ready: bool | None,
     pathname: str | None,
     budget_id: int,
     viewby: ViewByDimensionTypeLiteral = "MINISTRY",
     spending_type: SpendingTypeLiteral = "ALL",
     unit: UnitTypeLiteral = "ABSOLUTE",
-    language: str = "RU",
+    language: str = "EN",
     previous_hierarchy_key: list | None = None,
+    selected_id: str | None = None,
+    previous_node_map: dict | None = None,
 ) -> tuple[Any, Any, Any, Any, Any, bool, str]:
+    if not page_ready:
+        raise PreventUpdate
     # Guard: only run when the treemap page is active.
     if pathname != get_relative_path("/"):
         raise PreventUpdate
@@ -248,11 +291,7 @@ def update_figure_from_filters(
     if budget_id is None:
         raise PreventUpdate
 
-    # Clear the selected node when the hierarchy actually changed since the node map was
-    # last built — comparing values (not which Input fired) also catches the case where
-    # viewby/spending_type changed while on another page (this callback doesn't run there).
     hierarchy_key = [viewby, spending_type]
-    clear_selection = previous_hierarchy_key is not None and previous_hierarchy_key != hierarchy_key
 
     # Fetch and render using the selected values from stores
     # Use translated names when language is EN (English)
@@ -271,11 +310,16 @@ def update_figure_from_filters(
         df_shaped, spending_type, unit=unit, translated=translated, viewby=viewby
     )
     compact_map = build_compact_node_map(df_shaped, path_to_short_id=path_to_short_id)
+    selection_update = (
+        remap_selected_id(selected_id, previous_node_map, compact_map)
+        if selected_id
+        else no_update
+    )
     return (
         fig,
         {"visibility": "visible"},
         compact_map,
-        None if clear_selection else no_update,
+        selection_update,
         hierarchy_key,
         False,
         "",
@@ -412,7 +456,7 @@ def download_treemap_data(
     viewby: ViewByDimensionTypeLiteral,
     spending_type: SpendingTypeLiteral,
     unit: UnitTypeLiteral,
-    language: str = "RU",
+    language: str = "EN",
 ) -> tuple[Any, Any, Any]:
     if pathname != get_relative_path("/"):
         raise PreventUpdate

@@ -221,7 +221,7 @@ def generate_figure(
 
 
 def _find_path_by_dimension_id(
-    dim_id: int, node_map: dict, language: LanguageTypeLiteral = "RU"
+    dim_id: int, node_map: dict, language: LanguageTypeLiteral = "EN"
 ) -> str | None:
     """Look up a node path directly by dimension_id, used for deep-link fallback."""
     lang_key = language.upper()
@@ -304,9 +304,10 @@ def _resolve_filter_context(
         if focus_raw:
             focus_raw = unquote_plus(focus_raw).strip()
             # ?focus= is "leaf" (single dim_id) or "ctx1,ctx2,...,leaf" (ancestor chain).
-            # Always use the leaf (last element) for timeseries lookup.
-            leaf_str = focus_raw.split(",")[-1]
-            if leaf_str.isdigit():
+            focus_parts = focus_raw.split(",")
+            leaf_str = focus_parts[-1]
+            if leaf_str.isdigit() and all(part.isdigit() for part in focus_parts[:-1]):
+                ancestor_dim_ids = tuple(int(part) for part in focus_parts[:-1])
                 focus_dim_id = int(leaf_str)
                 resolved_path = _find_path_by_dimension_id(focus_dim_id, node_map, language)
     selected_dimension = node_map.get(resolved_path) if resolved_path else None
@@ -350,6 +351,7 @@ def _format_timeseries_title(
     Output("timeseries-graph", "style"),
     Output("store-timeseries-ticks", "data"),
     Output("timeseries-title", "children"),
+    Input("timeseries-page-ready", "data"),
     Input("url", "pathname"),
     Input("store-budget-id", "data"),
     Input("store-period", "data"),
@@ -361,16 +363,19 @@ def _format_timeseries_title(
     State("url", "search"),
 )
 def update_figure_from_filters(
+    page_ready: bool | None,
     pathname: str | None,
     budget_id: int,
     period: PeriodTypeLiteral = "ALL",
     spending_type: SpendingTypeLiteral = "ALL",
     unit: UnitTypeLiteral = "ABSOLUTE",
     selected_node_id: str | None = None,
-    language: LanguageTypeLiteral = "RU",
+    language: LanguageTypeLiteral = "EN",
     compact_node_map: dict | None = None,
     url_search: str | None = None,
 ) -> tuple[go.Figure, dict[str, str], dict | None, str | None]:
+    if not page_ready:
+        raise PreventUpdate
     # Guard: only render on the timeseries page to keep hidden graphs hidden.
     if pathname != get_relative_path("/timeseries"):
         return go.Figure(), {"display": "none"}, None, None
@@ -384,7 +389,7 @@ def update_figure_from_filters(
         node_map = {}
 
     selected_dimension, classified_only, ancestor_dim_ids, resolved_path = _resolve_filter_context(
-        selected_node_id, compact_node_map, node_map, language or "RU", url_search
+        selected_node_id, compact_node_map, node_map, language or "EN", url_search
     )
     df, _, budget_type = fetch_timeseries_data(
         budget_id=budget_id,
@@ -440,7 +445,7 @@ def download_timeseries_data(
     unit: UnitTypeLiteral = "ABSOLUTE",
     selected_node_id: str | None = None,
     compact_node_map: dict | None = None,
-    language: LanguageTypeLiteral = "RU",
+    language: LanguageTypeLiteral = "EN",
     url_search: str | None = None,
 ) -> dict[str, Any]:
     """
@@ -457,7 +462,7 @@ def download_timeseries_data(
     except ValueError:
         node_map = {}
     selected_dimension, classified_only, ancestor_dim_ids, _ = _resolve_filter_context(
-        selected_node_id, compact_node_map, node_map, language or "RU", url_search
+        selected_node_id, compact_node_map, node_map, language or "EN", url_search
     )
     df, _, budget_type = fetch_timeseries_data(
         budget_id=budget_id,

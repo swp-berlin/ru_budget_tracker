@@ -52,6 +52,9 @@ def layout(**other_kwargs) -> html.Div:
     return html.Div(
         className="plot-page",
         children=[
+            # Keep graph callbacks dormant until Dash Pages has mounted this
+            # layout together with the callback output components below.
+            dcc.Store(id="timeseries-page-ready", data=True),
             # Hidden treemap graph keeps cross-page callbacks satisfied.
             dcc.Graph(
                 id="treemap-graph", style={"display": "none", "height": "100%", "width": "100%"}
