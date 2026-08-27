@@ -1,7 +1,7 @@
 """App-level callbacks (toolbar, filters, menus, spinners, share/download)."""
 
 from typing import Any
-from urllib.parse import urlparse, unquote_plus, parse_qs, urlencode
+from urllib.parse import unquote_plus, parse_qs, urlencode
 
 import dash_bootstrap_components as dbc
 from dash import (
@@ -64,6 +64,69 @@ def _update_search_param(current_search: str | None, key: str, value: str) -> st
     return "?" + urlencode(params, doseq=True)
 
 
+def _focus_from_compact_map(selected_id: str | None, compact_node_map: dict | None) -> str | None:
+    """Encode the semantic node behind a transient Plotly id for URL sharing."""
+    if not selected_id or not compact_node_map:
+        return None
+    entry = compact_node_map.get(str(selected_id))
+    if not isinstance(entry, dict):
+        return None
+    leaf = str(entry.get("leaf", ""))
+    if not leaf:
+        return None
+    context = entry.get("ctx", []) or []
+    return ",".join([str(value) for value in context] + [leaf])
+
+
+def _build_switch_query(
+    current_search: str | None,
+    *,
+    destination: str,
+    budget_id: int | None,
+    viewby: str | None,
+    period: str | None,
+    spending_type: str | None,
+    unit: str | None,
+    language: str | None,
+    selected_id: str | None,
+    compact_node_map: dict | None,
+) -> str:
+    """Serialize the current shared stores for a Treemap/Time Series switch.
+
+    The entry URL initializes the stores once. After that, store values are
+    authoritative so a page switch cannot resurrect stale URL parameters.
+    """
+    params = _parse_search(current_search)
+    shared_values = {
+        "budget_id": budget_id,
+        "spending_type": spending_type,
+        "unit": unit,
+        "language": language,
+    }
+    for key, value in shared_values.items():
+        if value is not None:
+            params[key] = [str(value)]
+
+    focus = _focus_from_compact_map(selected_id, compact_node_map)
+    if focus:
+        params["focus"] = [focus]
+    elif selected_id:
+        # A selected Plotly id without a semantic match is stale. Falling back
+        # to the root must also remove a stale focus from the destination URL.
+        params.pop("focus", None)
+
+    if destination == "treemap":
+        params.pop("period", None)
+        if viewby is not None:
+            params["viewby"] = [str(viewby)]
+    else:
+        params.pop("viewby", None)
+        if period is not None:
+            params["period"] = [str(period)]
+
+    return urlencode(params, doseq=True)
+
+
 # --- Navigation ---
 
 
@@ -116,71 +179,50 @@ def update_about_button(
     Output("btn-switch-graphs", "href"),
     Output("btn-switch-graphs", "children"),
     Output("btn-switch-graphs", "title"),
-    State("url", "href"),
     Input("url", "pathname"),
+    Input("url", "search"),
     Input("store-budget-id", "data"),
     Input("store-selected-id", "data"),
-    State("store-treemap-node-map", "data"),
-    State("store-viewby", "data"),
-    State("store-period", "data"),
+    Input("store-treemap-node-map", "data"),
+    Input("store-viewby", "data"),
+    Input("store-period", "data"),
+    Input("store-spending-type", "data"),
+    Input("store-unit", "data"),
+    Input("store-language", "data"),
     prevent_initial_call="initial_duplicate",
 )
 def switch_graphs(
-    url: str,
     url_pathname: str | None,
+    current_search: str | None,
     budget_id: int | None,
     selected_id: str | None,
     compact_node_map: dict | None,
     viewby: str | None,
     period: str | None,
+    spending_type: str | None,
+    unit: str | None,
+    language: str | None,
 ):
-    """Swap destination, icon, and label based on current page.
-
-    Most filter params are read directly from the current URL. budget_id and
-    focus are exceptions: they're recomputed from stores, since the URL isn't
-    guaranteed to already reflect the latest store-budget-id/store-selected-id.
-    """
-    url_parsed = urlparse(url)
-    query_param_dict = parse_qs(url_parsed.query)
+    """Swap destination and serialize the authoritative current dashboard state."""
     treemap_path = get_relative_path("/")
     timeseries_path = get_relative_path("/timeseries")
 
-    # Compute focus from the currently selected node.
-    leaf_node_id: str = ""
-    if selected_id and compact_node_map:
-        leaf_node = compact_node_map.get(str(selected_id))
-        if isinstance(leaf_node, dict):
-            leaf = str(leaf_node.get("leaf", ""))
-            if leaf:
-                # Encode the full ancestor chain ending with the leaf dim_id, comma-joined.
-                # e.g. ctx=[100], leaf="200" → "100,200". Top-level nodes get just the leaf.
-                ctx: list = leaf_node.get("ctx", []) or []  # type: ignore[assignment]
-                leaf_node_id = ",".join([str(c) for c in ctx] + [leaf])
-
-    # Case 1: node selected → set focus param
-    if leaf_node_id:
-        query_param_dict["focus"] = [leaf_node_id]
-
-    # Case 2: back to root but focus still in URL → clear it
-    if (
-        url_pathname == treemap_path
-        and not leaf_node_id
-        and query_param_dict.get("focus") is not None
-        and len(compact_node_map or {}) > 0
-        and len(selected_id or "") > 0
-    ):
-        query_param_dict.pop("focus")
-
     if url_pathname == timeseries_path:
-        # Going back to treemap: strip period (timeseries-only), ensure viewby is present.
-        dest_params = {k: v for k, v in query_param_dict.items() if k != "period"}
-        if viewby:
-            dest_params.setdefault("viewby", [str(viewby)])
-        if budget_id is not None:
-            dest_params["budget_id"] = [str(budget_id)]
-        query_string = urlencode(dest_params, doseq=True)
+        query_string = _build_switch_query(
+            current_search,
+            destination="treemap",
+            budget_id=budget_id,
+            viewby=viewby,
+            period=period,
+            spending_type=spending_type,
+            unit=unit,
+            language=language,
+            selected_id=selected_id,
+            compact_node_map=compact_node_map,
+        )
+        href = f"{treemap_path}?{query_string}" if query_string else treemap_path
         return (
-            f"{treemap_path}?{query_string}",
+            href,
             [
                 html.Img(src=get_asset_url("icons/dashboard.svg"), alt="Treemap icon"),
                 html.Span("Treemap", className="btn-label"),
@@ -188,15 +230,21 @@ def switch_graphs(
             "Switch to Treemap View",
         )
 
-    # Going to timeseries: strip viewby (treemap-only), ensure period is present.
-    dest_params = {k: v for k, v in query_param_dict.items() if k != "viewby"}
-    if period:
-        dest_params.setdefault("period", [str(period)])
-    if budget_id is not None:
-        dest_params["budget_id"] = [str(budget_id)]
-    query_string = urlencode(dest_params, doseq=True)
+    query_string = _build_switch_query(
+        current_search,
+        destination="timeseries",
+        budget_id=budget_id,
+        viewby=viewby,
+        period=period,
+        spending_type=spending_type,
+        unit=unit,
+        language=language,
+        selected_id=selected_id,
+        compact_node_map=compact_node_map,
+    )
+    href = f"{timeseries_path}?{query_string}" if query_string else timeseries_path
     return (
-        f"{timeseries_path}?{query_string}",
+        href,
         [
             html.Img(src=get_asset_url("icons/stacked_bar_chart.svg"), alt="Timeseries icon"),
             html.Span("Timeseries", className="btn-label"),
@@ -392,9 +440,7 @@ def init_filters_from_url(
 # --- Filter selections (pattern-matched menu items) ---
 
 
-def _make_select_callback(
-    item_type: str, store: str, url_param: str, clears_focus: bool = False
-) -> None:
+def _make_select_callback(item_type: str, store: str, url_param: str) -> None:
     @callback(
         Output("url", "search", allow_duplicate=True),
         Output(store, "data"),
@@ -406,18 +452,14 @@ def _make_select_callback(
         value = _triggered_value(item_type)
         params = _parse_search(current_search)
         params[url_param] = [str(value)]
-        if clears_focus:
-            params.pop("focus", None)
         return "?" + urlencode(params, doseq=True), value
 
     _cb.__name__ = f"select_{item_type.replace('-', '_')}"
 
 
-_make_select_callback("viewby-item", "store-viewby", "viewby", clears_focus=True)
+_make_select_callback("viewby-item", "store-viewby", "viewby")
 _make_select_callback("period-item", "store-period", "period")
-_make_select_callback(
-    "spending-type-item", "store-spending-type", "spending_type", clears_focus=True
-)
+_make_select_callback("spending-type-item", "store-spending-type", "spending_type")
 _make_select_callback("unit-item", "store-unit", "unit")
 
 

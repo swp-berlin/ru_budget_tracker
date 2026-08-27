@@ -63,7 +63,7 @@ toolbar = html.Div(
         dcc.Store(id="store-period", data="ALL"),
         dcc.Store(id="store-spending-type", data="ALL"),
         dcc.Store(id="store-unit", data="ABSOLUTE"),
-        dcc.Store(id="store-language", data="RU"),
+        dcc.Store(id="store-language", data="EN"),
         # Store treemap node metadata for cross-page selection context.
         dcc.Store(id="store-treemap-node-map"),
         # Remembers the (viewby, spending_type) that produced store-treemap-node-map, so a
@@ -215,10 +215,10 @@ toolbar = html.Div(
                                 ),
                                 dcc.Download(id="download-treemap-data"),
                                 dcc.Download(id="download-timeseries-data"),
-                                # Language toggle button: default text shows next language (EN), default param RU
+                                # Language toggle button shows the language users can switch to.
                                 dbc.Button(
                                     [
-                                        html.Span("EN", className="btn-label"),
+                                        html.Span("RU", className="btn-label"),
                                     ],
                                     id="btn-switch-data-language",
                                     title="Toggle data language",
@@ -288,6 +288,8 @@ validation_layout = html.Div(
         html.Div(id="dummy-restore-zoom", style={"display": "none"}),
         dcc.Store(id="store-selected-id"),
         dcc.Store(id="store-treemap-node-map"),
+        dcc.Store(id="treemap-page-ready"),
+        dcc.Store(id="timeseries-page-ready"),
         dcc.Graph(id="timeseries-graph"),
         dcc.Graph(id="treemap-graph"),
         dcc.Download(id="download-timeseries-data"),

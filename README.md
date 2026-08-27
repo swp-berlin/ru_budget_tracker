@@ -91,6 +91,9 @@ Is a Dash app that follow a `fetch → transform → calculate → render`
 ### Structured Documentation
 
 - **Module Docs**: Each major module or directory should have a corresponding doc file under [`docs/`](docs/) that explains its purpose, usage, and any important details. This helps new developers understand the structure and functionality of the codebase quickly.
+- **Dashboard state fixes**: The shared Treemap/Time Series state, semantic node remapping,
+  initial-render guard, and verification checklist are documented in
+  [`docs/dashboard-state-and-reload-fixes.md`](docs/dashboard-state-and-reload-fixes.md).
 - **Code Comments**: Use comments within the code to explain complex logic or important decisions.
 
 ### Code Quality
