@@ -351,7 +351,7 @@ def _format_timeseries_title(
     Output("timeseries-graph", "style"),
     Output("store-timeseries-ticks", "data"),
     Output("timeseries-title", "children"),
-    Input("timeseries-page-ready", "data"),
+    Input("timeseries-page-ready", "data", allow_optional=True),
     Input("url", "pathname"),
     Input("store-budget-id", "data"),
     Input("store-period", "data"),

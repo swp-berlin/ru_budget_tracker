@@ -258,7 +258,7 @@ def remap_selected_id(
     Output("store-treemap-hierarchy-key", "data"),
     Output("warning-toast", "is_open", allow_duplicate=True),
     Output("warning-toast", "children", allow_duplicate=True),
-    Input("treemap-page-ready", "data"),
+    Input("treemap-page-ready", "data", allow_optional=True),
     Input("url", "pathname"),
     Input("store-budget-id", "data"),
     Input("store-viewby", "data"),
