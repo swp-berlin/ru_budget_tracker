@@ -6,7 +6,17 @@ from typing import Any, Optional, Sequence
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from dash import Input, Output, State, callback, dcc, get_relative_path, no_update
+from dash import (
+    ClientsideFunction,
+    Input,
+    Output,
+    State,
+    callback,
+    clientside_callback,
+    dcc,
+    get_relative_path,
+    no_update,
+)
 from dash.exceptions import PreventUpdate
 from sqlalchemy import RowMapping
 
@@ -326,24 +336,11 @@ def update_figure_from_filters(
     )
 
 
-@callback(
+clientside_callback(
+    ClientsideFunction(namespace="clientside", function_name="storeTreemapSelection"),
     Output("store-selected-id", "data"),
     Input("treemap-graph", "clickData"),
 )
-def update_selected_id(click_data: dict | None) -> Optional[str]:
-    """Store the currently selected treemap node id."""
-    if not click_data:
-        raise PreventUpdate
-    try:
-        pts = click_data.get("points", [])
-        if not pts:
-            raise PreventUpdate
-        node_id = pts[0].get("id")
-        if not node_id:
-            raise PreventUpdate
-        return str(node_id)
-    except Exception:
-        raise PreventUpdate
 
 
 def _build_download_df(

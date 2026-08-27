@@ -2,6 +2,15 @@ window.dash_clientside = window.dash_clientside || {};
 window.dash_clientside.clientside = window.dash_clientside.clientside || {};
 
 Object.assign(window.dash_clientside.clientside, {
+  // Persist the visible Treemap level before another UI action can rebuild it.
+  // An empty Plotly id, if emitted for the virtual root, deliberately clears
+  // the subject selection.
+  storeTreemapSelection: function (clickData) {
+    const point = clickData?.points?.[0];
+    if (!point || !("id" in point)) return window.dash_clientside.no_update;
+    return point.id === null || point.id === "" ? null : String(point.id);
+  },
+
   // ---------------------------------------------------------------------------
   // findAndClickSlice
   //

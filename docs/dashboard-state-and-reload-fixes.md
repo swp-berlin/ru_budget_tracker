@@ -36,6 +36,11 @@ The selected Treemap node is represented in the URL as its ancestor dimension id
 leaf dimension id (`focus=ancestor,...,leaf`). This makes the selection independent of Plotly's
 short, transient node ids.
 
+Treemap clicks, including navigation back to the root, update the shared selected-node store
+directly in the browser. An empty Plotly node id clears the subject selection. Keeping this small
+update local prevents a subsequent filter click from rebuilding the figure with an older
+selection while a server callback is still in flight.
+
 ## Selection remapping
 
 Every Treemap rebuild creates new compact Plotly ids. The implementation therefore compares a
@@ -94,7 +99,8 @@ component ids.
 4. Select a Treemap subject that exists in both `ALL` and `MILITARY`; switch between them and
    confirm the subject remains selected.
 5. Select a subject absent from `MILITARY`; switch to `MILITARY` and confirm the root is shown.
-6. Select a subject, switch to Time Series and back, and confirm the subject remains selected.
+6. Select a subject, switch to Time Series and back, return to root, select a different subject,
+   and immediately change `ALL`/`MILITARY`; confirm that only the latest subject is retained.
 7. Repeatedly reload `/` with Enter, F5, and Ctrl+F5; confirm that a graph request is made and the
    Treemap appears each time.
 8. Open `/about` and confirm the new four-section text, links, list indentation, bold labels, and
