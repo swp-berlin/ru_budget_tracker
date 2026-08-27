@@ -276,6 +276,15 @@ def toggle_resize_interval(pathname: str | None) -> bool:
     return pathname != get_relative_path("/timeseries")
 
 
+@callback(
+    Output("timeseries-title", "hidden"),
+    Input("url", "pathname"),
+)
+def hide_timeseries_title(pathname: str | None) -> bool:
+    """Keep the global Time Series title hidden on every other page."""
+    return pathname != get_relative_path("/timeseries")
+
+
 # --- Budget ---
 
 
@@ -627,12 +636,12 @@ clientside_callback(
     prevent_initial_call=True,
 )
 
-# Restore treemap zoom to the previously selected node after a figure update.
+# Restore Treemap zoom after either the figure or its remapped selection changes.
 clientside_callback(
     ClientsideFunction(namespace="clientside", function_name="restoreTreemapZoom"),
     Output("dummy-restore-zoom", "children"),
     Input("treemap-graph", "figure", allow_optional=True),
-    State("store-selected-id", "data"),
+    Input("store-selected-id", "data"),
 )
 
 # Handle URL focus parameter and click simulation.

@@ -2,7 +2,7 @@
 
 from urllib.parse import parse_qs
 
-from callbacks.callback import _build_switch_query
+from callbacks.callback import _build_switch_query, hide_timeseries_title
 from callbacks.callback_timeseries import _resolve_filter_context
 from callbacks.callback_treemap import remap_selected_id
 
@@ -108,3 +108,11 @@ def test_timeseries_direct_link_keeps_full_ancestor_context() -> None:
     assert classified_only is False
     assert ancestors == (10,)
     assert path == "10 - Parent/20 - Social spending"
+
+
+def test_timeseries_title_is_hidden_outside_timeseries_page(monkeypatch) -> None:
+    monkeypatch.setattr("callbacks.callback.get_relative_path", lambda path: path)
+
+    assert hide_timeseries_title("/") is True
+    assert hide_timeseries_title("/about") is True
+    assert hide_timeseries_title("/timeseries") is False
