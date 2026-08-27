@@ -61,9 +61,10 @@ not itself the data error.
 Both graph pages now contain a small page-readiness store beside their graph output. Each main
 graph callback requires that page-local store as an input. Consequently, initial rendering starts
 only after Dash Pages has mounted the page and its graph. The same guard is applied to Time Series
-because it uses the same page structure. This follows Dash's documented behavior that newly
-inserted inputs trigger their callbacks, while a callback with a missing input does not fire; see
-the [Dash app lifecycle](https://dash.plotly.com/app-lifecycle) and
+because it uses the same page structure. The readiness inputs are optional so that the inactive
+page can omit its store without a client-side reference error; a missing value is ignored by the
+callback guard. This follows Dash's documented behavior that newly inserted inputs trigger their
+callbacks; see the [Dash app lifecycle](https://dash.plotly.com/app-lifecycle) and
 [callback gotchas](https://dash.plotly.com/callback-gotchas).
 
 This is intentionally a narrow reliability fix. It does not change data loading, introduce a new
