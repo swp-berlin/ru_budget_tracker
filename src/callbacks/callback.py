@@ -663,7 +663,7 @@ clientside_callback(
     ClientsideFunction(namespace="clientside", function_name="syncTreemapFocusUrl"),
     Output("url", "search", allow_duplicate=True),
     Input("store-selected-id", "data"),
-    Input("store-treemap-node-map", "data"),
+    State("store-treemap-node-map", "data"),
     State("url", "search"),
     prevent_initial_call=True,
 )
