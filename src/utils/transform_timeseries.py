@@ -12,7 +12,7 @@ class TimeseriesTransformer:
     ) -> pd.DataFrame:
         """Transform law budget rows into a dataframe suitable for Timeseries visualization."""
         if not budgets:
-            return pd.DataFrame()
+            return pd.DataFrame(columns=["expenses", "dates", "types", "budget_id"])
 
         # REPORT rows are cumulative year-to-date and are kept that way: every unit's
         # denominator in `utils.calculate` is cumulative through the same quarter, so
@@ -90,7 +90,7 @@ class TimeseriesTransformer:
     ) -> pd.DataFrame:
         """Transform raw rows into a dataframe suitable for Timeseries visualization."""
         if not budgets:
-            return pd.DataFrame()
+            return pd.DataFrame(columns=["expenses", "dates", "types", "budget_id"])
         df = self._transform_budget_totals(budgets, spending_type)
 
         return df

@@ -6,11 +6,14 @@ const EXPORT_FONT = 'Source Sans 3';
 const EXPORT_FONT_FILE = 'assets/fonts/Source_Sans_3/SourceSans3-VariableFont_wght.ttf';
 
 Object.assign(window.dash_clientside.clientside, {
-  copyShareLink: function (n_clicks, selectedId, nodeMap) {
+  copyShareLink: function (n_clicks, selectedId, nodeMap, viewby) {
     try {
       if (!n_clicks) return 'Share not triggered';
       // URL is always current (write-through); only focus needs computing from the node map.
       const url = new URL(window.location.href);
+      // Time Series hides this control, but the hierarchy is required when a
+      // recipient follows the link and switches back to the Treemap.
+      if (viewby) url.searchParams.set('viewby', viewby);
       if (selectedId) {
         if (nodeMap) {
           const entry = nodeMap[String(selectedId)];

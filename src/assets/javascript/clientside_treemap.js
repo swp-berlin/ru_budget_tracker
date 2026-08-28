@@ -2,15 +2,6 @@ window.dash_clientside = window.dash_clientside || {};
 window.dash_clientside.clientside = window.dash_clientside.clientside || {};
 
 Object.assign(window.dash_clientside.clientside, {
-  // Persist the visible Treemap level before another UI action can rebuild it.
-  // An empty Plotly id, if emitted for the virtual root, deliberately clears
-  // the subject selection.
-  storeTreemapSelection: function (clickData) {
-    const point = clickData?.points?.[0];
-    if (!point || !("id" in point)) return window.dash_clientside.no_update;
-    return point.id === null || point.id === "" ? null : String(point.id);
-  },
-
   // ---------------------------------------------------------------------------
   // findAndClickSlice
   //
@@ -38,7 +29,15 @@ Object.assign(window.dash_clientside.clientside, {
   // @param {string} currentViewby   - View-by value currently loaded in the store
   // @returns {string} Status string written to a hidden dummy output element.
   // ---------------------------------------------------------------------------
-  findAndClickSlice: function (search, figure, nodeMap, language, currentBudgetId, currentViewby) {
+  findAndClickSlice: function (
+    search,
+    figure,
+    nodeMap,
+    language,
+    currentBudgetId,
+    currentViewby,
+    currentSelectedId
+  ) {
     if (!search) return "no search params";
 
     const params = new URLSearchParams(search);
@@ -59,7 +58,8 @@ Object.assign(window.dash_clientside.clientside, {
     const focusParam = params.get("focus");
     if (!focusParam) return "no focus param";
 
-    let nodeId = decodeURIComponent(focusParam).trim();
+    const decodedFocus = decodeURIComponent(focusParam).trim();
+    let nodeId = null;
 
     // ?focus= encodes the full ancestor chain ending with the leaf dim_id, comma-joined.
     // e.g. "100,200" means ancestor dim_id=100, leaf dim_id=200.
@@ -67,7 +67,7 @@ Object.assign(window.dash_clientside.clientside, {
     // We match against nodeMap entries on both leaf AND ctx so that nodes sharing
     // the same dim_id under different parents (e.g. Chapter "02" under Ministry A
     // vs Ministry B) are always resolved to the exact intended node.
-    const focusParts = nodeId.split(",").map(s => parseInt(s, 10));
+    const focusParts = decodedFocus.split(",").map(s => parseInt(s, 10));
     const focusLeaf = focusParts[focusParts.length - 1];
     const focusCtx = focusParts.slice(0, -1);
 
@@ -91,10 +91,27 @@ Object.assign(window.dash_clientside.clientside, {
       }
     }
 
+    // URL focus values are semantic dimension ids, never Plotly's transient
+    // short ids. If the semantic subject is absent in this figure, select the
+    // root instead of accidentally matching an unrelated numeric short id.
+    if (nodeId === null) {
+      if (nodeMap) {
+        window.dash_clientside.set_props("store-selected-id", { data: null });
+      }
+      return "focus not in current node map";
+    }
+
     // Skip if the node doesn't exist in the current figure (e.g. wrong filters applied).
     if (figure?.data?.[0]?.ids && !figure.data[0].ids.includes(nodeId)) {
       console.debug("[Treemap Focus] Node", nodeId, "not in current figure, skipping");
       return "node not in figure";
+    }
+
+    // A direct URL focus must also become the authoritative shared selection.
+    // Otherwise navigating to another page and back can leave the store behind
+    // even though the Treemap visibly opened the requested subject.
+    if (String(currentSelectedId ?? "") !== String(nodeId)) {
+      window.dash_clientside.set_props("store-selected-id", { data: String(nodeId) });
     }
 
     // Returns the Plotly plot div once it's mounted in the DOM, or null if not yet ready.
@@ -153,6 +170,7 @@ Object.assign(window.dash_clientside.clientside, {
   // @returns {window.dash_clientside.no_update}
   // ---------------------------------------------------------------------------
   restoreTreemapZoom: function (figure, selectedNodeId) {
+    bindTreemapSelectionHandler();
     if (!figure?.data?.length || !selectedNodeId) return window.dash_clientside.no_update;
 
     const ids = figure.data[0].ids;
@@ -174,4 +192,126 @@ Object.assign(window.dash_clientside.clientside, {
     setTimeout(() => tryRestyle(0), 50);
     return window.dash_clientside.no_update;
   },
+
+  // Keep the browser URL synchronized with the authoritative Treemap subject.
+  // This makes the visible URL truthful and prevents a later page/filter switch
+  // from resurrecting an older focus value.
+  syncTreemapFocusUrl: function (selectedNodeId, nodeMap, currentSearch) {
+    const params = new URLSearchParams(currentSearch || "");
+
+    if (selectedNodeId === null || selectedNodeId === "") {
+      if (!params.has("focus")) return window.dash_clientside.no_update;
+      params.delete("focus");
+    } else {
+      const entry = nodeMap?.[String(selectedNodeId)];
+      if (!entry?.leaf) {
+        // The displayed "Federal budget" root has a technical Plotly id but
+        // deliberately no semantic node-map entry. Treat it as root.
+        if (!nodeMap || !params.has("focus")) return window.dash_clientside.no_update;
+        params.delete("focus");
+      } else {
+        const focus = [...(entry.ctx || []), entry.leaf].join(",");
+        if (params.get("focus") === focus) return window.dash_clientside.no_update;
+        params.set("focus", focus);
+      }
+    }
+
+    const query = params.toString();
+    return query ? `?${query}` : "";
+  },
+
 });
+
+// Plotly uses a dedicated plotly_treemapclick event for drill-downs, while
+// dcc.Graph.clickData remains empty. Observe page mounts so every Treemap plot
+// gets a direct handler, including after navigating away and back.
+let treemapSelectionRetryTimer = null;
+
+function bindTreemapSelectionHandler(attempt = 0) {
+  treemapSelectionRetryTimer = null;
+  const plotDiv = document.querySelector("#treemap-graph .js-plotly-plot");
+  if (!plotDiv || typeof plotDiv.on !== "function") {
+    if (attempt < 30) {
+      treemapSelectionRetryTimer = setTimeout(
+        () => bindTreemapSelectionHandler(attempt + 1),
+        100
+      );
+    }
+    return false;
+  }
+  if (plotDiv.__budgetTrackerTreemapSelectionHandler) return true;
+
+  const handler = function (eventData) {
+    if (!("nextLevel" in (eventData || {}))) return;
+    const nextLevel = eventData.nextLevel;
+    const selectedId = nextLevel === null || nextLevel === "" ? null : String(nextLevel);
+    window.dash_clientside.set_props("store-selected-id", { data: selectedId });
+  };
+
+  plotDiv.__budgetTrackerTreemapSelectionHandler = handler;
+  plotDiv.on("plotly_treemapclick", handler);
+  return true;
+}
+
+(function installTreemapSelectionObserver() {
+  function start() {
+    const observer = new MutationObserver(() => {
+      if (!treemapSelectionRetryTimer) bindTreemapSelectionHandler();
+    });
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+    bindTreemapSelectionHandler();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start, { once: true });
+  } else {
+    start();
+  }
+})();
+
+// Plotly can replace its event-emitter during Dash page switches. Capture real
+// Treemap clicks at document level as a stable fallback. Plotly's hierarchy
+// datum already contains the intended next level, so the shared selection can
+// be updated immediately, before another filter can rebuild the figure.
+(function installTreemapClickCapture() {
+  document.addEventListener("click", function (event) {
+    const target = event.target;
+    const pathbar = target instanceof Element
+      ? target.closest("#treemap-graph g.pathbar")
+      : null;
+
+    if (pathbar) {
+      // Plotly renders the visible root breadcrumb outside g.slice and without
+      // hierarchy data. The first pathbar item is always the figure root, so a
+      // click on it must clear the shared subject selection explicitly.
+      const trace = pathbar.closest("g.trace.treemap");
+      const rootPathbar = trace?.querySelector("g.pathbar");
+      if (pathbar === rootPathbar) {
+        window.dash_clientside.set_props("store-selected-id", { data: null });
+      }
+      return;
+    }
+
+    const slice = target instanceof Element ? target.closest("#treemap-graph g.slice") : null;
+    if (!slice) return;
+
+    const datum = slice.__data__;
+    const clickedId = datum?.data?.id;
+    const clickedLabel = datum?.data?.data?.label;
+    if (clickedId === undefined || clickedId === null) return;
+
+    let selectedId;
+    if (datum.entry === clickedLabel) {
+      // Clicking the currently displayed entry navigates one level upward.
+      selectedId = datum.parent?.data?.id ?? null;
+    } else if (datum.children?.length) {
+      // Clicking a branch navigates into that branch. Leaf clicks do not
+      // change the Treemap level and therefore leave the selection untouched.
+      selectedId = String(clickedId);
+    } else {
+      return;
+    }
+
+    window.dash_clientside.set_props("store-selected-id", { data: selectedId });
+  }, true);
+})();

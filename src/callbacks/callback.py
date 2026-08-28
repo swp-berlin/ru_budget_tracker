@@ -99,6 +99,9 @@ def _build_switch_query(
     params = _parse_search(current_search)
     shared_values = {
         "budget_id": budget_id,
+        # Treemap hierarchy remains relevant while Time Series is visible: a
+        # shared Time Series link must reopen its focus in the same hierarchy.
+        "viewby": viewby,
         "spending_type": spending_type,
         "unit": unit,
         "language": language,
@@ -117,10 +120,7 @@ def _build_switch_query(
 
     if destination == "treemap":
         params.pop("period", None)
-        if viewby is not None:
-            params["viewby"] = [str(viewby)]
     else:
-        params.pop("viewby", None)
         if period is not None:
             params["period"] = [str(period)]
 
@@ -587,7 +587,7 @@ def show_share_toast(n_clicks: int | None) -> bool:
 
 # --- Clientside callbacks (spinners, treemap text, share link, image download) ---
 
-# Hide the treemap loading spinner once the graph becomes visible.
+# Hide the treemap loading spinner whenever a rendered figure arrives.
 clientside_callback(
     ClientsideFunction(namespace="clientside", function_name="hideTreemapSpinner"),
     Output("dummy-output", "lang"),
@@ -628,7 +628,7 @@ clientside_callback(
     prevent_initial_call=True,
 )
 
-# Hide the timeseries spinner once the graph becomes visible.
+# Hide the timeseries spinner whenever a rendered figure arrives.
 clientside_callback(
     ClientsideFunction(namespace="clientside", function_name="hideTimeseriesSpinner"),
     Output("dummy-output", "accessKey", allow_duplicate=True),
@@ -654,16 +654,28 @@ clientside_callback(
     State("store-language", "data"),
     State("store-budget-id", "data"),
     State("store-viewby", "data"),
+    State("store-selected-id", "data"),
     prevent_initial_call=True,
 )
 
-# Copy current URL to clipboard, appending focus param from selected treemap node.
+# Keep the visible URL focus synchronized with Treemap navigation.
+clientside_callback(
+    ClientsideFunction(namespace="clientside", function_name="syncTreemapFocusUrl"),
+    Output("url", "search", allow_duplicate=True),
+    Input("store-selected-id", "data"),
+    Input("store-treemap-node-map", "data"),
+    State("url", "search"),
+    prevent_initial_call=True,
+)
+
+# Copy current URL to clipboard, appending semantic Treemap context.
 clientside_callback(
     ClientsideFunction(namespace="clientside", function_name="copyShareLink"),
     Output("dummy-output", "title"),
     Input("btn-share-link", "n_clicks"),
     State("store-selected-id", "data"),
     State("store-treemap-node-map", "data"),
+    State("store-viewby", "data"),
     prevent_initial_call=True,
 )
 

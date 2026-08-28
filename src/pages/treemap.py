@@ -1,6 +1,6 @@
 from dash import dcc, html, register_page
 
-register_page(__name__, path="/", title="Russian Federal Budget Dashboard - Treemap")
+register_page(__name__, path="/", title="Russian Budget Monitor - Treemap")
 
 # Graph config kept simple and explicit for production clarity
 TREEMAP_CONFIG = dcc.Graph.Config(
@@ -28,7 +28,7 @@ def layout(**other_kwargs) -> html.Div:
         children=[
             # Keep graph callbacks dormant until Dash Pages has mounted this
             # layout together with the callback output components below.
-            dcc.Store(id="treemap-page-ready", data=True),
+            dcc.Interval(id="treemap-page-ready", interval=50, max_intervals=1),
             # Hidden timeseries graph keeps cross-page callbacks satisfied.
             dcc.Graph(
                 id="timeseries-graph",

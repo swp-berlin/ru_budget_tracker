@@ -6,17 +6,7 @@ from typing import Any, Optional, Sequence
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from dash import (
-    ClientsideFunction,
-    Input,
-    Output,
-    State,
-    callback,
-    clientside_callback,
-    dcc,
-    get_relative_path,
-    no_update,
-)
+from dash import Input, Output, State, callback, dcc, get_relative_path, no_update
 from dash.exceptions import PreventUpdate
 from sqlalchemy import RowMapping
 
@@ -229,6 +219,7 @@ def remap_selected_id(
     selected_id: str | None,
     previous_node_map: dict | None,
     new_node_map: dict | None,
+    rendered_ids: set[str] | None = None,
 ) -> str | None:
     """Map a transient Plotly id to the same semantic node in a new figure.
 
@@ -251,6 +242,8 @@ def remap_selected_id(
     for node_id, entry in new_node_map.items():
         if not isinstance(entry, dict):
             continue
+        if rendered_ids is not None and str(node_id) not in rendered_ids:
+            continue
         candidate = (
             str(entry.get("leaf", "")),
             tuple(str(value) for value in (entry.get("ctx", []) or [])),
@@ -268,20 +261,21 @@ def remap_selected_id(
     Output("store-treemap-hierarchy-key", "data"),
     Output("warning-toast", "is_open", allow_duplicate=True),
     Output("warning-toast", "children", allow_duplicate=True),
-    Input("treemap-page-ready", "data", allow_optional=True),
-    Input("url", "pathname"),
-    Input("store-budget-id", "data"),
-    Input("store-viewby", "data"),
-    Input("store-spending-type", "data"),
-    Input("store-unit", "data"),
-    Input("store-language", "data"),
+    Input("treemap-page-ready", "n_intervals", allow_optional=True),
+    State("url", "pathname"),
+    State("store-budget-id", "data"),
+    State("store-viewby", "data"),
+    State("store-spending-type", "data"),
+    State("store-unit", "data"),
+    State("store-language", "data"),
     State("store-treemap-hierarchy-key", "data"),
     State("store-selected-id", "data"),
     State("store-treemap-node-map", "data"),
-    prevent_initial_call="initial_duplicate",
+    prevent_initial_call=True,
+    optional=True,
 )
 def update_figure_from_filters(
-    page_ready: bool | None,
+    page_ready: int | None,
     pathname: str | None,
     budget_id: int,
     viewby: ViewByDimensionTypeLiteral = "MINISTRY",
@@ -320,8 +314,9 @@ def update_figure_from_filters(
         df_shaped, spending_type, unit=unit, translated=translated, viewby=viewby
     )
     compact_map = build_compact_node_map(df_shaped, path_to_short_id=path_to_short_id)
+    rendered_ids = {str(node_id) for node_id in fig.data[0].ids}
     selection_update = (
-        remap_selected_id(selected_id, previous_node_map, compact_map)
+        remap_selected_id(selected_id, previous_node_map, compact_map, rendered_ids)
         if selected_id
         else no_update
     )
@@ -334,14 +329,6 @@ def update_figure_from_filters(
         False,
         "",
     )
-
-
-clientside_callback(
-    ClientsideFunction(namespace="clientside", function_name="storeTreemapSelection"),
-    Output("store-selected-id", "data"),
-    Input("treemap-graph", "clickData"),
-)
-
 
 def _build_download_df(
     df: pd.DataFrame,

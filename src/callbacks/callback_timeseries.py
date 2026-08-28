@@ -29,6 +29,7 @@ from utils.definitions import (
     UnitTypeLiteral,
 )
 from utils.fetch_timeseries import TimeseriesDataFetcher
+from utils.transform_treemap import CLASSIFIED_PARENT_ID
 from utils.transform_timeseries import TimeseriesTransformer
 
 unit_labels = {
@@ -45,6 +46,8 @@ unit_labels = {
 def _calculate_values(
     df: pd.DataFrame, budget_id: int, unit: UnitTypeLiteral, budget_type: BudgetTypeLiteral
 ) -> pd.DataFrame:
+    if df.empty:
+        return df.copy()
     df = df[df["dates"].notna()].copy()
     rows_to_drop: list = []
     for budget_date, group_idx in df.groupby(df["dates"].dt.date).groups.items():
@@ -271,6 +274,39 @@ def _resolve_classified_dimension(
     return False, selected_dimension
 
 
+def _filter_association_context(
+    ancestor_dim_ids: tuple[int, ...], selected_dimension: dict | None, node_map: dict
+) -> tuple[int, ...]:
+    """Keep only ancestors that represent separate expense dimensions.
+
+    Same-type ancestors (notably PROGRAM_0 -> PROGRAM_1 -> PROGRAM_3) are a
+    Dimension.parent_id hierarchy. Synthetic CLASSIFIED nodes are calculated
+    display nodes and have no expense association at all. Requiring either kind
+    as an additional association produces no rows.
+    """
+    selected_type = selected_dimension.get("dimension_type") if selected_dimension else None
+    if not selected_type or not ancestor_dim_ids:
+        return ancestor_dim_ids
+
+    types_by_id = {
+        int(info["dimension_id"]): info.get("dimension_type")
+        for info in node_map.values()
+        if isinstance(info, dict) and info.get("dimension_id") is not None
+    }
+    synthetic_ids = {
+        int(info["dimension_id"])
+        for info in node_map.values()
+        if isinstance(info, dict)
+        and info.get("dimension_id") is not None
+        and "CLASSIFIED" in str(info.get("dimension_original_identifier", ""))
+    }
+    return tuple(
+        dim_id
+        for dim_id in ancestor_dim_ids
+        if dim_id not in synthetic_ids and types_by_id.get(dim_id) != selected_type
+    )
+
+
 def _resolve_filter_context(
     selected_node_id: str | None,
     compact_node_map: dict | None,
@@ -282,6 +318,17 @@ def _resolve_filter_context(
 
     Returns (selected_dimension, classified_only, ancestor_dim_ids, resolved_path).
     """
+    params = parse_qs((url_search or "").lstrip("?"))
+    url_viewby = unquote_plus(params.get("viewby", [""])[0]).strip().upper()
+    parsed_url_focus: tuple[int, ...] = ()
+    focus_raw = params.get("focus", [None])[0]
+    if focus_raw:
+        focus_parts = unquote_plus(focus_raw).strip().split(",")
+        try:
+            parsed_url_focus = tuple(int(part) for part in focus_parts)
+        except ValueError:
+            parsed_url_focus = ()
+
     resolved_path = _resolve_selected_path(selected_node_id, compact_node_map, node_map, language)
     # Ancestor dim_ids from the clicked node's path context (for context-aware timeseries filtering).
     ancestor_dim_ids: tuple[int, ...] = ()
@@ -298,25 +345,39 @@ def _resolve_filter_context(
                 focus_dim_id = int(leaf)
     # Deep-link fallback: compact_node_map is absent on fresh page loads, so short IDs
     # can't be decoded. Use ?focus=<dimension_id> from the URL instead.
-    if resolved_path is None and focus_dim_id is None and url_search:
-        params = parse_qs(url_search.lstrip("?"))
-        focus_raw = params.get("focus", [None])[0]
-        if focus_raw:
-            focus_raw = unquote_plus(focus_raw).strip()
-            # ?focus= is "leaf" (single dim_id) or "ctx1,ctx2,...,leaf" (ancestor chain).
-            focus_parts = focus_raw.split(",")
-            leaf_str = focus_parts[-1]
-            if leaf_str.isdigit() and all(part.isdigit() for part in focus_parts[:-1]):
-                ancestor_dim_ids = tuple(int(part) for part in focus_parts[:-1])
-                focus_dim_id = int(leaf_str)
-                resolved_path = _find_path_by_dimension_id(focus_dim_id, node_map, language)
+    if resolved_path is None and focus_dim_id is None and parsed_url_focus:
+        # ?focus= is "leaf" (single dim_id) or "ctx1,ctx2,...,leaf" (ancestor chain).
+        ancestor_dim_ids = parsed_url_focus[:-1]
+        focus_dim_id = parsed_url_focus[-1]
+        resolved_path = _find_path_by_dimension_id(focus_dim_id, node_map, language)
     selected_dimension = node_map.get(resolved_path) if resolved_path else None
     # If the focus dim isn't in the current budget's node_map (e.g. it only exists in
     # a different budget year), use the dimension_id directly so the data is still filtered.
     if selected_dimension is None and focus_dim_id is not None:
         selected_dimension = {"dimension_id": focus_dim_id, "dimension_original_identifier": ""}
-    classified_only, selected_dimension = _resolve_classified_dimension(
-        selected_dimension, resolved_path, node_map
+    # Older/stale PROGRAM node maps encoded the aggregate Classified container with
+    # the last chapter's synthetic id (e.g. 1000014). A single focus id in PROGRAM
+    # view denotes that aggregate container; chapter drill-downs include its ancestor
+    # context (e.g. -999999,1000014) and must remain chapter-specific.
+    is_program_classified_container = (
+        url_viewby == "PROGRAM"
+        and len(parsed_url_focus) == 1
+        and selected_dimension is not None
+        and "CLASSIFIED" in str(selected_dimension.get("dimension_original_identifier", ""))
+    )
+    if is_program_classified_container:
+        resolved_path = (
+            _find_path_by_dimension_id(CLASSIFIED_PARENT_ID, node_map, language) or resolved_path
+        )
+        classified_only = True
+        selected_dimension = None
+        ancestor_dim_ids = ()
+    else:
+        classified_only, selected_dimension = _resolve_classified_dimension(
+            selected_dimension, resolved_path, node_map
+        )
+    ancestor_dim_ids = _filter_association_context(
+        ancestor_dim_ids, selected_dimension, node_map
     )
     return selected_dimension, classified_only, ancestor_dim_ids, resolved_path
 
@@ -351,19 +412,21 @@ def _format_timeseries_title(
     Output("timeseries-graph", "style"),
     Output("store-timeseries-ticks", "data"),
     Output("timeseries-title", "children"),
-    Input("timeseries-page-ready", "data", allow_optional=True),
-    Input("url", "pathname"),
-    Input("store-budget-id", "data"),
-    Input("store-period", "data"),
-    Input("store-spending-type", "data"),
-    Input("store-unit", "data"),
-    Input("store-selected-id", "data"),
-    Input("store-language", "data"),
+    Input("timeseries-page-ready", "n_intervals", allow_optional=True),
+    State("url", "pathname"),
+    State("store-budget-id", "data"),
+    State("store-period", "data"),
+    State("store-spending-type", "data"),
+    State("store-unit", "data"),
+    State("store-selected-id", "data"),
+    State("store-language", "data"),
     State("store-treemap-node-map", "data"),
     State("url", "search"),
+    prevent_initial_call=True,
+    optional=True,
 )
 def update_figure_from_filters(
-    page_ready: bool | None,
+    page_ready: int | None,
     pathname: str | None,
     budget_id: int,
     period: PeriodTypeLiteral = "ALL",

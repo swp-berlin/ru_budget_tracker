@@ -11,8 +11,9 @@ This document describes the state, navigation, About-page, and initial-render ch
   shared between the Treemap and Time Series views.
 - After a user changes a shared setting, that current value is carried into the other view. Old
   values in the entry URL cannot be restored accidentally by changing views.
-- The view-specific filters remain separate: `viewby` belongs to the Treemap, while `period`
-  belongs to Time Series.
+- The controls remain view-specific: `viewby` is shown only on the Treemap and `period` only on
+  Time Series. The active `viewby` is nevertheless retained in Time Series URLs so a shared link
+  can return to the selected node in the correct Treemap hierarchy.
 - When the Treemap is rebuilt after an `ALL`/`MILITARY` change, the selected subject node remains
   selected if the same node exists in the new result. If it does not exist, the Treemap opens at
   its root.
@@ -26,20 +27,25 @@ the stores are the authoritative state for the active session. Filter callbacks 
 store and the URL.
 
 The Treemap/Time Series button now builds its destination query from those current store values.
-It also keeps unrelated query parameters, removes the source view's page-specific parameter, and
-sets the destination view's page-specific parameter:
+It also keeps unrelated query parameters and sets the destination view's page-specific state:
 
 - Treemap destination: keep/set `viewby`, remove `period`.
-- Time Series destination: keep/set `period`, remove `viewby`.
+- Time Series destination: keep/set `period` and retain `viewby` as Treemap return context.
 
 The selected Treemap node is represented in the URL as its ancestor dimension ids followed by its
 leaf dimension id (`focus=ancestor,...,leaf`). This makes the selection independent of Plotly's
 short, transient node ids.
 
 Treemap clicks, including navigation back to the root, update the shared selected-node store
-directly in the browser. An empty Plotly node id clears the subject selection. Keeping this small
-update local prevents a subsequent filter click from rebuilding the figure with an older
-selection while a server callback is still in flight.
+directly in the browser. Plotly emits these drill-downs through `plotly_treemapclick`, not Dash's
+regular `clickData`. Because Plotly can replace that event emitter during page switches, a stable
+capture-phase listener also derives the intended next level from Plotly's hierarchy datum. The
+visible root breadcrumb (`Federal budget` or `Military spending`) is a separate Plotly pathbar
+element without hierarchy data; clicking its first item therefore clears the shared selection
+explicitly. The selection and semantic `focus` URL parameter are updated before a subsequent
+filter can rebuild the figure. The displayed technical root id has no semantic map entry and
+therefore removes `focus`. A semantic URL id that is unavailable in a rebuilt figure is never
+reused as a transient Plotly id; it falls back to the root.
 
 ## Selection remapping
 
@@ -50,10 +56,11 @@ node's stable identity instead of reusing its old graphical id. Stable identity 
 (leaf dimension id, ordered ancestor dimension ids)
 ```
 
-If an exact identity is present in the rebuilt node map, the corresponding new Plotly id becomes
-the selected id. If there is no exact match—most importantly when a subject has no military
-spending—the selected id becomes empty and the root is shown. No fuzzy or label-based matching is
-used.
+If an exact identity is present in the rebuilt node map, a corresponding id that is actually
+rendered in the new Plotly figure becomes the selected id. Restricting the result to rendered ids
+also handles duplicate technical map entries without choosing an invisible candidate. If there is
+no exact visible match—most importantly when a subject has no military spending—the selected id
+becomes empty and the root is shown. No fuzzy or label-based matching is used.
 
 ## Initial-render race condition
 
@@ -63,14 +70,14 @@ current layout. Successful reloads did send that request and received the comple
 consistent with a Dash Pages timing race: cached assets can change the ordering, but the cache is
 not itself the data error.
 
-Both graph pages now contain a small page-readiness store beside their graph output. Each main
-graph callback requires that page-local store as an input. Consequently, initial rendering starts
-only after Dash Pages has mounted the page and its graph. The same guard is applied to Time Series
-because it uses the same page structure. The readiness inputs are optional so that the inactive
-page can omit its store without a client-side reference error; a missing value is ignored by the
-callback guard. This follows Dash's documented behavior that newly inserted inputs trigger their
-callbacks; see the [Dash app lifecycle](https://dash.plotly.com/app-lifecycle) and
-[callback gotchas](https://dash.plotly.com/callback-gotchas).
+Both graph pages now contain a one-shot page-readiness interval beside their graph output. Each
+main graph callback listens only to that page-local interval; the shared filters are callback
+state. Consequently, no graph callback can run while Dash Pages is still showing the transitional
+layout in which its output is absent. After mount, the interval starts the initial render. Later
+filter changes pulse the active page's interval from the existing spinner callback. The same guard
+is applied to Time Series because it uses the same page structure. The readiness inputs remain
+optional for inactive pages. See the [Dash app lifecycle](https://dash.plotly.com/app-lifecycle)
+and [callback gotchas](https://dash.plotly.com/callback-gotchas).
 
 This is intentionally a narrow reliability fix. It does not change data loading, introduce a new
 cache layer, or redesign the large Treemap response.
@@ -101,8 +108,8 @@ component ids.
 5. Select a subject absent from `MILITARY`; switch to `MILITARY` and confirm the root is shown.
 6. Select a subject, switch to Time Series and back, return to root, select a different subject,
    and immediately change `ALL`/`MILITARY`; confirm that only the latest subject is retained.
-7. Repeatedly reload `/` with Enter, F5, and Ctrl+F5; confirm that a graph request is made and the
-   Treemap appears each time.
+7. Repeatedly reload `/` with Enter, F5, and Ctrl+F5; confirm that a graph request is made, the
+   Treemap appears each time, and the browser console contains no missing-graph callback errors.
 8. Open `/about` and confirm the new four-section text, links, list indentation, bold labels, and
    absence of the old logo/header block.
 
