@@ -82,6 +82,20 @@ and [callback gotchas](https://dash.plotly.com/callback-gotchas).
 This is intentionally a narrow reliability fix. It does not change data loading, introduce a new
 cache layer, or redesign the large Treemap response.
 
+## Spinner ownership
+
+The loading overlay used to be toggled by two independent clientside callbacks: one showing it
+when a filter store changed, one hiding it on `treemap-graph.figure`/`timeseries-graph.figure`.
+On deep links the hide callback was intermittently never executed by dash-renderer even though the
+figure arrived and every other callback listening on the same `figure` input did run, so the
+spinner kept turning over a fully rendered chart (roughly one load in four against the dev server).
+
+The hide is now part of the figure response itself: both graph callbacks own their spinner's
+`className` and return `chart-spinner-hidden` (see `callbacks/helper.py` and `assets/css/menu.css`)
+alongside the figure, so the overlay cannot outlive the figure it belongs to. The show side stays
+clientside but goes through `set_props` on the same `className` prop instead of mutating the DOM,
+so React remains the only writer of that prop. The toast error path hides the overlay the same way.
+
 ## About page
 
 The visible logo/header block and H1 were removed. The revised supplied copy replaces the previous
