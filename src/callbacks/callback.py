@@ -587,12 +587,13 @@ def show_share_toast(n_clicks: int | None) -> bool:
 
 # --- Clientside callbacks (spinners, treemap text, share link, image download) ---
 
-# Hide the treemap loading spinner whenever a rendered figure arrives.
+# Hide after either a new figure or the page-local graph becoming visible.
+# The style input covers page switches where Dash reuses an identical figure.
 clientside_callback(
     ClientsideFunction(namespace="clientside", function_name="hideTreemapSpinner"),
     Output("dummy-output", "lang"),
     Input("treemap-graph", "figure", allow_optional=True),
-    prevent_initial_call=True,
+    Input("treemap-graph", "style", allow_optional=True),
 )
 
 # Also hide the treemap spinner when a warning toast opens (callback error path).
@@ -628,12 +629,12 @@ clientside_callback(
     prevent_initial_call=True,
 )
 
-# Hide the timeseries spinner whenever a rendered figure arrives.
+# Hide after either a new figure or the page-local graph becoming visible.
 clientside_callback(
     ClientsideFunction(namespace="clientside", function_name="hideTimeseriesSpinner"),
-    Output("dummy-output", "accessKey", allow_duplicate=True),
+    Output("dummy-output", "accessKey"),
     Input("timeseries-graph", "figure", allow_optional=True),
-    prevent_initial_call=True,
+    Input("timeseries-graph", "style", allow_optional=True),
 )
 
 # Restore Treemap zoom after either the figure or its remapped selection changes.

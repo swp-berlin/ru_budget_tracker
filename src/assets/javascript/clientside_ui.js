@@ -10,7 +10,10 @@ function hasDashComponent(id) {
 }
 
 Object.assign(window.dash_clientside.clientside, {
-  hideTreemapSpinner: function (figure) {
+  hideTreemapSpinner: function (figure, style) {
+    if (!style || style.visibility !== 'visible') {
+      return window.dash_clientside.no_update;
+    }
     var el = document.getElementById('treemap-spinner');
     if (el) el.style.display = 'none';
     return window.dash_clientside.no_update;
@@ -34,7 +37,10 @@ Object.assign(window.dash_clientside.clientside, {
     return window.dash_clientside.no_update;
   },
 
-  hideTimeseriesSpinner: function (figure) {
+  hideTimeseriesSpinner: function (figure, style) {
+    if (!style || style.visibility !== 'visible') {
+      return window.dash_clientside.no_update;
+    }
     var el = document.getElementById('timeseries-spinner');
     if (el) el.style.display = 'none';
     return window.dash_clientside.no_update;
@@ -127,3 +133,50 @@ Object.assign(window.dash_clientside.clientside, {
     return updatedFigure;
   },
 });
+
+// Dash can mount a page-local graph and apply its first figure before the
+// downstream clientside callback is registered. Bind directly to Plotly as a
+// page-mount-safe completion signal; the regular callbacks above remain the
+// fast path for later filter updates.
+function bindSpinnerAfterPlot(graphId, spinnerId) {
+  var graph = document.getElementById(graphId);
+  var plot = graph && graph.querySelector('.js-plotly-plot');
+  if (!plot || typeof plot.on !== 'function') return;
+  if (plot.__budgetTrackerSpinnerAfterPlot) return;
+
+  var hideWhenVisible = function () {
+    var currentGraph = document.getElementById(graphId);
+    if (!currentGraph) return;
+    var graphStyle = window.getComputedStyle(currentGraph);
+    if (graphStyle.display === 'none' || graphStyle.visibility !== 'visible') return;
+    var spinner = document.getElementById(spinnerId);
+    if (spinner) spinner.style.display = 'none';
+  };
+
+  plot.__budgetTrackerSpinnerAfterPlot = hideWhenVisible;
+  plot.on('plotly_afterplot', hideWhenVisible);
+
+  // Covers a plot that Dash/React reused before this mount observer bound.
+  if (plot._fullLayout) hideWhenVisible();
+}
+
+(function installSpinnerAfterPlotObserver() {
+  function bind() {
+    bindSpinnerAfterPlot('treemap-graph', 'treemap-spinner');
+    bindSpinnerAfterPlot('timeseries-graph', 'timeseries-spinner');
+  }
+
+  function start() {
+    new MutationObserver(bind).observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+    });
+    bind();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', start, { once: true });
+  } else {
+    start();
+  }
+})();
