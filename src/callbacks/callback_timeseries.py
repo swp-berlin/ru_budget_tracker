@@ -18,7 +18,7 @@ from dash import (
 )
 from dash.exceptions import PreventUpdate
 
-from callbacks.helper import build_server_node_map, get_unit_label
+from callbacks.helper import SPINNER_HIDDEN, build_server_node_map, get_unit_label
 from utils.calculate import Calculator
 from utils.definitions import (
     BudgetTypeLiteral,
@@ -412,6 +412,7 @@ def _format_timeseries_title(
     Output("timeseries-graph", "style"),
     Output("store-timeseries-ticks", "data"),
     Output("timeseries-title", "children"),
+    Output("timeseries-spinner", "className"),
     Input("timeseries-page-ready", "n_intervals", allow_optional=True),
     State("url", "pathname"),
     State("store-budget-id", "data"),
@@ -436,12 +437,12 @@ def update_figure_from_filters(
     language: LanguageTypeLiteral = "EN",
     compact_node_map: dict | None = None,
     url_search: str | None = None,
-) -> tuple[go.Figure, dict[str, str], dict | None, str | None]:
+) -> tuple[go.Figure, dict[str, str], dict | None, str | None, str]:
     if not page_ready:
         raise PreventUpdate
     # Guard: only render on the timeseries page to keep hidden graphs hidden.
     if pathname != get_relative_path("/timeseries"):
-        return go.Figure(), {"display": "none"}, None, None
+        return go.Figure(), {"display": "none"}, None, None, SPINNER_HIDDEN
     # Guard: wait until a budget is selected
     if budget_id is None:
         raise PreventUpdate
@@ -479,6 +480,9 @@ def update_figure_from_filters(
         {"visibility": "visible"},
         tick_info,
         title,
+        # Hiding the spinner here (rather than from a clientside callback bound to
+        # `timeseries-graph.figure`) guarantees it disappears with the figure it belongs to.
+        SPINNER_HIDDEN,
     )
 
 

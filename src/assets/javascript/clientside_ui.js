@@ -9,16 +9,17 @@ function hasDashComponent(id) {
   }
 }
 
-Object.assign(window.dash_clientside.clientside, {
-  hideTreemapSpinner: function (figure) {
-    var el = document.getElementById('treemap-spinner');
-    if (el) el.style.display = 'none';
-    return window.dash_clientside.no_update;
-  },
+// Spinner visibility is a Dash prop, never a direct DOM mutation: the figure
+// callbacks hide the overlay in the same response that delivers the figure, so
+// both sides of the toggle must go through the same prop.
+function setSpinnerHidden(id, hidden) {
+  if (!hasDashComponent(id)) return;
+  window.dash_clientside.set_props(id, { className: hidden ? 'chart-spinner-hidden' : '' });
+}
 
+Object.assign(window.dash_clientside.clientside, {
   showTreemapSpinner: function () {
-    var spinner = document.getElementById('treemap-spinner');
-    if (spinner) spinner.style.display = '';
+    setSpinnerHidden('treemap-spinner', false);
     if (hasDashComponent('treemap-page-ready')) {
       window.dash_clientside.set_props('treemap-page-ready', { n_intervals: Date.now() });
     }
@@ -26,24 +27,16 @@ Object.assign(window.dash_clientside.clientside, {
   },
 
   showTimeseriesSpinner: function () {
-    var spinner = document.getElementById('timeseries-spinner');
-    if (spinner) spinner.style.display = '';
+    setSpinnerHidden('timeseries-spinner', false);
     if (hasDashComponent('timeseries-page-ready')) {
       window.dash_clientside.set_props('timeseries-page-ready', { n_intervals: Date.now() });
     }
     return window.dash_clientside.no_update;
   },
 
-  hideTimeseriesSpinner: function (figure) {
-    var el = document.getElementById('timeseries-spinner');
-    if (el) el.style.display = 'none';
-    return window.dash_clientside.no_update;
-  },
-
   hideTreemapSpinnerOnToast: function (isOpen) {
     if (isOpen) {
-      var el = document.getElementById('treemap-spinner');
-      if (el) el.style.display = 'none';
+      setSpinnerHidden('treemap-spinner', true);
     }
     return window.dash_clientside.no_update;
   },

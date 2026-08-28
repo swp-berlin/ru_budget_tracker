@@ -22,7 +22,9 @@ Shared, page-agnostic callbacks: toolbar navigation (About/back button, switch-g
 button), the budget dropdown, the view-by/period/spending-type/unit filter menus (built
 via the `_make_select_callback`/`_make_highlight_callback` factories), the language
 toggle, the share toast, and the clientside spinner/zoom/share-link/image-download
-bridges.
+bridges. The spinner bridges only *show* the overlay (and pulse the active page's
+readiness interval); hiding it belongs to the figure callbacks, which set the spinner's
+`className` in the same response that delivers the figure.
 
 ### `callback_treemap.py`
 Callbacks for the treemap page (`pages/treemap.py`, `/`): rendering the figure from the

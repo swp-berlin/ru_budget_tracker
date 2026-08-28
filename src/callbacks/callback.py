@@ -587,15 +587,14 @@ def show_share_toast(n_clicks: int | None) -> bool:
 
 # --- Clientside callbacks (spinners, treemap text, share link, image download) ---
 
-# Hide the treemap loading spinner whenever a rendered figure arrives.
-clientside_callback(
-    ClientsideFunction(namespace="clientside", function_name="hideTreemapSpinner"),
-    Output("dummy-output", "lang"),
-    Input("treemap-graph", "figure", allow_optional=True),
-    prevent_initial_call=True,
-)
+# The spinners are hidden by the figure callbacks themselves (they own
+# `treemap-spinner`/`timeseries-spinner` className), so the overlay disappears in
+# the same response that delivers the figure. A separate clientside callback
+# listening on `figure` is not reliable: dash occasionally drops it when the
+# graph is (re)mounted by the pages router while a figure request is in flight,
+# which left the spinner running forever on deep links.
 
-# Also hide the treemap spinner when a warning toast opens (callback error path).
+# Hide the treemap spinner when a warning toast opens (callback error path).
 clientside_callback(
     ClientsideFunction(namespace="clientside", function_name="hideTreemapSpinnerOnToast"),
     Output("dummy-output", "hidden"),
@@ -625,14 +624,6 @@ clientside_callback(
     Input("store-unit", "data"),
     Input("store-selected-id", "data"),
     Input("store-language", "data"),
-    prevent_initial_call=True,
-)
-
-# Hide the timeseries spinner whenever a rendered figure arrives.
-clientside_callback(
-    ClientsideFunction(namespace="clientside", function_name="hideTimeseriesSpinner"),
-    Output("dummy-output", "accessKey", allow_duplicate=True),
-    Input("timeseries-graph", "figure", allow_optional=True),
     prevent_initial_call=True,
 )
 

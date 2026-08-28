@@ -274,3 +274,9 @@
   border-radius: 50%;
   animation: treemap-spin 0.8s linear infinite;
 }
+
+/* Hidden state for the treemap/timeseries spinner overlays. The figure
+   callback sets this class in the same response that delivers the figure. */
+.chart-spinner-hidden {
+  display: none;
+}
