@@ -14,6 +14,7 @@ from utils.definitions import (
     ViewByDimensionTypeLiteral,
     unit_config,
 )
+from utils.transform_treemap import CLASSIFIED_PARENT_ID
 from plotly import graph_objects as go
 
 
@@ -217,6 +218,11 @@ def shape_for_viewby(
         # Classified rows have no program hierarchy, so we bridge them into the PROGRAM view
         # by copying their CHAPTER label into PROGRAM_1 (making them appear at the top level)
         # and clearing PROGRAM_3 so no spurious leaf node is rendered.
+        # PROGRAM_0 aggregates all classified chapters, so it must use the same semantic
+        # parent id as the aggregate node in MINISTRY view. PROGRAM_1 keeps each chapter's
+        # synthetic id so chapter-specific drill-downs still resolve independently.
+        df_copy.loc[classified_rows, "PROGRAM_0_DIM_ID"] = CLASSIFIED_PARENT_ID
+        df_copy.loc[classified_rows, "PROGRAM_0_ORIG_ID"] = "CLASSIFIED_PARENT"
         for col in df_copy.columns:
             if col.startswith("CHAPTER") and "NAME" in col:
                 df_copy.loc[classified_rows, col.replace("CHAPTER", "PROGRAM_1")] = df_copy.loc[

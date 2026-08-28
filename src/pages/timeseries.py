@@ -3,7 +3,7 @@ from dash import dcc, html, register_page
 
 from utils.definitions import unit_config, period_config, spending_type_config
 
-register_page(__name__, path="/timeseries", title="Russian Federal Budget Dashboard - Time Series")
+register_page(__name__, path="/timeseries", title="Russian Budget Monitor - Time Series")
 
 # Graph config kept simple and explicit for production clarity
 TIMESERIES_CONFIG = dcc.Graph.Config(
@@ -54,7 +54,7 @@ def layout(**other_kwargs) -> html.Div:
         children=[
             # Keep graph callbacks dormant until Dash Pages has mounted this
             # layout together with the callback output components below.
-            dcc.Store(id="timeseries-page-ready", data=True),
+            dcc.Interval(id="timeseries-page-ready", interval=50, max_intervals=1),
             # Hidden treemap graph keeps cross-page callbacks satisfied.
             dcc.Graph(
                 id="treemap-graph", style={"display": "none", "height": "100%", "width": "100%"}

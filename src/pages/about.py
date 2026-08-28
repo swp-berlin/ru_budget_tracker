@@ -3,7 +3,7 @@
 from dash import dcc, html, register_page
 
 
-register_page(__name__, path="/about", title="Russian Federal Budget Dashboard - About")
+register_page(__name__, path="/about", title="Russian Budget Monitor - About")
 
 
 layout = html.Div(

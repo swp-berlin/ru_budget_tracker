@@ -168,7 +168,7 @@ Plotly does not clip tile text — long labels spill into neighbouring tiles. Th
 
 #### `hideTreemapSpinner(style)` / `showTreemapSpinner()`
 
-Show or hide `#treemap-spinner`. Called by Dash clientside callbacks triggered by graph style changes and filter interactions.
+Show or hide `#treemap-spinner`. Called by Dash clientside callbacks triggered by figure updates and filter interactions.
 
 #### `hideTimeseriesSpinner(style)` / `showTimeseriesSpinner()`
 

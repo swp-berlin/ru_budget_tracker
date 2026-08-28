@@ -1,8 +1,16 @@
 window.dash_clientside = window.dash_clientside || {};
 window.dash_clientside.clientside = window.dash_clientside.clientside || {};
 
+function hasDashComponent(id) {
+  try {
+    return Boolean(window.dash_component_api?.getLayout?.(id));
+  } catch (_) {
+    return false;
+  }
+}
+
 Object.assign(window.dash_clientside.clientside, {
-  hideTreemapSpinner: function (style) {
+  hideTreemapSpinner: function (figure) {
     var el = document.getElementById('treemap-spinner');
     if (el) el.style.display = 'none';
     return window.dash_clientside.no_update;
@@ -11,16 +19,22 @@ Object.assign(window.dash_clientside.clientside, {
   showTreemapSpinner: function () {
     var spinner = document.getElementById('treemap-spinner');
     if (spinner) spinner.style.display = '';
+    if (hasDashComponent('treemap-page-ready')) {
+      window.dash_clientside.set_props('treemap-page-ready', { n_intervals: Date.now() });
+    }
     return window.dash_clientside.no_update;
   },
 
   showTimeseriesSpinner: function () {
     var spinner = document.getElementById('timeseries-spinner');
     if (spinner) spinner.style.display = '';
+    if (hasDashComponent('timeseries-page-ready')) {
+      window.dash_clientside.set_props('timeseries-page-ready', { n_intervals: Date.now() });
+    }
     return window.dash_clientside.no_update;
   },
 
-  hideTimeseriesSpinner: function (style) {
+  hideTimeseriesSpinner: function (figure) {
     var el = document.getElementById('timeseries-spinner');
     if (el) el.style.display = 'none';
     return window.dash_clientside.no_update;

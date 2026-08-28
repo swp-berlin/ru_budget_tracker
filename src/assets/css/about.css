@@ -12,6 +12,10 @@
     overflow-y: auto;
 }
 
+.about-page main {
+  padding-top: 24px;
+}
+
 :root {
   --fg: #222;
   --muted: #666;
