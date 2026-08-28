@@ -40,4 +40,6 @@ sanity_check*.json
 cache/
 tests/goldens/.rowdumps/
 src/data/quality/issues/
+src/data/gesis_export/expenses.csv
+src/data/gesis_export/expenses.csv.tmp
 src/data/import_files/raw/

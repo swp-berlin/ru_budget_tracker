@@ -7,6 +7,8 @@ DB_WAL_FILE ?= $(DB_FILE)-wal
 DB_SHM_FILE ?= $(DB_FILE)-shm
 TOTALS_REPORT_FILE ?= data/import_files/raw/totals/total_report_2026.xlsx
 TOTALS_LAW_FILE ?= data/import_files/raw/totals/total_law_2026.csv
+GESIS_EXPORT_DIR ?= src/data/gesis_export
+GESIS_EXPORT_FILE ?= $(GESIS_EXPORT_DIR)/expenses.csv
 
 .PHONY: \
 	alembic-upgrade \
@@ -27,6 +29,7 @@ TOTALS_LAW_FILE ?= data/import_files/raw/totals/total_law_2026.csv
 	import-all-core \
 	import-all \
 	bootstrap-data \
+	gesis-export \
 	test-frozen-db
 
 # =============================================================================
@@ -126,6 +129,10 @@ cache-timeseries:
 	cd src && uv run python -m scripts.generate_timeseries_cache && cd -
 
 cache-all: cache-budgets cache-timeseries
+
+# Export unaggregated LAW and REPORT expense rows for research publication.
+gesis-export:
+	uv run python scripts/export_gesis.py --database $(DB_FILE) --output $(GESIS_EXPORT_FILE)
 
 # Generate the data-quality report (src/data/quality/report.{md,json}).
 # Exit 1 only on ERROR-severity findings; WARNINGs (known source
