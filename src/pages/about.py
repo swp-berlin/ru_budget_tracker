@@ -26,12 +26,18 @@ layout = html.Div(
                             href="https://www.swp-berlin.org/en/researcher/janis-kluge/",
                         ),
                         ", a researcher at the German Institute for International and Security "
-                        "Affairs (SWP), in cooperation with ",
+                        "Affairs (SWP), in cooperation with the team Digital Services and Open "
+                        "Science, namely ",
                         html.A(
                             "Paul Bochtler",
                             href="https://www.swp-berlin.org/en/researcher/paul-bochtler/",
                         ),
-                        " and the Digital Services and Open Science team.",
+                        " and Tom Rüger and ",
+                        html.A(
+                            "&effect",
+                            href="https://www.and-effect.com/",
+                        ),
+                        ".",
                     ]
                 ),
                 html.H2("Sources"),
@@ -258,6 +264,38 @@ layout = html.Div(
                             ]
                         ),
                     ]
+                ),
+                html.H2("Code and Data"),
+                html.P(
+                    [
+                        "The corresponding research dataset is published at GESIS and can be "
+                        "accessed via ",
+                        html.A(
+                            "DOI 10.7802/3100",
+                            href="https://doi.org/10.7802/3100",
+                        ),
+                        ". This dashboard uses the latest version of the data by default and can contain more data than the published data at times.",
+                    ]
+                ),
+                html.P(
+                    [
+                        "The source code for this dashboard is publicly available on ",
+                        html.A(
+                            "GitHub",
+                            href="https://github.com/swp-berlin/ru_budget_tracker",
+                        ),
+                        " and permanently archived on Zenodo under ",
+                        html.A(
+                            "DOI 10.5281/zenodo.21875631",
+                            href="https://doi.org/10.5281/zenodo.21875631",
+                        ),
+                        ". You can clone the repository with:",
+                    ]
+                ),
+                html.Pre(
+                    html.Code(
+                        "git clone https://github.com/swp-berlin/ru_budget_tracker.git"
+                    )
                 ),
             ]
         ),
