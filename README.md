@@ -6,8 +6,6 @@
   - [Table of Contents](#table-of-contents)
   - [Description](#description)
   - [Structure](#structure)
-    - [Dashboard](#dashboard)
-  - [Is a Dash app that follow a `fetch → transform → calculate → render`](#is-a-dash-app-that-follow-a-fetch--transform--calculate--render)
   - [Development Guidelines](#development-guidelines)
     - [Git and GitHub](#git-and-github)
     - [Structured Documentation](#structured-documentation)
@@ -29,7 +27,7 @@ A dashboard application for Stiftung Wissenschaft und Politik (SWP). Dashboard p
 
 The projects consists of two main components:
 - ETL (importer and scripts)
-- Dash App
+- Dash App (follows: fetch → transform → calculate → render approach)
 
 ```mermaid
 ---
@@ -64,21 +62,6 @@ UTILS[utils]
 DB -->|fetch and transform| UTILS -->|pre-caching and lazy-caching| DB
 UTILS <--> CTRL[callbacks] <--> V[pages]
 ```
-
-### Dashboard
-
-Is a Dash app that follow a `fetch → transform → calculate → render`
--
-
-
-- App including
-  - FE (`src/pages`)
-  - BE ()
-  - Database
-- Importer (`src/importer`)
--
-
-
 
 ## Development Guidelines
 
