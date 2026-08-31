@@ -59,8 +59,8 @@ title: Dashboard
 flowchart LR
 DB[(budget.db)]
 UTILS[utils]
-DB -->|fetch and transform| UTILS -->|pre-caching and lazy-caching| DB
-UTILS <--> CTRL[callbacks] <--> V[pages]
+DB -->|fetch and transform| UTILS
+UTILS --> CTRL[callbacks] <--> V[pages]
 ```
 
 ## Development Guidelines
