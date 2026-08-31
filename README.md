@@ -59,7 +59,7 @@ title: Dashboard
 flowchart LR
 DB[(budget.db)]
 UTILS[utils]
-DB --> UTILS -->|fetch and transform| CTRL[callbacks] <--> V[pages]
+DB -->|fetch| UTILS -->|transform| CTRL[callbacks] <--> V[pages]
 ```
 
 ## Development Guidelines
