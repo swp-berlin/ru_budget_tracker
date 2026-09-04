@@ -11,6 +11,7 @@ from dash.exceptions import PreventUpdate
 from sqlalchemy import RowMapping
 
 from callbacks.helper import (
+    SPINNER_HIDDEN,
     build_compact_node_map,
     build_name_cols,
     create_treemap_colors,
@@ -259,6 +260,7 @@ def remap_selected_id(
     Output("store-treemap-node-map", "data"),
     Output("store-selected-id", "data", allow_duplicate=True),
     Output("store-treemap-hierarchy-key", "data"),
+    Output("treemap-spinner", "className"),
     Output("warning-toast", "is_open", allow_duplicate=True),
     Output("warning-toast", "children", allow_duplicate=True),
     Input("treemap-page-ready", "n_intervals", allow_optional=True),
@@ -285,7 +287,7 @@ def update_figure_from_filters(
     previous_hierarchy_key: list | None = None,
     selected_id: str | None = None,
     previous_node_map: dict | None = None,
-) -> tuple[Any, Any, Any, Any, Any, bool, str]:
+) -> tuple[Any, Any, Any, Any, Any, str, bool, str]:
     if not page_ready:
         raise PreventUpdate
     # Guard: only run when the treemap page is active.
@@ -307,7 +309,7 @@ def update_figure_from_filters(
             unit=unit,
         )
     except ValueError as e:
-        return no_update, no_update, no_update, no_update, no_update, True, str(e)
+        return no_update, no_update, no_update, no_update, no_update, SPINNER_HIDDEN, True, str(e)
 
     df_shaped = shape_dataframe(df, spending_type, viewby)
     fig, path_to_short_id = generate_figure(
@@ -326,6 +328,9 @@ def update_figure_from_filters(
         compact_map,
         selection_update,
         hierarchy_key,
+        # Hiding the spinner here (rather than from a clientside callback bound to
+        # `treemap-graph.figure`) guarantees it disappears with the figure it belongs to.
+        SPINNER_HIDDEN,
         False,
         "",
     )

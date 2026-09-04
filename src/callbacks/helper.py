@@ -17,6 +17,10 @@ from utils.definitions import (
 from utils.transform_treemap import CLASSIFIED_PARENT_ID
 from plotly import graph_objects as go
 
+# Class that hides a chart's loading overlay; see menu.css. The figure callbacks
+# set it so the spinner disappears in the same response that delivers the figure.
+SPINNER_HIDDEN = "chart-spinner-hidden"
+
 
 def get_unit_label(unit: UnitTypeLiteral) -> str:
     """Return the human-readable label for a unit (used as CSV column header)."""
